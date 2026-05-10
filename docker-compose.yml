@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # Lightpanda 无头浏览器
+  lightpanda:
+    image: lightpanda/browser:nightly
+    container_name: clipflow-lightpanda
+    ports:
+      - "127.0.0.1:9223:9222"
+    restart: unless-stopped
+    environment:
+      - LIGHTPANDA_DISABLE_TELEMETRY=true
+    networks:
+      - clipflow-network
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:9222/json/version || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: clipflow-mysql
+    ports:
+      - "127.0.0.1:3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=clipflow123
+      - MYSQL_DATABASE=clipflow
+      - MYSQL_USER=clipflow
+      - MYSQL_PASSWORD=clipflow123
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - clipflow-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pclipflow123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
+
+networks:
+  clipflow-network:
+    driver: bridge

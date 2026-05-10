@@ -1,0 +1,195 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* Indigo + Emerald — creative, professional, warm */
+  --background: oklch(0.985 0.002 275);
+  --foreground: oklch(0.216 0.05 277);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.216 0.05 277);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.216 0.05 277);
+  --primary: oklch(0.511 0.262 276.966);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.962 0.018 272.314);
+  --secondary-foreground: oklch(0.357 0.168 277.023);
+  --muted: oklch(0.962 0.018 272.314);
+  --muted-foreground: oklch(0.551 0.027 276);
+  --accent: oklch(0.962 0.018 272.314);
+  --accent-foreground: oklch(0.357 0.168 277.023);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.928 0.014 272);
+  --input: oklch(0.928 0.014 272);
+  --ring: oklch(0.585 0.233 277.117);
+  --chart-1: oklch(0.585 0.233 277.117);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.975 0.01 275);
+  --sidebar-foreground: oklch(0.216 0.05 277);
+  --sidebar-primary: oklch(0.511 0.262 276.966);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.943 0.03 272);
+  --sidebar-accent-foreground: oklch(0.357 0.168 277.023);
+  --sidebar-border: oklch(0.928 0.014 272);
+  --sidebar-ring: oklch(0.585 0.233 277.117);
+}
+
+.dark {
+  --background: oklch(0.216 0.05 277);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.274 0.06 277);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.274 0.06 277);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.715 0.2 277);
+  --primary-foreground: oklch(0.216 0.05 277);
+  --secondary: oklch(0.324 0.065 277);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.324 0.065 277);
+  --muted-foreground: oklch(0.65 0.04 277);
+  --accent: oklch(0.324 0.065 277);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.585 0.233 277.117);
+  --chart-1: oklch(0.585 0.233 277.117);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.274 0.06 277);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.715 0.2 277);
+  --sidebar-primary-foreground: oklch(0.216 0.05 277);
+  --sidebar-accent: oklch(0.324 0.065 277);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.585 0.233 277.117);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* Prevent pull-to-refresh on mobile H5 */
+    overscroll-behavior-y: contain;
+  }
+  html {
+    @apply font-sans;
+    /* Prevent pull-to-refresh on mobile H5 */
+    overscroll-behavior-y: contain;
+    /* Prevent horizontal scroll on mobile */
+    overflow-x: hidden;
+  }
+}
+
+/* Marketing page — CJK typography and CSS isolation */
+.marketing-page {
+  font-family: var(--font-noto-sans-sc), var(--font-sans), system-ui, sans-serif;
+}
+
+.marketing-page [lang="zh-CN"] h1,
+.marketing-page [lang="zh-CN"] h2,
+.marketing-page [lang="zh-CN"] h3,
+.marketing-page [lang="zh-CN"] p,
+.marketing-page [lang="zh-CN"] li,
+.marketing-page[lang="zh-CN"] h1,
+.marketing-page[lang="zh-CN"] h2,
+.marketing-page[lang="zh-CN"] h3,
+.marketing-page[lang="zh-CN"] p,
+.marketing-page[lang="zh-CN"] li {
+  line-height: 1.75;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   Marketing — Section scroll-triggered animations
+   ============================================================ */
+
+@keyframes marketing-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Apply scroll-driven animation to all marketing sections */
+.marketing-page section {
+  animation: marketing-fade-in-up 0.5s ease forwards;
+  animation-timeline: view();
+  animation-range: entry 0% entry 30%;
+}
+
+/* Fallback: browsers that don't support animation-timeline still see content */
+@supports not (animation-timeline: view()) {
+  .marketing-page section {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}
+
+/* Respect user's motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .marketing-page section {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

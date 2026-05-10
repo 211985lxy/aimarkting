@@ -1,0 +1,14 @@
+.git
+.github
+.next
+.playwright-cli
+.planning
+test-results
+output
+node_modules
+**/node_modules
+**/.next
+**/dist
+**/coverage
+*.log
+.DS_Store

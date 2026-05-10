@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker exec clipflow-mysql mysql -u clipflow -pclipflow123 clipflow -e ':*)",
+      "Bash(docker exec:*)",
+      "Bash(chmod +x \"/Users/xiangyu/Desktop/ai智能体-发布页面管理/quick-test-codes.sh\")",
+      "Bash(\"/Users/xiangyu/Desktop/ai智能体-发布页面管理/quick-test-codes.sh\")",
+      "Bash(npx tsx:*)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@temp.local\",\"password\":\"TempPass123\"}')",
+      "Bash(chmod +x \"/Users/xiangyu/Desktop/ai智能体-发布页面管理/one-click-activation.sh\")",
+      "Bash(\"/Users/xiangyu/Desktop/ai智能体-发布页面管理/one-click-activation.sh\")",
+      "Bash(chmod +x \"/Users/xiangyu/Desktop/ai智能体-发布页面管理/start-now.sh\")",
+      "Bash(\"/Users/xiangyu/Desktop/ai智能体-发布页面管理/start-now.sh\")",
+      "Bash(chmod +x \"/Users/xiangyu/Desktop/ai智能体-发布页面管理/test-douyin-login.sh\")",
+      "Bash(\"/Users/xiangyu/Desktop/ai智能体-发布页面管理/test-douyin-login.sh\")"
+    ]
+  }
+}
