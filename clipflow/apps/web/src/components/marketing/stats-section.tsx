@@ -18,21 +18,21 @@ export function StatsSection() {
   const t = useTranslations("Stats")
 
   return (
-    <section className="py-16 sm:py-20 lg:py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-[#1E1B4B] via-[#312E81] to-[#4338CA]">
+    <section className="bg-[#25211D] px-4 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
       <div className="mx-auto max-w-7xl">
-        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white text-center mb-12 sm:mb-16">
+        <h2 className="mb-12 text-center text-2xl font-bold text-white sm:mb-16 sm:text-3xl lg:text-4xl">
           {t("heading")}
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
           {stats.map(({ valueKey, labelKey }) => (
             <div
               key={valueKey}
-              className="flex flex-col items-center text-center gap-2 py-8 sm:py-10 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm"
+              className="flex flex-col items-center gap-2 rounded-xl border border-white/10 bg-white/5 py-8 text-center sm:py-10"
             >
               <span className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white">
                 {t(valueKey)}
               </span>
-              <span className="text-sm sm:text-base text-indigo-200/70 font-medium">
+              <span className="text-sm font-medium text-white/65 sm:text-base">
                 {t(labelKey)}
               </span>
             </div>

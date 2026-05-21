@@ -3,12 +3,13 @@ import { redis } from "./redis"
 import { withCache } from "./cache"
 import {
   BRANDING_SETTING_KEYS,
+  ACTIVE_BRANDING_SEED,
   FALLBACK_BRANDING,
   isBrandingSettingKey,
   type BrandingConfig,
 } from "./branding-config"
 
-const BRANDING_CACHE_KEY = "system:branding:v1"
+const BRANDING_CACHE_KEY = "system:branding:v2"
 const BRANDING_CACHE_TTL_SECONDS = 60 * 60
 
 export async function getBrandingConfig(): Promise<BrandingConfig> {
@@ -25,8 +26,8 @@ export async function getBrandingConfig(): Promise<BrandingConfig> {
       const values = new Map(settings.map((setting) => [setting.key, setting.value]))
 
       return {
-        name: values.get(BRANDING_SETTING_KEYS.name) || FALLBACK_BRANDING.name,
-        logoUrl: values.get(BRANDING_SETTING_KEYS.logoUrl) || FALLBACK_BRANDING.logoUrl,
+        name: resolveActiveBrandName(values.get(BRANDING_SETTING_KEYS.name)),
+        logoUrl: resolveActiveLogoUrl(values.get(BRANDING_SETTING_KEYS.logoUrl)),
         defaultName:
           values.get(BRANDING_SETTING_KEYS.defaultName)
           || FALLBACK_BRANDING.defaultName,
@@ -46,6 +47,22 @@ export async function invalidateBrandingCache() {
   } catch {
     // Cache eviction failure must not block settings writes.
   }
+}
+
+function resolveActiveBrandName(value: string | undefined): string {
+  if (!value || value === "爱爆365") {
+    return ACTIVE_BRANDING_SEED.name
+  }
+
+  return value
+}
+
+function resolveActiveLogoUrl(value: string | undefined): string {
+  if (!value || value === "/logo.png") {
+    return ACTIVE_BRANDING_SEED.logoUrl
+  }
+
+  return value
 }
 
 export { isBrandingSettingKey }

@@ -18,8 +18,8 @@ export const DEFAULT_BRANDING_BASELINE = {
 } as const
 
 export const ACTIVE_BRANDING_SEED = {
-  name: "爱爆365",
-  logoUrl: "/logo.png",
+  name: "明动AIM增长大脑",
+  logoUrl: "/branding/mingdong-aim-logo.svg",
 } as const
 
 export const FALLBACK_BRANDING: BrandingConfig = {

@@ -10,7 +10,6 @@ export const redis =
     connectTimeout: 5000,
     commandTimeout: 10000,
     retryStrategy(times) {
-      if (times > 10) return null
       return Math.min(times * 200, 3000)
     },
     reconnectOnError(err) {

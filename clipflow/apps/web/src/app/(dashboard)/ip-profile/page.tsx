@@ -1,6 +1,9 @@
 "use client"
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { useState, useEffect, useCallback } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   Loader2,
   ChevronLeft,
@@ -35,6 +38,7 @@ import {
   Plus,
   Check,
   RotateCcw,
+  Mic,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -45,12 +49,34 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  createKnowledge,
+  deleteKnowledge,
   getIpProfile,
   generatePositioning,
+  listKnowledge,
+  updateKnowledge,
   upsertIpProfile,
+  transcribeAudio,
   ApiError,
+  type KnowledgeEntry,
 } from "@/lib/api/client"
+import { useAudioRecorder } from "@/hooks/use-audio-recorder"
 import type {
   ApiIpProfile,
   GeneratePositioningRequest,
@@ -177,6 +203,18 @@ const GENERATION_MESSAGES = [
   "构建定位方案...",
   "完成收尾工作...",
 ]
+
+const KNOWLEDGE_CATEGORIES = [
+  { value: "boss_experience", label: "老板经验", wuxing: "尊贵紫气", colorClass: "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/25" },
+  { value: "product_usp", label: "产品卖点", wuxing: "苍穹玉蓝", colorClass: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25" },
+  { value: "customer_pain", label: "客户痛点", wuxing: "熔岩烈红", colorClass: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/25" },
+  { value: "project_case", label: "项目案例", wuxing: "翡翠翠绿", colorClass: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25" },
+  { value: "customer_qa", label: "客户问答", wuxing: "乾坤琥珀金", colorClass: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/25" },
+] as const
+
+function getKnowledgeCategoryLabel(category: string) {
+  return KNOWLEDGE_CATEGORIES.find((item) => item.value === category)?.label || category
+}
 
 // ─── Helper: check if current step has a valid answer ────
 
@@ -424,7 +462,7 @@ function WizardView({
             {stepIndex + 1} / {WIZARD_STEPS.length}
           </span>
         </div>
-        <Progress value={progressValue} className="h-1.5" />
+        <Progress value={progressValue} className="h-1.5 [&_[data-slot=progress-indicator]]:gold-flow-progress" />
         <p className="mt-2 text-xs text-muted-foreground">{step.sublabel}</p>
       </div>
 
@@ -450,23 +488,23 @@ function WizardView({
                       key={option.value}
                       onClick={() => handleCardClick(option.value)}
                       className={[
-                        "cursor-pointer transition-all duration-200 select-none",
+                        "cursor-pointer transition-all duration-300 select-none jade-emboss",
                         selected
-                          ? "border-primary bg-primary/5 shadow-sm"
-                          : "hover:border-primary/40 hover:shadow-sm",
+                          ? "border-primary bg-primary/5 shadow-[0_0_15px_rgba(251,191,36,0.12)] dark:shadow-[0_0_15px_rgba(251,191,36,0.08)] scale-[1.02]"
+                          : "border-border/60 hover:border-primary/40 hover:shadow-[0_0_12px_rgba(0,0,0,0.04)] dark:hover:shadow-[0_0_12px_rgba(251,191,36,0.02)] active:scale-[0.98]",
                       ].join(" ")}
                     >
                       <CardContent className="flex flex-col items-center gap-2 p-4 text-center">
                         <OptionIcon
                           className={[
-                            "h-6 w-6",
-                            selected ? "text-primary" : "text-muted-foreground",
+                            "h-6 w-6 transition-all duration-300",
+                            selected ? "text-primary scale-110" : "text-muted-foreground",
                           ].join(" ")}
                         />
                         <span
                           className={[
-                            "text-sm font-medium",
-                            selected ? "text-primary" : "text-foreground",
+                            "text-sm font-medium transition-colors duration-300",
+                            selected ? "text-primary font-semibold" : "text-foreground",
                           ].join(" ")}
                         >
                           {option.label}
@@ -493,7 +531,7 @@ function WizardView({
                     : surveyAnswers.surveyPersonalTraits
                 }
                 onChange={(e) => handleTextareaChange(e.target.value)}
-                className="resize-none text-sm"
+                className="resize-none text-sm transition-all duration-300 hover:border-primary/50 focus:border-primary"
               />
               <p className="text-right text-xs text-muted-foreground">
                 {(step.field === "surveyTargetCustomer"
@@ -578,7 +616,7 @@ function GeneratingView() {
           {GENERATION_MESSAGES.map((msg, i) => (
             <p
               key={i}
-              className={i === GENERATION_MESSAGES.length - 1 ? "text-foreground font-medium" : "text-muted-foreground"}
+              className={i === GENERATION_MESSAGES.length - 1 ? "text-foreground font-medium animate-pulse" : "text-muted-foreground"}
             >
               {msg}
             </p>
@@ -586,12 +624,17 @@ function GeneratingView() {
         </div>
       ) : (
         <>
-          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <svg className="h-14 w-14 text-primary tai-chi-rotate" viewBox="0 0 100 100" fill="currentColor">
+            <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="3" />
+            <path d="M 50 10 A 20 20 0 0 0 50 50 A 20 20 0 0 1 50 90 A 40 40 0 0 0 50 10 Z" fill="currentColor" />
+            <circle cx="50" cy="30" r="6" className="fill-background" />
+            <circle cx="50" cy="70" r="6" className="fill-primary" />
+          </svg>
           <p
-            className="text-base font-medium text-foreground transition-opacity duration-300"
+            className="text-base font-semibold text-foreground tracking-widest transition-opacity duration-300 animate-pulse"
             style={{ opacity: visible ? 1 : 0 }}
           >
-            {GENERATION_MESSAGES[msgIndex]}
+            【乾坤定位】{GENERATION_MESSAGES[msgIndex]}
           </p>
         </>
       )}
@@ -924,6 +967,370 @@ function DashboardView({ positioning, onEdit }: DashboardViewProps) {
   )
 }
 
+function ProfileTabs({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const requestedTab = searchParams.get("tab")
+  const activeTab = requestedTab === "knowledge" ? "knowledge" : "ip-positioning"
+
+  return (
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) => router.replace(`/ip-profile?tab=${value}`, { scroll: false })}
+      className="space-y-6"
+    >
+      <TabsList>
+        <TabsTrigger value="ip-positioning">IP 定位</TabsTrigger>
+        <TabsTrigger value="knowledge">知识库</TabsTrigger>
+      </TabsList>
+      <TabsContent value="ip-positioning" className="mt-0">
+        {children}
+      </TabsContent>
+      <TabsContent value="knowledge" className="mt-0">
+        <KnowledgeTab />
+      </TabsContent>
+    </Tabs>
+  )
+}
+
+function KnowledgeTab() {
+  const [entries, setEntries] = useState<KnowledgeEntry[]>([])
+  const [category, setCategory] = useState<string>("all")
+  const [loading, setLoading] = useState(true)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [title, setTitle] = useState("")
+  const [content, setContent] = useState("")
+  const [entryCategory, setEntryCategory] = useState("boss_experience")
+  const [saving, setSaving] = useState(false)
+
+  // 统一的语音录制与智能转写管理 Hook
+  const {
+    isRecording,
+    isTranscribing,
+    recordDuration,
+    volData,
+    startRecording,
+    stopRecording,
+    formatTime,
+  } = useAudioRecorder({
+    transcribeFn: transcribeAudio,
+    onTranscribeSuccess: (text) => setContent((prev) => (prev ? `${prev}\n${text}` : text)),
+  })
+
+  const loadEntries = useCallback(() => {
+    setLoading(true)
+    listKnowledge(category === "all" ? undefined : category)
+      .then(setEntries)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "知识库加载失败"))
+      .finally(() => setLoading(false))
+  }, [category])
+
+  useEffect(() => {
+    loadEntries()
+  }, [loadEntries])
+
+  function resetForm() {
+    setEditingId(null)
+    setTitle("")
+    setContent("")
+    setEntryCategory("boss_experience")
+  }
+
+  function startEdit(entry: KnowledgeEntry) {
+    setEditingId(entry.id)
+    setTitle(entry.title)
+    setContent(entry.content)
+    setEntryCategory(entry.category)
+    setDialogOpen(true)
+  }
+
+  async function handleSave() {
+    if (!title.trim() || !content.trim()) {
+      toast.error("请填写标题和内容")
+      return
+    }
+
+    setSaving(true)
+    try {
+      if (editingId) {
+        await updateKnowledge(editingId, {
+          title: title.trim(),
+          content: content.trim(),
+          category: entryCategory,
+        })
+        toast.success("知识已更新")
+      } else {
+        await createKnowledge({
+          title: title.trim(),
+          content: content.trim(),
+          category: entryCategory,
+        })
+        toast.success("知识已新增")
+      }
+      setDialogOpen(false)
+      resetForm()
+      loadEntries()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleArchive(id: string) {
+    try {
+      await deleteKnowledge(id)
+      toast.success("已归档")
+      loadEntries()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "归档失败")
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={category === "all" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setCategory("all")}
+            className="cursor-pointer"
+          >
+            全部
+          </Button>
+          {KNOWLEDGE_CATEGORIES.map((item) => (
+            <Button
+              key={item.value}
+              variant={category === item.value ? "default" : "outline"}
+              size="sm"
+              onClick={() => setCategory(item.value)}
+              className="cursor-pointer"
+            >
+              {item.label}
+            </Button>
+          ))}
+        </div>
+
+        <Dialog
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open)
+            if (!open) resetForm()
+          }}
+        >
+          <DialogTrigger render={<Button className="cursor-pointer" />}>
+            <Plus className="mr-2 h-4 w-4" />
+            新增知识
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{editingId ? "编辑知识" : "新增知识"}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>类别</Label>
+                <Select
+                  value={entryCategory}
+                  onValueChange={(value) => {
+                    if (value) setEntryCategory(value)
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {KNOWLEDGE_CATEGORIES.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>标题</Label>
+                <Input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="例如：15年空调维修经验"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>内容</Label>
+                <div className="relative">
+                  <Textarea
+                    value={content}
+                    onChange={(event) => setContent(event.target.value)}
+                    rows={6}
+                    placeholder="写下老板经验、产品卖点、客户问题、项目案例或问答素材。"
+                    className={`min-h-36 resize-y pb-14 text-sm leading-relaxed transition-all duration-500 ${
+                      isRecording
+                        ? "border-primary shadow-[0_0_15px_rgba(239,68,68,0.25)] dark:shadow-[0_0_15px_rgba(239,68,68,0.15)] ring-1 ring-primary/30"
+                        : "hover:border-primary/50 focus:border-primary"
+                    }`}
+                    disabled={isTranscribing || saving}
+                  />
+                  
+                  {/* 智能语音转写 Loading 遮罩层 */}
+                  {isTranscribing && (
+                    <div className="absolute inset-0 ink-wash-mask flex flex-col items-center justify-center rounded-lg transition-all z-10">
+                      <div className="flex flex-col items-center space-y-3">
+                        <div className="relative flex items-center justify-center">
+                          <svg className="h-12 w-12 text-primary tai-chi-rotate" viewBox="0 0 100 100" fill="currentColor">
+                            <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="3" />
+                            <path d="M 50 10 A 20 20 0 0 0 50 50 A 20 20 0 0 1 50 90 A 40 40 0 0 0 50 10 Z" fill="currentColor" />
+                            <circle cx="50" cy="30" r="6" className="fill-background" />
+                            <circle cx="50" cy="70" r="6" className="fill-primary" />
+                          </svg>
+                        </div>
+                        <p className="text-xs font-semibold text-foreground tracking-widest animate-pulse">
+                          【乾坤流转】语音墨宝转写中...
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 浮动麦克风与声波控制栏 */}
+                  <div className="absolute bottom-3 right-3 flex items-center gap-2 z-20">
+                    {isRecording ? (
+                      <div className="flex items-center gap-3 rounded-full border border-primary/20 bg-background/95 px-3 py-1.5 shadow-md backdrop-blur transition-all duration-300">
+                        <span className="flex h-2 w-2 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                        </span>
+                        <span className="font-mono text-xs text-foreground font-semibold">
+                          {formatTime(recordDuration)} / 01:00
+                        </span>
+                        
+                        {/* 薪火跳动音波 — 红莲熔岩赤金渐变 */}
+                        <div className="flex items-center gap-1 h-3.5">
+                          {volData.map((height, i) => (
+                            <div
+                              key={i}
+                              className="w-[2.5px] bg-lava-waveform rounded-full transition-all duration-75 shadow-[0_0_4px_oklch(0.575_0.205_28.0/0.3)]"
+                              style={{ height: `${Math.max(4, height / 6)}px` }}
+                            />
+                          ))}
+                        </div>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={stopRecording}
+                          className="h-7 cursor-pointer px-2 text-[10px] font-semibold text-primary hover:bg-primary/10 transition-all duration-200"
+                        >
+                          说完了
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={startRecording}
+                        disabled={isTranscribing || saving}
+                        className="cursor-pointer gap-1.5 border-primary/30 hover:border-primary hover:bg-primary/5 shadow-sm text-xs h-9 rounded-md transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] badge-gold"
+                      >
+                        <Mic className="h-3.5 w-3.5 text-primary animate-pulse" />
+                        语音输入
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  取消
+                </Button>
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  保存
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {loading ? (
+        <Card>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-5 w-1/2" />
+            <Skeleton className="h-16 w-full" />
+          </CardContent>
+        </Card>
+      ) : entries.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-14 text-center">
+            <BookOpen className="mb-3 h-10 w-10 text-muted-foreground/40" />
+            <p className="text-sm font-medium">还没有知识条目</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              点击右上角「新增知识」，开始沉淀企业营销资产。
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {entries.map((entry) => {
+            const getCategoryBadgeClass = (cat: string) => {
+              return KNOWLEDGE_CATEGORIES.find((c) => c.value === cat)?.colorClass || "bg-muted text-muted-foreground border-muted-foreground/10"
+            }
+
+            return (
+              <Card key={entry.id} className="border-border/60 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(251,191,36,0.04)] dark:hover:shadow-[0_4px_20px_rgba(251,191,36,0.02)] hover:border-primary/30">
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 space-y-1.5 flex-1">
+                      <h3 className="font-semibold text-base text-foreground leading-snug">{entry.title}</h3>
+                      <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap select-text">
+                        {entry.content}
+                      </p>
+                      <div className="pt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <Badge variant="outline" className={getCategoryBadgeClass(entry.category)}>
+                          {getKnowledgeCategoryLabel(entry.category)}
+                        </Badge>
+                        <span className="flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                          {entry.sourceType === "manual" ? "手动录入" : "ASR 语音"}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                          {new Date(entry.createdAt).toLocaleDateString("zh-CN")}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex sm:flex-col shrink-0 gap-2 sm:items-end justify-end mt-2 sm:mt-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => startEdit(entry)}
+                        className="cursor-pointer font-medium hover:border-primary/30 hover:bg-primary/[0.02]"
+                      >
+                        编辑
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleArchive(entry.id)}
+                        className="cursor-pointer font-medium hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        归档
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── ReadOnlyField helper ─────────────────────────────────
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
@@ -1116,7 +1523,7 @@ export default function IpProfilePage() {
 
   if (view === "wizard") {
     return (
-      <div>
+      <ProfileTabs>
         <WizardView
           stepIndex={stepIndex}
           setStepIndex={setStepIndex}
@@ -1124,7 +1531,7 @@ export default function IpProfilePage() {
           setSurveyAnswers={setSurveyAnswers}
           onGenerate={handleGenerate}
         />
-      </div>
+      </ProfileTabs>
     )
   }
 
@@ -1134,25 +1541,29 @@ export default function IpProfilePage() {
 
   if (view === "result" && positioning) {
     return (
-      <ResultView
-        positioning={positioning}
-        surveyAnswers={surveyAnswers}
-        saving={saving}
-        onPositioningChange={setPositioning}
-        onSaveField={handleSaveField}
-        onConfirm={handleConfirm}
-        onRegenerate={handleRegenerate}
-      />
+      <ProfileTabs>
+        <ResultView
+          positioning={positioning}
+          surveyAnswers={surveyAnswers}
+          saving={saving}
+          onPositioningChange={setPositioning}
+          onSaveField={handleSaveField}
+          onConfirm={handleConfirm}
+          onRegenerate={handleRegenerate}
+        />
+      </ProfileTabs>
     )
   }
 
   if (view === "dashboard" && positioning) {
     return (
-      <DashboardView
-        positioning={positioning}
-        savedProfile={savedProfile}
-        onEdit={handleEdit}
-      />
+      <ProfileTabs>
+        <DashboardView
+          positioning={positioning}
+          savedProfile={savedProfile}
+          onEdit={handleEdit}
+        />
+      </ProfileTabs>
     )
   }
 

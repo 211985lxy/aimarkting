@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import Image from "next/image";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -104,6 +106,25 @@ const assetFilters: { value: AssetFilter; label: string }[] = [
   { value: "video", label: "视频" },
   { value: "music", label: "音乐" },
 ];
+
+const ASSET_FLOW_CARDS = [
+  {
+    title: "企业资料",
+    desc: "营业资料、项目介绍、产品手册先沉淀到资产库。",
+  },
+  {
+    title: "证据素材",
+    desc: "案例图片、过程视频、客户反馈作为文案的可信证据。",
+  },
+  {
+    title: "声音资产",
+    desc: "克隆声音和公共声音沉淀为可复用表达资产。",
+  },
+  {
+    title: "成片包装",
+    desc: "创作页会围绕最终文案调用素材和包装能力。",
+  },
+] as const;
 
 // ─── Public asset types ─────────────────────────────────
 
@@ -344,19 +365,31 @@ export default function AssetsPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">资产管理</h1>
-        <p className="text-muted-foreground mt-1">管理您的数字人和素材</p>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight">AIM 资产库</h1>
+          <Badge variant="outline" className="text-[10px] sm:text-xs">
+            企业营销资产沉淀
+          </Badge>
+        </div>
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          这里不是单纯上传文件，而是把企业资料、案例素材、客户反馈、声音资产沉淀成创作页可调用的证据库。
+        </p>
+        <AssetFlowOverview
+          avatarCount={avatars.length}
+          assetCount={assets.length}
+          voiceCount={userVoices.length + publicVoices.length}
+        />
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="avatars">
+      <Tabs defaultValue="assets">
         <TabsList>
-          <TabsTrigger value="avatars" className="cursor-pointer">
-            数字人
-          </TabsTrigger>
           <TabsTrigger value="assets" className="cursor-pointer">
-            素材
+            素材证据库
+          </TabsTrigger>
+          <TabsTrigger value="avatars" className="cursor-pointer">
+            数字人与声音
           </TabsTrigger>
         </TabsList>
 
@@ -384,6 +417,41 @@ export default function AssetsPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function AssetFlowOverview({
+  avatarCount,
+  assetCount,
+  voiceCount,
+}: {
+  avatarCount: number;
+  assetCount: number;
+  voiceCount: number;
+}) {
+  return (
+    <Card className="border-primary/15 bg-primary/[0.02]">
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-4">
+          {ASSET_FLOW_CARDS.map((item, index) => (
+            <div key={item.title} className="rounded-md border bg-background px-3 py-3">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+                  {index + 1}
+                </span>
+                <p className="text-sm font-medium">{item.title}</p>
+              </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <Badge variant="secondary">已沉淀素材 {assetCount}</Badge>
+          <Badge variant="secondary">数字人 {avatarCount}</Badge>
+          <Badge variant="secondary">可用声音 {voiceCount}</Badge>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

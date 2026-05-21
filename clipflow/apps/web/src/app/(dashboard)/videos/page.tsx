@@ -75,16 +75,16 @@ export default function VideosPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="我的视频" subtitle="查看所有生成的视频" />
+      <PageHeader title="我的文案" subtitle="查看已生成的文案与成片记录" />
 
       {/* Video Grid or Empty State */}
       {tasks.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Video className="h-12 w-12 text-muted-foreground mb-4" />
-            <h2 className="text-lg font-semibold">还没有视频</h2>
+            <h2 className="text-lg font-semibold">还没有文案</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              创建你的第一个营销短视频吧
+              创建你的第一条 AIM 营销文案吧
             </p>
           </CardContent>
         </Card>
@@ -131,7 +131,7 @@ function VideoCard({
         {task.coverUrl ? (
           <Image
             src={task.coverUrl}
-            alt={`视频 ${task.avatarName}`}
+            alt={`文案成片 ${task.avatarName}`}
             fill
             unoptimized
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"

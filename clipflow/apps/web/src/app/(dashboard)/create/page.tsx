@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import Image from "next/image";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -12,11 +14,8 @@ import {
   ChevronDown,
   Clapperboard,
   PenLine,
-  UserCircle,
   Package,
   Play,
-  Users,
-  User,
   Music,
   ImageIcon,
   AlertTriangle,
@@ -43,14 +42,12 @@ import {
   listTemplates,
   generateScripts as apiGenerateScripts,
   updateScript,
-  listAvatars,
   listPackagingTemplates,
   syncPackagingTemplates,
   createProductionPlan,
   createVideoTask,
   getVideoTask,
   getIpProfile,
-  getPublicAvatarPreviewDefaults,
   listAssets,
   uploadFileToStorage,
   registerAsset,
@@ -61,18 +58,16 @@ import {
   listOpeningTypes,
   listCopyStructures,
   listEndingTypes,
+  checkScriptQuality,
 } from "@/lib/api/client";
 import { buildPackagingRecommendationContext } from "@/lib/video-template-config";
 import { mapCopyToVideoStructure } from "@/lib/copy-structure-mapping";
 import type {
   ApiAsset,
   ApiPackagingTemplateRecommendation,
-  ApiVideoStructure,
-  ApiAvatar,
   ApiVideoPackagingTemplate,
   ApiScript,
   IpProfileResponse,
-  PublicTemplateListItem,
   BackgroundMusicSelection,
   MaterialAssignment,
   ApiTopicCard,
@@ -80,7 +75,9 @@ import type {
   ApiCopyStructure,
   ApiEndingType,
 } from "@/types/api";
-import { PublicAvatarPreviewDialog } from "@/components/public-avatar-preview-dialog";
+import type { QualityCheckReport } from "@/lib/api/client";
+import { QualityReportCard } from "@/components/quality-report";
+import { polishScript } from "@/lib/api/client";
 import {
   getBlockingAiMaterials,
   splitMaterialAssignments,
@@ -90,10 +87,18 @@ import { toast } from "sonner";
 // ─── Phase Definitions ──────────────────────────────────
 
 const PHASES = [
-  { label: "选题", icon: Sparkles, layer: "策划层" },
-  { label: "定文案", icon: PenLine, layer: "编剧层" },
-  { label: "定包装", icon: Package, layer: "包装层" },
-  { label: "出视频", icon: Play, layer: "生成" },
+  { label: "选题", icon: Sparkles, layer: "输入" },
+  { label: "定文案", icon: PenLine, layer: "主控" },
+  { label: "定包装", icon: Package, layer: "证据" },
+  { label: "出视频", icon: Play, layer: "演绎" },
+] as const;
+
+const PRODUCT_FLOW_STEPS = [
+  "填写基础信息问卷",
+  "AI 建立三维 IP 档案",
+  "生成 4 个爆款选题",
+  "自动生成口播文案",
+  "审核文案与热点融合",
 ] as const;
 
 const RECOMMENDATION_TIER_LABELS: Record<
@@ -155,13 +160,13 @@ function buildManualMaterialFromAsset(input: {
 }
 
 const WORKBENCH_SUPPORTED_VIDEO_TYPES = [
-  "virtualman_broadcast",
-  "virtualman_video",
+  "broadcast_mixcut",
+  "custom_broadcast_mixcut",
 ] as const;
 
 function resolveWorkbenchTemplateVideoType(videoType: string | null | undefined) {
   const normalized = videoType?.trim();
-  return normalized || "virtualman_broadcast";
+  return normalized || "broadcast_mixcut";
 }
 
 function isWorkbenchSupportedVideoType(videoType: string | null | undefined) {
@@ -171,22 +176,6 @@ function isWorkbenchSupportedVideoType(videoType: string | null | undefined) {
 }
 
 // ─── Types ──────────────────────────────────────────────
-
-interface PublicVoice {
-  id: string;
-  name: string;
-  gender?: string;
-  coverUrl?: string;
-  demoUrl?: string;
-  langs?: string[];
-}
-
-interface PublicAvatar {
-  id: string;
-  name: string;
-  coverUrl: string;
-  gender?: string;
-}
 
 interface WorkbenchDraft {
   currentPhase: number;
@@ -237,6 +226,7 @@ export default function CreateVideoPage() {
   const [selectedEndingCode, setSelectedEndingCode] = useState<string | null>(null);
   const [fallbackTemplateId, setFallbackTemplateId] = useState<string | null>(null);
   const [ipProfile, setIpProfile] = useState<IpProfileResponse | null>(null);
+  const [ipProfileLoading, setIpProfileLoading] = useState(true);
   const [generatedScripts, setGeneratedScripts] = useState<ApiScript[]>([]);
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
   const [editedScript, setEditedScript] = useState("");
@@ -258,15 +248,6 @@ export default function CreateVideoPage() {
   const [materialAssistLoading, setMaterialAssistLoading] = useState(false);
   const [materialAssistError, setMaterialAssistError] = useState<string | null>(null);
 
-  // Phase 3: Avatar & Generate
-  const [avatars, setAvatars] = useState<ApiAvatar[]>([]);
-  const [publicAvatars, setPublicAvatars] = useState<PublicAvatar[]>([]);
-  const [publicVoices, setPublicVoices] = useState<PublicVoice[]>([]);
-  const [avatarsLoading, setAvatarsLoading] = useState(false);
-  const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
-  const [selectedPublicVoiceId, setSelectedPublicVoiceId] = useState<string | null>(null);
-  const [avatarSource, setAvatarSource] = useState<"mine" | "public">("mine");
-
   // Submission & polling
   const [taskId, setTaskId] = useState<string | null>(null);
   const [taskStatus, setTaskStatus] = useState<string | null>(null);
@@ -283,9 +264,8 @@ export default function CreateVideoPage() {
   const resolvedPackaging = selectedPackaging;
   const resolvedPackagingRecommendation = resolvedPackaging?.recommendation ?? null;
   const resolvedPackagingLabel = resolvedPackaging?.name ?? "未选择";
-  const selectedAvatar = avatars.find((a) => a.id === selectedAvatarId) ?? null;
-  const selectedPublicAvatar = publicAvatars.find((a) => a.id === selectedAvatarId) ?? null;
-  const selectedPublicVoice = publicVoices.find((v) => v.id === selectedPublicVoiceId) ?? null;
+  const ipProfileReady = !!ipProfile?.isComplete && !!ipProfile.profile;
+  const hasThreeDPositioning = !!ipProfile?.profile?.business && !!ipProfile.profile.persona && !!ipProfile.profile.content;
   const blockingAiMaterials = useMemo(
     () => getBlockingAiMaterials(materials),
     [materials],
@@ -296,12 +276,12 @@ export default function CreateVideoPage() {
   );
 
   // Readiness checks
-  const phase0Ready = !!selectedTopicCard && !!topicSelectionId;
+  const phase0Ready = ipProfileReady && !!selectedTopicCard && !!topicSelectionId;
   const phase1Ready = !!selectedScriptId && !!editedScript.trim();
   const phase2Ready =
     !!resolvedPackaging
     && resolvedPackagingRecommendation?.tier !== "blocked";
-  const phase3Ready = !!selectedAvatarId && (!!selectedAvatar?.externalSpeakerId || !!selectedPublicVoiceId);
+  const phase3Ready = phase2Ready && !!editedScript.trim();
 
   // ─── Draft save/restore ────────────────────────────────
 
@@ -413,7 +393,6 @@ export default function CreateVideoPage() {
       let nextTemplates = options?.forceSync
         ? []
         : await listPackagingTemplates({
-            scene: "virtualman",
             structureId: mappedStructureId,
             scriptId: selectedScriptId,
           });
@@ -423,7 +402,6 @@ export default function CreateVideoPage() {
         try {
           await syncPackagingTemplates();
           nextTemplates = await listPackagingTemplates({
-            scene: "virtualman",
             structureId: mappedStructureId,
             scriptId: selectedScriptId,
           });
@@ -479,7 +457,11 @@ export default function CreateVideoPage() {
 
   // Load IP profile
   useEffect(() => {
-    getIpProfile().then(setIpProfile).catch(() => {});
+    setIpProfileLoading(true);
+    getIpProfile()
+      .then(setIpProfile)
+      .catch(() => {})
+      .finally(() => setIpProfileLoading(false));
   }, []);
 
   // Load fallback template ID on mount (first published template)
@@ -506,6 +488,12 @@ export default function CreateVideoPage() {
       listEndingTypes().then(setEndingTypes).catch(() => {});
     }
   }, [currentPhase, openingTypes.length, copyStructures.length, endingTypes.length]);
+
+  useEffect(() => {
+    if (currentPhase >= 1 && !selectedEndingCode && endingTypes.length > 0) {
+      setSelectedEndingCode(endingTypes[0].code);
+    }
+  }, [currentPhase, endingTypes, selectedEndingCode]);
 
   // Load packaging templates when entering phase 2
   useEffect(() => {
@@ -624,87 +612,6 @@ export default function CreateVideoPage() {
       window.clearInterval(timer);
     };
   }, [materials]);
-
-  // Load avatars when entering phase 3
-  useEffect(() => {
-    if (currentPhase === 3) {
-      setAvatarsLoading(true);
-      Promise.all([
-        listAvatars().catch(() => []),
-        fetch("/api/public-assets")
-          .then((r) => r.json())
-          .then((j) => ({
-            virtualmen: j.data?.virtualmen || [],
-            voices: j.data?.voices || [],
-          }))
-          .catch(() => ({ virtualmen: [], voices: [] })),
-      ])
-        .then(([myAvatars, publicAssets]) => {
-          setAvatars(myAvatars);
-          const mapped: PublicAvatar[] = publicAssets.virtualmen.map(
-            (v: { id: string; name: string; coverUrl: string; gender?: string }) => ({
-              id: v.id,
-              name: v.name,
-              coverUrl: v.coverUrl || "",
-              gender: v.gender,
-            }),
-          );
-          const mappedVoices: PublicVoice[] = publicAssets.voices.map(
-            (voice: PublicVoice) => ({
-              id: voice.id,
-              name: voice.name,
-              gender: voice.gender,
-              coverUrl: voice.coverUrl,
-              demoUrl: voice.demoUrl,
-              langs: voice.langs,
-            }),
-          );
-          setPublicAvatars(mapped);
-          setPublicVoices(mappedVoices);
-        })
-        .finally(() => setAvatarsLoading(false));
-    }
-  }, [currentPhase]);
-
-  useEffect(() => {
-    if (currentPhase !== 3) return;
-
-    if (avatarSource !== "public" || !selectedPublicAvatar?.id) {
-      setSelectedPublicVoiceId(null);
-      return;
-    }
-
-    if (publicVoices.length === 0) return;
-
-    // If the user already picked a valid voice, keep it
-    if (selectedPublicVoiceId && publicVoices.some((v) => v.id === selectedPublicVoiceId)) {
-      return;
-    }
-
-    // Otherwise auto-pick a default voice for this avatar
-    let cancelled = false;
-
-    void (async () => {
-      try {
-        const defaults = await getPublicAvatarPreviewDefaults(selectedPublicAvatar.id);
-        if (cancelled) return;
-
-        if (
-          defaults.speakerId &&
-          publicVoices.some((voice) => voice.id === defaults.speakerId)
-        ) {
-          setSelectedPublicVoiceId(defaults.speakerId);
-          return;
-        }
-      } catch {
-        // Leave voice unset so the user must make an explicit choice.
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [avatarSource, currentPhase, publicVoices, selectedPublicAvatar?.id, selectedPublicVoiceId]);
 
   // Poll for task status (queued at 10s, active at 3s)
   useEffect(() => {
@@ -979,7 +886,7 @@ export default function CreateVideoPage() {
   }
 
   async function handleSubmit() {
-    if (!selectedAvatarId || !editedScript.trim() || !selectedScriptId) return;
+    if (!editedScript.trim() || !selectedScriptId) return;
     setIsSubmitting(true);
     setTaskError(null);
     try {
@@ -989,16 +896,6 @@ export default function CreateVideoPage() {
 
       // Save script first
       await handleSaveScript();
-
-      const pubAvatar = publicAvatars.find((a) => a.id === selectedAvatarId);
-
-      // Resolve avatar params
-      if (pubAvatar && !selectedPublicVoiceId) {
-        throw new Error("请选择公共数字人的声音后再生成");
-      }
-      if (!pubAvatar && !selectedAvatar?.externalSpeakerId) {
-        throw new Error("这个数字人的专属声音还在克隆中，请稍后再试或换一个数字人");
-      }
 
       if (!selectedPackaging) {
         throw new Error("请先选择包装模板");
@@ -1014,6 +911,11 @@ export default function CreateVideoPage() {
       const styleId = selectedPackaging.shanjianId;
       if (!styleId) {
         throw new Error("当前视频没有可用的包装 styleId");
+      }
+
+      const usableMaterials = materials.filter((m) => isAiMaterial(m) || !!m.assetId);
+      if (usableMaterials.length === 0) {
+        throw new Error("请先在包装阶段补充至少一个可用素材，再生成视频");
       }
 
       const mappedStructureId = selectedCopyStructureCode
@@ -1034,31 +936,22 @@ export default function CreateVideoPage() {
         packagingTemplateId: selectedPackagingTemplateId || undefined,
         structureId: mappedStructureId || undefined,
         styleId,
-        materials: materials.filter((m) => isAiMaterial(m) || !!m.assetId).length > 0
-          ? materials.filter((m) => isAiMaterial(m) || !!m.assetId)
-          : undefined,
+        materials: usableMaterials,
         backgroundMusic: backgroundMusic ?? undefined,
         packRules: resolvedPackagingRecommendation?.presetPackRules ?? undefined,
         processRules: resolvedPackagingRecommendation?.presetProcessRules ?? undefined,
         recommendationContext,
+        videoType: "broadcast_mixcut",
       });
 
       // Create video task with production plan
       const taskParams: Record<string, unknown> = {
-        type: plan.videoType || "virtualman_broadcast",
+        type: "broadcast_mixcut",
         scriptId: selectedScriptId,
         scriptContent: editedScript.trim(),
         productionPlanId: plan.id,
         styleId,
       };
-
-      if (pubAvatar) {
-        taskParams.virtualmanId = pubAvatar.id;
-        taskParams.speakerId = selectedPublicVoiceId;
-        taskParams.avatarName = pubAvatar.name;
-      } else {
-        taskParams.avatarId = selectedAvatarId;
-      }
 
       const task = await createVideoTask(taskParams);
       setTaskId(task.id);
@@ -1104,6 +997,14 @@ export default function CreateVideoPage() {
     return (
       <div className="space-y-8">
         <PageHeader />
+        <ProductFlowOverview
+          ipProfileReady={ipProfileReady}
+          hasThreeDPositioning={hasThreeDPositioning}
+          topicReady={!!selectedTopicCard}
+          scriptReady={!!selectedScriptId && !!editedScript.trim()}
+          qualityChecked={false}
+          hotTopicTitle={hotTopicTitle}
+        />
         <SubmissionPolling taskStatus={taskStatus} />
       </div>
     );
@@ -1112,6 +1013,14 @@ export default function CreateVideoPage() {
   return (
     <div className="space-y-4 sm:space-y-8">
       <PageHeader />
+      <ProductFlowOverview
+        ipProfileReady={ipProfileReady}
+        hasThreeDPositioning={hasThreeDPositioning}
+        topicReady={!!selectedTopicCard}
+        scriptReady={!!selectedScriptId && !!editedScript.trim()}
+        qualityChecked={!!selectedScriptId && !!editedScript.trim()}
+        hotTopicTitle={hotTopicTitle}
+      />
       <PhaseIndicator currentPhase={currentPhase} onPhaseClick={goToPhase} readiness={[phase0Ready, phase1Ready, phase2Ready, phase3Ready]} />
 
       {staleWarning && (
@@ -1137,7 +1046,13 @@ export default function CreateVideoPage() {
           topicLoading={topicLoading}
           topicRefreshCount={topicRefreshCount}
           hotTopicTitle={hotTopicTitle}
+          ipProfileReady={ipProfileReady}
+          ipProfileLoading={ipProfileLoading}
           onGenerateTopics={async () => {
+            if (!ipProfileReady) {
+              toast.error("请先完成基础问卷并确认三维 IP 档案");
+              return;
+            }
             setTopicLoading(true);
             try {
               const result = await generateTopics(undefined, topicRefreshCount);
@@ -1243,25 +1158,10 @@ export default function CreateVideoPage() {
 
       {currentPhase === 3 && (
         <PhaseGenerate
-          avatars={avatars}
-          publicAvatars={publicAvatars}
-          publicVoices={publicVoices}
-          avatarsLoading={avatarsLoading}
-          selectedAvatarId={selectedAvatarId}
-          selectedPublicVoiceId={selectedPublicVoiceId}
-          avatarSource={avatarSource}
-          onAvatarSourceChange={setAvatarSource}
-          onSelectAvatar={setSelectedAvatarId}
-          onSelectPublicVoice={setSelectedPublicVoiceId}
-          selectedStructure={null}
-          selectedTemplate={null}
           resolvedPackagingLabel={resolvedPackagingLabel}
           selectedPackagingRecommendation={resolvedPackagingRecommendation}
           hasResolvedPackaging={phase2Ready}
           editedScript={editedScript}
-          selectedAvatar={selectedAvatar}
-          selectedPublicAvatar={selectedPublicAvatar}
-          selectedPublicVoice={selectedPublicVoice}
           materials={materials}
           backgroundMusic={backgroundMusic}
           blockingAiCount={blockingAiMaterials.length}
@@ -1283,15 +1183,149 @@ function PageHeader() {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-2xl font-bold tracking-tight">创建视频</h1>
+        <h1 className="text-2xl font-bold tracking-tight">明动AIM增长大脑</h1>
         <Badge variant="outline" className="text-[10px] sm:text-xs">
-          当前仅支持数字人口播
+          AI营销增长智能体
         </Badge>
       </div>
       <p className="text-muted-foreground mt-0.5 sm:mt-1 text-xs sm:text-sm">
-        选题驱动创作工作台：选题 → 定文案 → 定包装 → 出视频
+        把业务资料、老板经验、项目案例训练成可持续产出选题与文案的增长大脑。
       </p>
     </div>
+  );
+}
+
+function ProductFlowOverview({
+  ipProfileReady,
+  hasThreeDPositioning,
+  topicReady,
+  scriptReady,
+  qualityChecked,
+  hotTopicTitle,
+}: {
+  ipProfileReady: boolean;
+  hasThreeDPositioning: boolean;
+  topicReady: boolean;
+  scriptReady: boolean;
+  qualityChecked: boolean;
+  hotTopicTitle: string | null;
+}) {
+  const completed = [
+    ipProfileReady,
+    hasThreeDPositioning,
+    topicReady,
+    scriptReady,
+    qualityChecked,
+  ];
+
+  return (
+    <Card className="border-primary/15 bg-primary/[0.02]">
+      <CardContent className="space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold">核心流程</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              基础问卷 → 三维 IP 档案 → 4 个选题 → 自动文案 → 审核与热点融合
+            </p>
+          </div>
+          {hotTopicTitle ? (
+            <Badge variant="outline" className="w-fit border-orange-300 text-orange-600">
+              热点融合：{hotTopicTitle}
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="w-fit">热点融合可选</Badge>
+          )}
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-5">
+          {PRODUCT_FLOW_STEPS.map((label, index) => {
+            const done = completed[index];
+            const active = !done && completed.slice(0, index).every(Boolean);
+            return (
+              <div
+                key={label}
+                className={`rounded-md border px-3 py-2 text-xs ${
+                  done
+                    ? "border-green-200 bg-green-50 text-green-700"
+                    : active
+                      ? "border-primary/30 bg-background text-foreground"
+                      : "border-border bg-muted/30 text-muted-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  {done ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : active ? (
+                    <Clock className="h-3.5 w-3.5" />
+                  ) : (
+                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border text-[10px]">
+                      {index + 1}
+                    </span>
+                  )}
+                  <span className="font-medium">{label}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ScriptCommandCenter({
+  title,
+  subtitle,
+  script,
+  stage,
+  badges = [],
+}: {
+  title: string;
+  subtitle: string;
+  script: string;
+  stage: string;
+  badges?: string[];
+}) {
+  const normalizedScript = script.trim();
+  const charCount = normalizedScript.length;
+  const duration = Math.max(0, Math.ceil(charCount / 3.5));
+
+  return (
+    <Card className="border-primary/20 bg-primary/[0.02]">
+      <CardContent className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="border-primary/30 text-primary">
+                {stage}
+              </Badge>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
+                {title}
+              </h3>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2 text-xs text-muted-foreground">
+            <Badge variant="secondary" className="text-xs">{charCount} 字</Badge>
+            <Badge variant="secondary" className="text-xs">约 {duration} 秒</Badge>
+          </div>
+        </div>
+        <div className="rounded-md border bg-background/70 p-3">
+          <p className="text-sm leading-relaxed line-clamp-5">
+            {normalizedScript || "文案还未就绪"}
+          </p>
+        </div>
+        {badges.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {badges.map((badge) => (
+              <Badge key={badge} variant="outline" className="text-xs">
+                {badge}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1396,6 +1430,8 @@ function PhaseTopic({
   topicLoading,
   topicRefreshCount,
   hotTopicTitle,
+  ipProfileReady,
+  ipProfileLoading,
   onGenerateTopics,
   onSelectTopic,
   onNext,
@@ -1407,6 +1443,8 @@ function PhaseTopic({
   topicLoading: boolean;
   topicRefreshCount: number;
   hotTopicTitle: string | null;
+  ipProfileReady: boolean;
+  ipProfileLoading: boolean;
   onGenerateTopics: () => void;
   onSelectTopic: (index: number) => void;
   onNext: () => void;
@@ -1414,23 +1452,51 @@ function PhaseTopic({
   // Auto-generate on first mount
   const hasAutoGenerated = useRef(false);
   useEffect(() => {
-    if (!hasAutoGenerated.current && topicCards.length === 0 && !topicLoading) {
+    if (ipProfileReady && !hasAutoGenerated.current && topicCards.length === 0 && !topicLoading) {
       hasAutoGenerated.current = true;
       onGenerateTopics();
     }
-  }, [topicCards.length, topicLoading, onGenerateTopics]);
+  }, [ipProfileReady, topicCards.length, topicLoading, onGenerateTopics]);
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
         <h2 className="text-base sm:text-lg font-semibold flex items-center gap-2">
           <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-          AI 智能选题
+          文案智能体 · 选题输入
         </h2>
         <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">
-          策划层决策：系统基于你的 IP 档案生成 4 个选题方向，选一个最适合的
+          先确定这条口播要讲什么，后续文案、包装和素材都会围绕这个表达目标展开。
         </p>
       </div>
+
+      {!ipProfileReady && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              {ipProfileLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin text-amber-600 mt-0.5 shrink-0" />
+              ) : (
+                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              )}
+              <div>
+                <p className="text-sm font-medium text-amber-800">首次进入需要先建立 IP 档案</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  完成 5 个基础问题后，AI 会自动生成商业定位、人设定位、内容定位，确认后才能生成选题。
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              className="cursor-pointer shrink-0"
+              onClick={() => { window.location.href = "/ip-profile"; }}
+            >
+              去完成基础问卷
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Hot topic banner from home page */}
       {hotTopicTitle && (
@@ -1516,7 +1582,7 @@ function PhaseTopic({
           variant="outline"
           size="sm"
           onClick={onGenerateTopics}
-          disabled={topicLoading}
+          disabled={topicLoading || !ipProfileReady}
           className="cursor-pointer gap-1.5"
         >
           {topicLoading ? (
@@ -1596,9 +1662,17 @@ function PhaseCopywriting({
   onNext: () => void;
   onBack: () => void;
 }) {
-  const [openSection1, setOpenSection1] = useState(true);
-  const [openSection2, setOpenSection2] = useState(true);
-  const [openSection3, setOpenSection3] = useState(true);
+  const [openSection1, setOpenSection1] = useState(false);
+  const [openSection2, setOpenSection2] = useState(false);
+  const [openSection3, setOpenSection3] = useState(false);
+
+  // Quality check state
+  const [qualityReport, setQualityReport] = useState<QualityCheckReport | null>(null);
+  const [isCheckingQuality, setIsCheckingQuality] = useState(false);
+  const [qualityCheckError, setQualityCheckError] = useState<string | null>(null);
+  const [isPolishing, setIsPolishing] = useState(false);
+  const [autoChecked, setAutoChecked] = useState(false);
+  const autoCheckTriggeredRef = useRef<string | null>(null);
 
   const profile = ipProfile?.profile;
   const canGenerate =
@@ -1607,9 +1681,110 @@ function PhaseCopywriting({
     && !!selectedCopyStructureCode
     && !!selectedEndingCode
     && !!profile?.isComplete;
+  const selectedOpening = openingTypes.find((item) => item.code === selectedOpeningCode);
+  const selectedStructure = copyStructures.find((item) => item.code === selectedCopyStructureCode);
+  const selectedEnding = endingTypes.find((item) => item.code === selectedEndingCode);
+
+  // Auto-run quality check when a script is first selected
+  useEffect(() => {
+    if (selectedScriptId && editedScript.trim() && selectedScriptId !== autoCheckTriggeredRef.current) {
+      autoCheckTriggeredRef.current = selectedScriptId;
+      setAutoChecked(true);
+      setQualityReport(null);
+      setQualityCheckError(null);
+      setIsCheckingQuality(true);
+      checkScriptQuality({
+        content: editedScript.trim(),
+        topicTitle: selectedTopicCard?.title,
+        persona: profile?.displayName ?? undefined,
+      })
+        .then(setQualityReport)
+        .catch((error) => {
+          setQualityCheckError(
+            error instanceof Error ? error.message : "自动质量检查失败，请手动重试"
+          );
+        })
+        .finally(() => setIsCheckingQuality(false));
+    }
+  }, [selectedScriptId, editedScript, selectedTopicCard?.title, profile?.displayName]);
+
+  function handleEditedScriptInput(nextValue: string) {
+    onEditScript(nextValue);
+    setQualityReport(null);
+    setQualityCheckError(null);
+    setAutoChecked(false);
+  }
+
+  async function handleQualityCheck() {
+    if (!editedScript.trim()) {
+      setQualityCheckError("请先输入文案内容");
+      return;
+    }
+
+    setIsCheckingQuality(true);
+    setQualityCheckError(null);
+    setQualityReport(null);
+
+    try {
+      const report = await checkScriptQuality({
+        content: editedScript.trim(),
+        topicTitle: selectedTopicCard?.title,
+        persona: profile?.displayName ?? undefined,
+      });
+      setQualityReport(report);
+    } catch (error) {
+      setQualityCheckError(
+        error instanceof Error ? error.message : "质量检查失败，请稍后重试"
+      );
+    } finally {
+      setIsCheckingQuality(false);
+    }
+  }
+
+  async function handlePolish() {
+    if (!editedScript.trim()) return;
+
+    // Determine weak dimensions from quality report
+    const weakDimensions: string[] = [];
+    if (qualityReport) {
+      if (!qualityReport.aiTaste.passed) weakDimensions.push("aiTaste");
+      if (!qualityReport.editorial.passed) weakDimensions.push("editorial");
+      if (!qualityReport.attraction.passed) weakDimensions.push("attraction");
+      if (!qualityReport.logic.passed) weakDimensions.push("logic");
+    }
+
+    setIsPolishing(true);
+    try {
+      const result = await polishScript({
+        content: editedScript.trim(),
+        weakDimensions,
+        topicTitle: selectedTopicCard?.title,
+        persona: profile?.displayName ?? undefined,
+      });
+      onEditScript(result.polished);
+      toast.success("AI 润色完成，请查看修改后的文案");
+      setQualityReport(null);
+      setQualityCheckError(null);
+      setAutoChecked(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "AI 润色失败，请重试");
+    } finally {
+      setIsPolishing(false);
+    }
+  }
 
   return (
     <div className="space-y-5 sm:space-y-8">
+      <div>
+        <h2 className="text-base sm:text-lg font-semibold flex items-center gap-2">
+          <PenLine className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+          文案智能体 · 生成与定稿
+        </h2>
+        <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">
+          这里是主流程核心：先选表达结构，再生成、质检、润色并锁定最终口播文案。
+        </p>
+      </div>
+
       {/* Selected topic summary */}
       {selectedTopicCard && (
         <Card className="bg-muted/30">
@@ -1620,7 +1795,7 @@ function PhaseCopywriting({
               <div className="flex flex-wrap gap-1">
                 {selectedTopicCard.elementCodes.map((code) => (
                   <Badge key={code} variant="outline" className={`text-[10px] sm:text-xs ${getElementBadgeClass(code)}`}>
-                    {code}
+                    {getElementName(code)}
                   </Badge>
                 ))}
               </div>
@@ -1628,6 +1803,34 @@ function PhaseCopywriting({
           </CardContent>
         </Card>
       )}
+
+      <Card className="border-primary/15 bg-primary/[0.02]">
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">自动套用爆款表达模型</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                系统会基于选题自动匹配开头、结构和结尾；你也可以展开手动微调。
+              </p>
+            </div>
+            <Badge variant="outline" className="shrink-0">七大开头 · 八大结构</Badge>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="rounded-md border bg-background/70 p-2">
+              <p className="text-xs text-muted-foreground">开头</p>
+              <p className="text-sm font-medium mt-0.5">{selectedOpening?.name ?? "待匹配"}</p>
+            </div>
+            <div className="rounded-md border bg-background/70 p-2">
+              <p className="text-xs text-muted-foreground">文案结构</p>
+              <p className="text-sm font-medium mt-0.5">{selectedStructure?.name ?? "待匹配"}</p>
+            </div>
+            <div className="rounded-md border bg-background/70 p-2">
+              <p className="text-xs text-muted-foreground">结尾</p>
+              <p className="text-sm font-medium mt-0.5">{selectedEnding?.name ?? "待匹配"}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Section 1: Opening Types */}
       <div className="space-y-3">
@@ -1841,7 +2044,7 @@ function PhaseCopywriting({
           {isGenerating ? (
             <><Loader2 className="h-4 w-4 animate-spin" />文案 Agent 创作中...</>
           ) : (
-            <><Sparkles className="h-4 w-4" />{hotTopicTitle ? "热点融合创作" : "文案 Agent 创作"}</>
+            <><Sparkles className="h-4 w-4" />{hotTopicTitle ? "热点融合写文案" : "启动文案智能体"}</>
           )}
         </Button>
       </div>
@@ -1907,12 +2110,104 @@ function PhaseCopywriting({
       {selectedScriptId && (
         <div className="space-y-3">
           <Separator />
+          <Card className="border-primary/20 bg-primary/[0.02]">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Wand2 className="h-4 w-4 text-primary" />
+                    文案审核 & 热点融合
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    选择文案后自动检查四个维度；热点融合是可选项，可以从实时热点入口进入。
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {hotTopicTitle ? (
+                    <Badge variant="outline" className="border-orange-300 text-orange-600">
+                      已结合热点：{hotTopicTitle}
+                    </Badge>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="cursor-pointer gap-1.5"
+                      onClick={() => { window.location.href = "/home"; }}
+                    >
+                      <Flame className="h-3.5 w-3.5" />结合热点
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleQualityCheck}
+                    disabled={isCheckingQuality || !editedScript.trim()}
+                    className="cursor-pointer gap-1.5"
+                  >
+                    {isCheckingQuality ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" />检查中...</>
+                    ) : (
+                      <><Wand2 className="h-3.5 w-3.5" />质量检查</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {isCheckingQuality && (
+                <div className="flex items-start gap-3 rounded-md border bg-background/70 p-3">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">正在执行四维质量检查</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">编辑质量、AI 味、吸引力、逻辑性会一起评估。</p>
+                  </div>
+                </div>
+              )}
+
+              {qualityCheckError && (
+                <Card className="border-red-200 bg-red-50">
+                  <CardContent className="flex items-start gap-3 py-3">
+                    <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm text-red-800 font-medium">质量检查失败</p>
+                      <p className="text-xs text-red-600 mt-0.5">{qualityCheckError}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {qualityReport && (
+                <QualityReportCard
+                  report={qualityReport}
+                  onPolish={handlePolish}
+                  isPolishing={isPolishing}
+                />
+              )}
+
+              {!qualityReport && !isCheckingQuality && !qualityCheckError && (
+                <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm text-amber-800 font-medium">
+                      {autoChecked ? "尚未完成质量检查" : "当前文案需要质量检查"}
+                    </p>
+                    <p className="text-xs text-amber-600 mt-0.5">建议先确认文案达标后再进入下一步，质量门控只提醒，不会阻止继续生成。</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <div>
-            <Label htmlFor="edit-script" className="text-sm font-semibold text-muted-foreground">编辑文案（可修改）</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="edit-script" className="text-sm font-semibold text-muted-foreground">编辑文案（可修改）</Label>
+            </div>
             <Textarea
               id="edit-script"
               value={editedScript}
-              onChange={(e) => onEditScript(e.target.value)}
+              onChange={(e) => handleEditedScriptInput(e.target.value)}
               rows={5}
               className="mt-2"
             />
@@ -1920,7 +2215,20 @@ function PhaseCopywriting({
               约 {editedScript.length} 字，预估时长 {Math.ceil(editedScript.length / 3.5)} 秒
             </p>
           </div>
+
         </div>
+      )}
+
+      {!selectedScriptId && generatedScripts.length > 0 && (
+        <Card className="border-dashed">
+          <CardContent className="flex items-start gap-3 py-3">
+            <Wand2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium">选择一条文案后会进入质量门控</p>
+              <p className="text-xs text-muted-foreground mt-0.5">系统会自动执行四维质检，并在不通过时提供 AI 润色入口。</p>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Spacer for sticky bottom bar */}
@@ -1933,9 +2241,17 @@ function PhaseCopywriting({
             <ChevronLeft className="h-4 w-4 mr-1" /> 上一步
           </Button>
           {selectedScriptId && editedScript.trim() && (
-            <Button type="button" onClick={onNext} className="cursor-pointer">
-              下一步：定包装 <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
+            <div className="flex items-center gap-2">
+              {qualityReport && !qualityReport.overall.passed && (
+                <span className="text-xs text-amber-600">⚠ 质量未通过，建议先润色</span>
+              )}
+              {!qualityReport && !isCheckingQuality && (
+                <span className="text-xs text-amber-600">⚠ 未质检</span>
+              )}
+              <Button type="button" onClick={onNext} className="cursor-pointer">
+                下一步：定包装 <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -2192,20 +2508,20 @@ function PhasePackaging({
       <div>
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Package className="h-5 w-5 text-primary" />
-          选择视频包装
+          文案智能体 · 包装与证据
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          包装层决策：选择闪剪模板和素材，它决定了你的视频&quot;长什么样&quot;。好的包装和证据素材能让口播变成有说服力的营销视频。
+          这一阶段不重新创作文案，只为最终文案选择合适的画面节奏、模板能力和证据素材。
         </p>
       </div>
 
-      {/* Script preview */}
-      <Card className="bg-muted/30">
-        <CardContent>
-          <p className="text-xs text-muted-foreground mb-1">当前文案预览</p>
-          <p className="text-sm line-clamp-3">{editedScript}</p>
-        </CardContent>
-      </Card>
+      <ScriptCommandCenter
+        stage="最终文案"
+        title="文案是本阶段的主控输入"
+        subtitle="包装模板、素材角色和 BGM 都会围绕这条口播去匹配。"
+        script={editedScript}
+        badges={["模板匹配文案节奏", "素材补足文案证据", "BGM 服务表达情绪"]}
+      />
 
       {/* Packaging templates */}
       <div className="space-y-3">
@@ -2245,7 +2561,7 @@ function PhasePackaging({
         )}
 
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">选择包装模板</h3>
+          <h3 className="text-sm font-semibold">按文案选择包装模板</h3>
           {!loading && packagingTemplates.length > 0 && (
             <span className="text-xs text-muted-foreground">{filteredTemplates.length} / {packagingTemplates.length} 个模板</span>
           )}
@@ -2648,7 +2964,7 @@ function PhasePackaging({
                   有 {blockingAiCount} 个 AI 素材正在准备中。
                 </p>
                 <p className="mt-1 text-xs text-amber-700">
-                  你可以继续往下选择数字人，素材准备好后即可提交。
+                  你可以继续往下确认生产总览，素材准备好后即可提交。
                 </p>
               </div>
             </CardContent>
@@ -3012,28 +3328,13 @@ function PhasePackaging({
   );
 }
 
-// ─── Phase 3: 出视频 (Avatar + Summary + Submit) ────────
+// ─── Phase 3: 出视频 (Summary + Submit) ─────────────────
 
 function PhaseGenerate({
-  avatars,
-  publicAvatars,
-  publicVoices,
-  avatarsLoading,
-  selectedAvatarId,
-  selectedPublicVoiceId,
-  avatarSource,
-  onAvatarSourceChange,
-  onSelectAvatar,
-  onSelectPublicVoice,
-  selectedStructure,
-  selectedTemplate,
   resolvedPackagingLabel,
   selectedPackagingRecommendation,
   hasResolvedPackaging,
   editedScript,
-  selectedAvatar,
-  selectedPublicAvatar,
-  selectedPublicVoice,
   materials,
   backgroundMusic,
   blockingAiCount,
@@ -3044,25 +3345,10 @@ function PhaseGenerate({
   onSaveDraft,
   onBack,
 }: {
-  avatars: ApiAvatar[];
-  publicAvatars: PublicAvatar[];
-  publicVoices: PublicVoice[];
-  avatarsLoading: boolean;
-  selectedAvatarId: string | null;
-  selectedPublicVoiceId: string | null;
-  avatarSource: "mine" | "public";
-  onAvatarSourceChange: (v: "mine" | "public") => void;
-  onSelectAvatar: (id: string) => void;
-  onSelectPublicVoice: (id: string | null) => void;
-  selectedStructure: ApiVideoStructure | null;
-  selectedTemplate: PublicTemplateListItem | null;
   resolvedPackagingLabel: string;
   selectedPackagingRecommendation: ApiPackagingTemplateRecommendation | null;
   hasResolvedPackaging: boolean;
   editedScript: string;
-  selectedAvatar: ApiAvatar | null;
-  selectedPublicAvatar: PublicAvatar | null;
-  selectedPublicVoice: PublicVoice | null;
   materials: MaterialAssignment[];
   backgroundMusic: BackgroundMusicSelection | null;
   blockingAiCount: number;
@@ -3073,259 +3359,35 @@ function PhaseGenerate({
   onSaveDraft: () => void;
   onBack: () => void;
 }) {
-  const router = useRouter();
-  const [previewAvatar, setPreviewAvatar] = useState<PublicAvatar | null>(null);
-  const [publicGenderFilter, setPublicGenderFilter] = useState<"all" | "女" | "男">("all");
-  const [publicSearch, setPublicSearch] = useState("");
-  const readyAvatars = avatars.filter((a) => a.status === "ready");
-  const publicPreviewText = editedScript.trim().slice(0, 80) || "你好，我想用一句话看看，这个公共数字人讲出来的感觉是不是对的。";
-
-  const filteredPublicAvatars = useMemo(() => {
-    let list = publicAvatars;
-    if (publicGenderFilter !== "all") {
-      list = list.filter((a) => a.gender === publicGenderFilter);
-    }
-    if (publicSearch.trim()) {
-      const q = publicSearch.trim().toLowerCase();
-      list = list.filter((a) => a.name.toLowerCase().includes(q));
-    }
-    return list;
-  }, [publicAvatars, publicGenderFilter, publicSearch]);
-
-  // Determine display names for summary
-  const avatarDisplayName = selectedAvatar?.name ?? selectedPublicAvatar?.name ?? "未选择";
-  const voiceDisplayName = selectedAvatar?.speakerName ?? selectedPublicVoice?.name ?? "未选择";
   const manualMaterialCount = materials.filter((item) => item.source !== "ai_pexels" && item.source !== "ai_pixabay").length;
   const aiMaterialCount = materials.filter((item) => isAiMaterial(item)).length;
+  const usableMaterialCount = materials.filter((item) => isAiMaterial(item) || !!item.assetId).length;
 
   // Can submit check
-  const isPublicAvatarSelected = !!selectedPublicAvatar;
-  const canSubmit = !!selectedAvatarId && !!editedScript.trim() && !isSubmitting &&
+  const canSubmit = !!editedScript.trim() && !isSubmitting &&
     hasResolvedPackaging &&
     blockingAiCount === 0 &&
-    (isPublicAvatarSelected ? !!selectedPublicVoiceId : !!selectedAvatar?.externalSpeakerId);
+    usableMaterialCount > 0;
 
   return (
     <div className="space-y-6">
-      {/* Avatar selection */}
       <div>
         <h2 className="text-lg font-semibold flex items-center gap-2">
-          <UserCircle className="h-5 w-5 text-primary" />
-          选择数字人
+          <Play className="h-5 w-5 text-primary" />
+          文案智能体 · 成片确认
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          选择一个数字人形象来演绎你的视频文案
+          最后确认文案、包装模板、素材和背景音乐是否齐备，然后提交生成视频。
         </p>
       </div>
 
-      {/* Avatar source tabs */}
-      <div className="flex items-center gap-2">
-        <Button
-          variant={avatarSource === "mine" ? "default" : "outline"}
-          size="sm"
-          onClick={() => { onAvatarSourceChange("mine"); onSelectAvatar(""); }}
-          className="cursor-pointer gap-1.5"
-        >
-          <User className="h-3.5 w-3.5" /> 我的数字人
-        </Button>
-        <Button
-          variant={avatarSource === "public" ? "default" : "outline"}
-          size="sm"
-          onClick={() => { onAvatarSourceChange("public"); onSelectAvatar(""); }}
-          className="cursor-pointer gap-1.5"
-        >
-          <Users className="h-3.5 w-3.5" /> 公共数字人
-        </Button>
-      </div>
-
-      {/* Avatar grid */}
-      {avatarsLoading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i}>
-              <CardContent className="p-4 space-y-3">
-                <Skeleton className="aspect-square w-full rounded-lg" />
-                <Skeleton className="h-4 w-20" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : avatarSource === "mine" ? (
-        readyAvatars.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {readyAvatars.map((avatar) => {
-              const isSelected = selectedAvatarId === avatar.id;
-              return (
-                <Card
-                  key={avatar.id}
-                  className={`cursor-pointer transition-colors duration-200 hover:border-primary/50 ${
-                    isSelected ? "border-primary ring-2 ring-primary/20" : ""
-                  }`}
-                  onClick={() => onSelectAvatar(avatar.id)}
-                >
-                  <CardContent className="p-4 space-y-3">
-                    <div className="relative aspect-square rounded-lg overflow-hidden bg-muted">
-                      {avatar.coverUrl ? (
-                        <Image
-                          src={avatar.coverUrl}
-                          alt={avatar.name}
-                          fill
-                          unoptimized
-                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                          className="object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <UserCircle className="h-12 w-12 text-muted-foreground/30" />
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium truncate">{avatar.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {avatar.speakerName ? `声音: ${avatar.speakerName}` : "声音: 克隆中"}
-                      </p>
-                    </div>
-                    {isSelected && (
-                      <div className="flex items-center gap-1 text-primary text-xs font-medium">
-                        <Check className="h-3.5 w-3.5" /> 已选择
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        ) : (
-          <Card className="border-dashed">
-            <CardContent className="pt-6 pb-6 text-center space-y-3">
-              <UserCircle className="h-10 w-10 text-muted-foreground/30 mx-auto" />
-              <p className="text-sm text-muted-foreground">暂无可用的数字人</p>
-              <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => router.push("/assets")}>
-                前往创建数字人
-              </Button>
-            </CardContent>
-          </Card>
-        )
-      ) : (
-        /* Public avatars */
-        <div className="space-y-4">
-          {/* Filter bar: gender tabs + search */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1 rounded-lg border bg-muted/50 p-0.5">
-              {([["all", "全部"], ["女", "女"], ["男", "男"]] as const).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setPublicGenderFilter(value)}
-                  className={`cursor-pointer px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                    publicGenderFilter === value
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {label}
-                  <span className="ml-1 text-[10px] opacity-60">
-                    {value === "all"
-                      ? publicAvatars.length
-                      : publicAvatars.filter((a) => a.gender === value).length}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                placeholder="搜索数字人名称..."
-                value={publicSearch}
-                onChange={(e) => setPublicSearch(e.target.value)}
-                className="pl-8 h-8 text-xs"
-              />
-            </div>
-            <span className="text-xs text-muted-foreground shrink-0">
-              {filteredPublicAvatars.length} 个
-            </span>
-          </div>
-
-          {/* Scrollable avatar grid */}
-          <div className="max-h-[480px] overflow-y-auto rounded-lg border bg-muted/20 p-3">
-            {filteredPublicAvatars.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                {filteredPublicAvatars.map((avatar) => {
-                  const isSelected = selectedAvatarId === avatar.id;
-                  return (
-                    <div
-                      key={avatar.id}
-                      className={`group relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all duration-200 hover:shadow-md ${
-                        isSelected
-                          ? "border-primary ring-2 ring-primary/20 shadow-md"
-                          : "border-transparent hover:border-primary/30"
-                      }`}
-                      onClick={() => onSelectAvatar(avatar.id)}
-                    >
-                      <div className="relative aspect-[3/4] bg-muted">
-                        <Image
-                          src={avatar.coverUrl}
-                          alt={avatar.name}
-                          fill
-                          unoptimized
-                          sizes="(max-width: 640px) 33vw, (max-width: 1024px) 20vw, 16vw"
-                          className="object-cover"
-                        />
-                        {isSelected && (
-                          <div className="absolute top-1.5 right-1.5 bg-primary text-primary-foreground rounded-full p-0.5">
-                            <Check className="h-3 w-3" />
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          className="absolute bottom-1 right-1 bg-black/60 text-white rounded-full p-1 cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-black/80 transition-all"
-                          onClick={(e) => { e.stopPropagation(); setPreviewAvatar(avatar); }}
-                        >
-                          <Eye className="h-3 w-3" />
-                        </button>
-                      </div>
-                      <div className="p-1.5 bg-background">
-                        <p className="text-xs font-medium truncate">{avatar.name}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <Search className="h-8 w-8 mb-2 opacity-30" />
-                <p className="text-sm">没有找到匹配的数字人</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Public voice selection — shown after avatar is picked */}
-      {avatarSource === "public" && selectedAvatarId && publicVoices.length > 0 && (
-        <Card className="border-primary/15 bg-primary/[0.03]">
-          <CardContent className="space-y-3">
-            <p className="text-sm font-medium">为公共数字人选择声音</p>
-            <div className="flex flex-wrap gap-2">
-              {publicVoices.map((voice) => {
-                const isSelected = selectedPublicVoiceId === voice.id;
-                return (
-                  <Button
-                    key={voice.id}
-                    variant={isSelected ? "default" : "outline"}
-                    size="sm"
-                    className="cursor-pointer text-xs"
-                    onClick={() => onSelectPublicVoice(voice.id)}
-                  >
-                    {voice.name} {voice.gender ? `(${voice.gender})` : ""}
-                  </Button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <ScriptCommandCenter
+        stage="待成片文案"
+        title="这条文案将驱动整条视频"
+        subtitle="系统会使用包装模板和素材完成画面呈现，不需要额外选择讲述形象。"
+        script={editedScript}
+        badges={["文案定稿", "素材承载信息点", "包装控制节奏"]}
+      />
 
       {/* Production Summary */}
       <Separator />
@@ -3341,16 +3403,8 @@ function PhaseGenerate({
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-            <div className="space-y-1">
-              <p className="text-muted-foreground text-xs">导演层 · 视频结构</p>
-              <p className="font-medium">{selectedStructure?.displayName ?? "未选择"}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-muted-foreground text-xs">编剧层 · 表达模板</p>
-              <p className="font-medium">{selectedTemplate?.displayName ?? "未选择"}</p>
-            </div>
             <div className="space-y-1 sm:col-span-2">
-              <p className="text-muted-foreground text-xs">编剧层 · 最终文案</p>
+              <p className="text-muted-foreground text-xs">文案层 · 最终口播</p>
               <p className="font-medium line-clamp-3">{editedScript || "未编辑"}</p>
               <p className="text-xs text-muted-foreground">约 {editedScript.length} 字 · 预估 {Math.ceil(editedScript.length / 3.5)} 秒</p>
             </div>
@@ -3386,14 +3440,6 @@ function PhaseGenerate({
                   建议风格：{selectedPackagingRecommendation.bgmGuidance}
                 </p>
               )}
-            </div>
-            <div className="space-y-1">
-              <p className="text-muted-foreground text-xs">数字人</p>
-              <p className="font-medium">{avatarDisplayName}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-muted-foreground text-xs">声音</p>
-              <p className="font-medium">{voiceDisplayName}</p>
             </div>
           </div>
         </CardContent>
@@ -3465,19 +3511,6 @@ function PhaseGenerate({
           </div>
         </div>
       </div>
-
-      {/* Avatar preview dialog */}
-      {previewAvatar && (
-        <PublicAvatarPreviewDialog
-          open={!!previewAvatar}
-          onOpenChange={(open) => { if (!open) setPreviewAvatar(null); }}
-          avatar={previewAvatar}
-          voices={publicVoices}
-          defaultText={publicPreviewText}
-          selectedVoiceId={selectedPublicVoiceId}
-          onSelectedVoiceChange={(id) => onSelectPublicVoice(id)}
-        />
-      )}
     </div>
   );
 }

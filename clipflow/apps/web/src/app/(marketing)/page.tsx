@@ -12,25 +12,29 @@ import { TestimonialsSection } from "@/components/marketing/testimonials-section
 import { DifferentiatorsSection } from "@/components/marketing/differentiators-section"
 import { CTASection } from "@/components/marketing/cta-section"
 
+function normalizeLocale(locale: string | undefined) {
+  return locale?.toLowerCase().replace("_", "-").startsWith("en") ? "en" : "zh"
+}
+
 export async function generateMetadata(): Promise<Metadata> {
   const [store, branding] = await Promise.all([cookies(), getBrandingConfig()])
-  const locale = store.get("locale")?.value ?? "zh"
+  const locale = normalizeLocale(store.get("locale")?.value)
   const isZh = locale === "zh"
 
   return {
     title: isZh
-      ? `${branding.name} - AI 营销短视频流水线`
-      : `${branding.name} - AI Video Marketing Pipeline`,
+      ? `${branding.name} - AI营销增长智能体`
+      : `${branding.name} - AI Marketing Growth Agent`,
     description: isZh
-      ? `小企业主的 AI 视频创作助手——输入文案，自动生成专业营销短视频`
-      : "AI-powered video creation for small businesses — from copy to professional marketing video",
+      ? `${branding.name}，帮企业把业务资料、老板经验、项目案例训练成AI营销增长智能体`
+      : `${branding.name} turns business materials, founder expertise, and project cases into an AI marketing growth agent`,
     openGraph: {
       title: isZh
-        ? `${branding.name} - AI 营销短视频流水线`
-        : `${branding.name} - AI Video Marketing Pipeline`,
+        ? `${branding.name} - AI营销增长智能体`
+        : `${branding.name} - AI Marketing Growth Agent`,
       description: isZh
-        ? "小企业主的 AI 视频创作助手"
-        : "AI-powered video creation for small businesses",
+        ? "把企业资料、老板经验、项目案例训练成增长大脑"
+        : "Train business knowledge into an AI marketing growth agent",
       images: [{ url: "/og-image.png", width: 1200, height: 630 }],
       locale: isZh ? "zh_CN" : "en_US",
       type: "website",

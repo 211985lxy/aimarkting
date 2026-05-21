@@ -17,21 +17,21 @@ const testimonials: Testimonial[] = [
     nameKey: "t1Name",
     roleKey: "t1Role",
     initials: "ZW",
-    color: "bg-gradient-to-br from-blue-500 to-indigo-600",
+    color: "bg-[#D14A33]",
   },
   {
     quoteKey: "t2Quote",
     nameKey: "t2Name",
     roleKey: "t2Role",
     initials: "LT",
-    color: "bg-gradient-to-br from-pink-500 to-rose-600",
+    color: "bg-[#B88C33]",
   },
   {
     quoteKey: "t3Quote",
     nameKey: "t3Name",
     roleKey: "t3Role",
     initials: "WK",
-    color: "bg-gradient-to-br from-emerald-500 to-teal-600",
+    color: "bg-[#25211D]",
   },
 ]
 
@@ -39,30 +39,30 @@ export function TestimonialsSection() {
   const t = useTranslations("Testimonials")
 
   return (
-    <section className="py-16 sm:py-20 lg:py-24 px-4 sm:px-6 lg:px-8 bg-slate-50">
+    <section className="bg-[#FAF8F3] px-4 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
       <div className="mx-auto max-w-7xl">
-        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[#1E1B4B] text-center mb-12 sm:mb-16">
+        <h2 className="mb-12 text-center text-2xl font-bold text-[#25211D] sm:mb-16 sm:text-3xl lg:text-4xl">
           {t("heading")}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {testimonials.map(({ quoteKey, nameKey, roleKey, initials, color }) => (
             <div
               key={quoteKey}
-              className="relative flex flex-col rounded-2xl border border-gray-200 bg-white p-6 sm:p-8 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/5"
+              className="relative flex flex-col rounded-xl border border-[#E8DED1] bg-white p-6 transition-all duration-200 hover:shadow-lg hover:shadow-[#8C4A2F]/5 sm:p-8"
             >
-              <Quote className="h-8 w-8 text-[#6366F1]/20 mb-4" />
-              <blockquote className="text-[#1E1B4B] leading-relaxed flex-1 mb-6">
+              <Quote className="mb-4 h-8 w-8 text-[#D14A33]/20" />
+              <blockquote className="mb-6 flex-1 leading-relaxed text-[#25211D]">
                 &ldquo;{t(quoteKey)}&rdquo;
               </blockquote>
-              <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
+              <div className="flex items-center gap-3 border-t border-[#EFE7DC] pt-4">
                 <div
                   className={`flex h-10 w-10 items-center justify-center rounded-full ${color} text-white text-sm font-semibold`}
                 >
                   {initials}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-[#1E1B4B]">{t(nameKey)}</p>
-                  <p className="text-xs text-muted-foreground">{t(roleKey)}</p>
+                  <p className="text-sm font-semibold text-[#25211D]">{t(nameKey)}</p>
+                  <p className="text-xs text-[#8A8175]">{t(roleKey)}</p>
                 </div>
               </div>
             </div>

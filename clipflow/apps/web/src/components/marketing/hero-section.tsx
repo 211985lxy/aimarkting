@@ -3,69 +3,108 @@
 import Link from "next/link"
 import { useTranslations } from "next-intl"
 import { useBranding } from "@/components/providers/branding-provider"
-import { ArrowRight, Play } from "lucide-react"
+import {
+  ArrowRight,
+  BookOpen,
+  Brain,
+  BriefcaseBusiness,
+  MessageSquareText,
+  Play,
+  Quote,
+  Sparkles,
+} from "lucide-react"
+
+const inputs = [
+  { label: "企业资料", Icon: BookOpen },
+  { label: "老板经验", Icon: Quote },
+  { label: "项目案例", Icon: BriefcaseBusiness },
+  { label: "客户问答", Icon: MessageSquareText },
+]
+
+const outputs = ["案例内容", "老板口播", "卖点人话", "成交话术"]
 
 export function HeroSection() {
   const t = useTranslations("Hero")
   const branding = useBranding()
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-b from-[#0F0A2A] via-[#1E1B4B] to-[#312E81] py-24 sm:py-32 lg:py-40 px-4 sm:px-6 lg:px-8">
-      {/* Background grid pattern */}
-      <div
-        className="absolute inset-0 opacity-[0.04]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px)",
-          backgroundSize: "64px 64px",
-        }}
-      />
-      {/* Radial glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-[#6366F1]/20 rounded-full blur-[120px]" />
+    <section className="relative overflow-hidden bg-[#FAF8F3] px-4 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
+      <div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[1fr_520px]">
+        <div>
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#D14A33]/20 bg-white px-4 py-1.5 text-sm font-medium text-[#D14A33] shadow-sm">
+            <Sparkles className="h-4 w-4" />
+            {t("badge")}
+          </div>
 
-      <div className="relative mx-auto max-w-4xl text-center">
-        {/* Badge */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-indigo-300 backdrop-blur-sm mb-8">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          {t("badge")}
-        </div>
+          <h1 className="max-w-4xl text-4xl font-bold leading-[1.08] tracking-tight text-[#25211D] sm:text-5xl lg:text-7xl">
+            {t("title")}
+            <br />
+            <span className="text-[#D14A33]">{t("titleHighlight")}</span>
+          </h1>
 
-        {/* Headline */}
-        <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold text-white leading-[1.1] tracking-tight">
-          {t("title")}
-          <br />
-          <span className="bg-gradient-to-r from-[#818CF8] via-[#6366F1] to-[#A78BFA] bg-clip-text text-transparent">
-            {t("titleHighlight")}
-          </span>
-        </h1>
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-[#5F5A52] sm:text-xl">
+            {t("subtitle", { name: branding.name })}
+          </p>
 
-        {/* Subtitle */}
-        <p className="mt-6 text-lg sm:text-xl text-indigo-200/70 max-w-2xl mx-auto leading-relaxed">
-          {t("subtitle", { name: branding.name })}
-        </p>
-
-        {/* CTAs */}
-        <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <div className="mt-10 flex flex-col gap-4 sm:flex-row">
           <Link
             href="/register"
-            className="inline-flex items-center justify-center cursor-pointer bg-[#22C55E] hover:bg-[#16A34A] text-white text-base px-8 py-4 rounded-lg font-semibold transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 w-full sm:w-auto"
+            className="inline-flex w-full cursor-pointer items-center justify-center rounded-lg bg-[#D14A33] px-8 py-4 text-base font-semibold text-white shadow-lg shadow-[#D14A33]/20 transition-colors duration-200 hover:bg-[#B83F2B] sm:w-auto"
           >
             {t("cta")}
             <ArrowRight className="ml-2 h-5 w-5" />
           </Link>
           <Link
             href="/login"
-            className="inline-flex items-center justify-center cursor-pointer border border-white/20 text-white hover:bg-white/10 text-base px-8 py-4 rounded-lg font-semibold transition-all duration-200 w-full sm:w-auto"
+            className="inline-flex w-full cursor-pointer items-center justify-center rounded-lg border border-[#D14A33]/20 bg-white px-8 py-4 text-base font-semibold text-[#25211D] transition-colors duration-200 hover:bg-[#FFF8F4] sm:w-auto"
           >
             <Play className="mr-2 h-5 w-5" />
             {t("ctaSecondary")}
           </Link>
+          </div>
+
+          <p className="mt-8 text-sm font-medium text-[#8A8175]">
+            {t("trustLine", { count: "3,000" })}
+          </p>
         </div>
 
-        {/* Trust line */}
-        <p className="mt-8 text-sm text-indigo-300/50">
-          {t("trustLine", { count: "3,000" })}
-        </p>
+        <div className="rounded-2xl border border-[#E8DED1] bg-white p-5 shadow-xl shadow-[#8C4A2F]/10">
+          <div className="flex items-center justify-between border-b border-[#EFE7DC] pb-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#B88C33]">
+                AIM Growth Brain
+              </p>
+              <p className="mt-1 text-lg font-bold text-[#25211D]">企业营销资产 AI 化引擎</p>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#D14A33]/10">
+              <Brain className="h-6 w-6 text-[#D14A33]" />
+            </div>
+          </div>
+
+          <div className="grid gap-4 py-5 sm:grid-cols-2">
+            {inputs.map(({ label, Icon }) => (
+              <div key={label} className="rounded-lg border border-[#EFE7DC] bg-[#FAF8F3] p-4">
+                <Icon className="mb-3 h-5 w-5 text-[#B88C33]" />
+                <p className="text-sm font-semibold text-[#25211D]">{label}</p>
+                <p className="mt-1 text-xs text-[#777066]">结构化入库</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-xl bg-[#25211D] p-5 text-white">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-sm font-semibold">AIM 智能体输出</p>
+              <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">营销服务中</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {outputs.map((item) => (
+                <div key={item} className="rounded-lg bg-white/10 px-3 py-2 text-sm text-white/90">
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   )

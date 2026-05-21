@@ -31,8 +31,8 @@ model User {
   activationCodes                ActivationCode[]
   topicSelections                TopicSelection[]
   competitorAnalyses             CompetitorAnalysis[]
-  socialAccounts                 SocialAccount[]
-  socialUploadTasks              SocialUploadTask[]
+  knowledgeEntries               KnowledgeEntry[]
+  aimGenerations                 AimGeneration[]
 }
 
 model Avatar {
@@ -106,6 +106,13 @@ model Script {
   topicSelectionId  String?
   isHotTopicVersion Boolean  @default(false)
 
+  // ── Quality Gate (PRD Module 4) ──
+  openingTypeCode String?  // 使用的开头类型代码
+  structureCode   String?  // 使用的文案结构代码
+  endingTypeCode  String?  // 使用的结尾类型代码
+  qualityReport   Json?    // 四维评分详情 { editorial, aiTaste, attraction, logic }
+  rewriteCount    Int      @default(0) // 自动重写次数
+
   user          User                  @relation(fields: [userId], references: [id])
   generationRun ContentGenerationRun? @relation(fields: [generationRunId], references: [id])
   ipProfile     IpProfile?            @relation(fields: [ipProfileId], references: [id])
@@ -166,8 +173,6 @@ model VideoTask {
   productionPlan    VideoProductionPlan?    @relation(fields: [productionPlanId], references: [id])
   structure         VideoStructure?         @relation(fields: [structureId], references: [id])
   packagingTemplate VideoPackagingTemplate? @relation(fields: [packagingTemplateId], references: [id])
-  socialUploadTasks SocialUploadTask[]
-
   @@index([userId, status])
   @@index([userId, deliveryStatus])
   @@index([externalTaskId])
@@ -255,6 +260,53 @@ model IpProfile {
 
   @@index([isComplete])
   @@index([profileVersion])
+}
+
+// ─── 企业知识库 ─────────────────────────────────────────
+
+model KnowledgeEntry {
+  id         String   @id @default(cuid())
+  userId     String
+  category   String // boss_experience | product_usp | customer_pain | project_case | customer_qa
+  title      String
+  content    String   @db.Text
+  tags       Json     @default("[]")
+  sourceType String   @default("manual") // manual | voice_transcribe | import
+  sortOrder  Int      @default(0)
+  status     String   @default("active") // active | archived
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, category])
+  @@index([userId, status])
+}
+
+// ─── AIM 生成记录 ───────────────────────────────────────
+
+model AimGeneration {
+  id               String   @id @default(cuid())
+  userId           String
+  rawInput         String   @db.Text
+  inputSource      String   @default("text") // text | voice
+  videoScript      String?  @db.Text
+  wechatArticle    String?  @db.Text
+  momentsPost      String?  @db.Text
+  formatsRequested Json     @default("[]")
+  knowledgeUsed    Json     @default("[]")
+  ipSnapshotUsed   String?  @db.Text
+  qualityScores    Json?
+  model            String?
+  totalTokens      Int?
+  status           String   @default("completed")
+  errorMessage     String?  @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model ContentGenerationRun {
@@ -690,81 +742,4 @@ model CompetitorAnalysis {
   @@index([userId, platform])
 }
 
-// ─── Social Media Integration ─────────────────────────────
-
-model SocialAccount {
-  id                String   @id @default(cuid())
-  userId            String
-  platform          String   // douyin | xiaohongshu | bilibili | kuaishou | tencent
-  accountName       String   // 用户自定义的账号名称
-  accountAlias      String?  // 平台显示的昵称
-
-  // 认证信息 (加密存储)
-  cookieData        String?  @db.Text  // JSON 加密存储
-  qrcodeData        String?  @db.Text  // 临时二维码 dataURL
-
-  // 账号状态
-  status            String   @default("pending") // pending | logged_in | expired | failed
-  lastCheckedAt     DateTime?
-  expiresAt         DateTime?
-
-  // 平台信息
-  avatarUrl         String?
-  followerCount     Int?
-
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  user              User     @relation(fields: [userId], references: [id])
-  uploadTasks       SocialUploadTask[]
-
-  @@index([userId, platform])
-  @@index([userId, status])
-  @@unique([userId, platform, accountName])
-}
-
-model SocialUploadTask {
-  id                String   @id @default(cuid())
-  userId            String
-  videoTaskId       String?  // 关联的视频任务
-
-  // 平台信息
-  platform          String
-  accountId         String
-
-  // 上传内容
-  title             String
-  description       String?  @db.Text
-  tags              String?  // JSON array
-  thumbnailPath     String?
-
-  // 发布配置
-  publishStrategy   String   @default("immediate") // immediate | scheduled
-  scheduledAt       DateTime?
-
-  // 任务状态
-  status            String   @default("pending") // pending | uploading | completed | failed | cancelled
-  progress          Int      @default(0) // 0-100
-
-  // 结果
-  platformVideoId   String?  // 平台返回的视频ID
-  platformVideoUrl  String?
-  errorCode         String?
-  errorMessage      String?  @db.Text
-
-  // 元数据
-  externalTaskId    String?  @unique  // social-auto-upload 的任务ID
-
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  completedAt       DateTime?
-
-  user              User              @relation(fields: [userId], references: [id])
-  videoTask         VideoTask?        @relation(fields: [videoTaskId], references: [id])
-  account           SocialAccount     @relation(fields: [accountId], references: [id])
-
-  @@index([userId, status])
-  @@index([videoTaskId])
-  @@index([externalTaskId])
-  @@index([status, createdAt])
-}
+// Social Media models removed — module 5 (multi-platform distribution) not in scope

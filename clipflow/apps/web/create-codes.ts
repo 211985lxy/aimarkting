@@ -1,7 +1,7 @@
-import { PrismaClient } from './src/generated/prisma/index.js';
+import { PrismaClient } from './src/generated/prisma/client.js';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({});
 
 async function createActivationCodes() {
   try {
@@ -39,8 +39,8 @@ async function createActivationCodes() {
           },
         });
         console.log(`✅ ${code} - 创建成功`);
-      } catch (error) {
-        console.log(`❌ ${code} - 创建失败: ${error.message}`);
+      } catch (err) {
+        console.log(`❌ ${code} - 创建失败: ${(err as Error).message}`);
       }
     }
 

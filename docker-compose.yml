@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Lightpanda 无头浏览器
   lightpanda:
@@ -40,8 +38,26 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis 缓存与轻量锁
+  redis:
+    image: redis:7-alpine
+    container_name: clipflow-redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    networks:
+      - clipflow-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   mysql_data:
+  redis_data:
 
 networks:
   clipflow-network:

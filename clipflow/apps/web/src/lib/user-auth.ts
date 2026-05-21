@@ -41,6 +41,69 @@ function extractToken(request: NextRequest): string | null {
   return null
 }
 
+export async function authenticateRequest(
+  request: NextRequest,
+  options: { requireActivation?: boolean } = {}
+): Promise<UserPayload> {
+  const token = extractToken(request)
+  if (!token) {
+    throw new Error("UNAUTHORIZED")
+  }
+
+  const user = verifyUserToken(token)
+  if (!user) {
+    throw new Error("INVALID_TOKEN")
+  }
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+  })
+  if (!dbUser) {
+    throw new Error("USER_NOT_FOUND")
+  }
+
+  if (options.requireActivation !== false) {
+    const subscriptionStatus = getSubscriptionStatus(dbUser.expiresAt)
+    if (subscriptionStatus !== "active") {
+      throw new Error(
+        subscriptionStatus === "expired"
+          ? "SUBSCRIPTION_EXPIRED"
+          : "ACTIVATION_REQUIRED"
+      )
+    }
+  }
+
+  return user
+}
+
+export function authErrorResponse(error: unknown): NextResponse | null {
+  if (!(error instanceof Error)) return null
+
+  if (error.message === "UNAUTHORIZED") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  if (error.message === "INVALID_TOKEN") {
+    return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+  }
+  if (error.message === "USER_NOT_FOUND") {
+    return NextResponse.json({ error: "User not found" }, { status: 401 })
+  }
+  if (error.message === "ACTIVATION_REQUIRED") {
+    return NextResponse.json(
+      { error: "Activation required", code: "ACTIVATION_REQUIRED" },
+      { status: 403 }
+    )
+  }
+  if (error.message === "SUBSCRIPTION_EXPIRED") {
+    return NextResponse.json(
+      { error: "Subscription expired", code: "SUBSCRIPTION_EXPIRED" },
+      { status: 403 }
+    )
+  }
+
+  return null
+}
+
 /**
  * User auth middleware wrapper.
  * Validates user JWT and injects user context into handler.

@@ -92,7 +92,7 @@ describe("Shanjian Client", () => {
         )
       )
 
-      const taskId = await generateVirtualmanBroadcast({
+      const { taskId } = await generateVirtualmanBroadcast({
         styleId: "style-1",
         virtualmanId: "vm-1",
         content: "Hello world",

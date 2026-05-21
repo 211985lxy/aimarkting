@@ -115,7 +115,7 @@ describe("Video Tasks E2E", () => {
   let createdTaskId: string
 
   it("creates virtualman_broadcast task", async () => {
-    mockGenerateVirtualmanBroadcast.mockResolvedValue("ext-video-1")
+    mockGenerateVirtualmanBroadcast.mockResolvedValue({ taskId: "ext-video-1", payload: {} })
 
     const res = await POST(
       userReq("/api/tasks", {
@@ -149,7 +149,7 @@ describe("Video Tasks E2E", () => {
   })
 
   it("creates a task from an existing selected scriptId", async () => {
-    mockGenerateVirtualmanBroadcast.mockResolvedValue("ext-video-from-script")
+    mockGenerateVirtualmanBroadcast.mockResolvedValue({ taskId: "ext-video-from-script", payload: {} })
 
     const script = await prisma.script.create({
       data: {
@@ -196,7 +196,7 @@ describe("Video Tasks E2E", () => {
   })
 
   it("keeps generic packaging materials on the standard virtualman route", async () => {
-    mockGenerateVirtualmanBroadcast.mockResolvedValue("ext-plan-standard")
+    mockGenerateVirtualmanBroadcast.mockResolvedValue({ taskId: "ext-plan-standard", payload: {} })
 
     const script = await prisma.script.create({
       data: {
@@ -259,7 +259,7 @@ describe("Video Tasks E2E", () => {
   })
 
   it("routes explicit scene-segment materials to the custom virtualman route", async () => {
-    mockGenerateCustomVirtualmanBroadcast.mockResolvedValue("ext-plan-custom")
+    mockGenerateCustomVirtualmanBroadcast.mockResolvedValue({ taskId: "ext-plan-custom", payload: {} })
 
     const script = await prisma.script.create({
       data: {
@@ -392,6 +392,8 @@ describe("Video Tasks E2E", () => {
   })
 
   it("allows task creation for another authenticated user", async () => {
+    mockGenerateVirtualmanBroadcast.mockResolvedValue({ taskId: "ext-video-poor", payload: {} })
+
     const poorUser = await prisma.user.create({
       data: {
         email: "poor-tasks@e2e.com",
@@ -448,7 +450,7 @@ describe("Video Tasks E2E", () => {
   })
 
   it("creates realman_broadcast task (no avatar validation required)", async () => {
-    mockGenerateRealmanBroadcast.mockResolvedValue("ext-realman-1")
+    mockGenerateRealmanBroadcast.mockResolvedValue({ taskId: "ext-realman-1", payload: {} })
 
     const res = await POST(
       userReq("/api/tasks", {

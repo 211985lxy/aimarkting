@@ -1,5 +1,76 @@
 import "./global-setup";
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+
+process.env.PEXELS_API_KEY_1 = "mock-key";
+process.env.PIXABAY_API_KEY_1 = "mock-key";
+
+vi.mock("@/lib/pexels", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/pexels")>()
+  return {
+    ...actual,
+    searchPhotos: vi.fn().mockResolvedValue({
+      total_results: 15,
+      photos: [
+        {
+          id: 991101,
+          width: 1920,
+          height: 1080,
+          url: "https://www.pexels.com/photo/991101/",
+          photographer: "Pexels Photographer",
+          photographer_url: "https://example.com/photographer",
+          photographer_id: 123,
+          avg_color: "#ffffff",
+          alt: "mock photo alt",
+          src: {
+            original: "https://images.example.com/991101.jpg",
+            large2x: "https://images.example.com/991101.jpg",
+            large: "https://images.example.com/991101.jpg",
+            medium: "https://images.example.com/991101.jpg",
+            small: "https://images.example.com/991101.jpg",
+            portrait: "https://images.example.com/991101.jpg",
+            landscape: "https://images.example.com/991101.jpg",
+            tiny: "https://images.example.com/991101.jpg",
+          }
+        }
+      ]
+    }),
+    searchVideos: vi.fn().mockResolvedValue({
+      total_results: 0,
+      videos: []
+    })
+  }
+});
+
+vi.mock("@/lib/pixabay", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/pixabay")>()
+  return {
+    ...actual,
+    searchImages: vi.fn().mockResolvedValue({
+      total: 15,
+      totalHits: 15,
+      hits: [
+        {
+          id: 881101,
+          largeImageURL: "https://pixabay.example.com/881101_large.jpg",
+          webformatURL: "https://pixabay.example.com/881101_640.jpg",
+          previewURL: "https://pixabay.example.com/881101_preview.jpg",
+          webformatWidth: 640,
+          webformatHeight: 480,
+          pageURL: "https://pixabay.com/photo/881101/",
+          user: "Pixabay Creator",
+          user_id: 12345,
+          tags: "mock image tags"
+        }
+      ]
+    }),
+    searchVideos: vi.fn().mockResolvedValue({
+      total: 0,
+      totalHits: 0,
+      hits: []
+    })
+  }
+});
+
 import {
   prisma,
   cleanDatabase,

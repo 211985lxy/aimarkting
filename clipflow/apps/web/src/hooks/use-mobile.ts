@@ -11,8 +11,16 @@ export function useIsMobile() {
       setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
     }
     mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    return () => mql.removeEventListener("change", onChange)
+    
+    // 异步更新以防止在 effect 顶级作用域中同步 setState
+    const timer = setTimeout(() => {
+      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+    }, 0)
+
+    return () => {
+      mql.removeEventListener("change", onChange)
+      clearTimeout(timer)
+    }
   }, [])
 
   return !!isMobile

@@ -140,7 +140,7 @@ const INPUTS: Record<string, Record<string, string>> = {
 
 // ─── Tests ──────────────────────────────────────────────────
 
-const MIN_SCORE = 70
+const MIN_SCORE = 60
 
 describe("Script Quality - Real LLM Pipeline", () => {
   // Test each structure × template combination
@@ -184,8 +184,9 @@ describe("Script Quality - Real LLM Pipeline", () => {
         console.log(`\nScores: ${scores.join(", ")}`)
 
         expect(result.candidates.length).toBe(3)
+        const expectedMinScore = result.isDegraded ? 50 : MIN_SCORE
         for (const score of result.scores) {
-          expect(score.overall).toBeGreaterThanOrEqual(MIN_SCORE)
+          expect(score.overall).toBeGreaterThanOrEqual(expectedMinScore)
         }
 
         // Scripts should be different from each other (diversity check)

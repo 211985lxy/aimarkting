@@ -246,9 +246,9 @@ export default function VideoDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
         <Video className="h-12 w-12 text-muted-foreground" />
-        <h2 className="text-xl font-bold">视频不存在</h2>
+        <h2 className="text-xl font-bold">文案记录不存在</h2>
         <p className="text-sm text-muted-foreground">
-          找不到该视频，可能已被删除
+          找不到该文案记录，可能已被删除
         </p>
         <Button
           variant="outline"
@@ -256,7 +256,7 @@ export default function VideoDetailPage() {
           className="cursor-pointer transition-colors duration-200"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
-          返回视频列表
+          返回文案列表
         </Button>
       </div>
     )
@@ -287,7 +287,7 @@ export default function VideoDetailPage() {
           className="mb-6 cursor-pointer transition-colors duration-200"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
-          返回视频列表
+          返回文案列表
         </Button>
 
         <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
@@ -322,7 +322,7 @@ export default function VideoDetailPage() {
           className="mb-6 cursor-pointer transition-colors duration-200"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
-          返回视频列表
+          返回文案列表
         </Button>
 
         <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
@@ -332,9 +332,9 @@ export default function VideoDetailPage() {
           </div>
 
           <div>
-            <h2 className="text-xl font-bold">视频生成中...</h2>
+            <h2 className="text-xl font-bold">文案成片生成中...</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              请稍候，正在为您生成视频
+              请稍候，正在为这条文案生成成片
             </p>
           </div>
 
@@ -353,7 +353,7 @@ export default function VideoDetailPage() {
     try {
       const { retryPayload } = await getVideoTaskRetryPayload(id)
       const newTask = await createVideoTask(retryPayload)
-      toast.success("已重新提交视频生成任务")
+      toast.success("已重新提交文案成片任务")
       router.push(`/videos/${newTask.id}`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "重试失败，请稍后再试")
@@ -368,7 +368,7 @@ export default function VideoDetailPage() {
     // Map common error codes/messages to user-friendly guidance
     const errorMessage = task.errorMessage ?? "未知错误"
     const friendlyHint = errorMessage.includes("timeout") || errorMessage.includes("超时")
-      ? "视频生成服务响应超时，通常重试即可解决。"
+      ? "文案成片服务响应超时，通常重试即可解决。"
       : errorMessage.includes("quota") || errorMessage.includes("余额")
         ? "服务额度不足，请联系管理员。"
         : "这可能是临时性问题，建议点击重试。如果反复失败，请检查素材质量或联系客服。"
@@ -382,7 +382,7 @@ export default function VideoDetailPage() {
           className="mb-6 cursor-pointer transition-colors duration-200"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
-          返回视频列表
+          返回文案列表
         </Button>
 
         <Card className="border-red-200">
@@ -441,16 +441,16 @@ export default function VideoDetailPage() {
           className="mb-6 cursor-pointer transition-colors duration-200"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
-          返回视频列表
+          返回文案列表
         </Button>
 
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center space-y-4">
             <AlertCircle className="h-10 w-10 text-muted-foreground" />
             <div>
-              <h2 className="text-xl font-bold">视频数据异常</h2>
+              <h2 className="text-xl font-bold">文案成片数据异常</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                视频已标记完成但未找到视频文件，请联系管理员
+                文案已标记完成但未找到成片文件，请联系管理员
               </p>
             </div>
           </CardContent>
@@ -467,7 +467,7 @@ export default function VideoDetailPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="视频预览" backHref="/videos">
+      <PageHeader title="文案成片预览" backHref="/videos">
         <div className="flex items-center gap-2">
           {task.enhancementStatus === 'completed' && (
             <Badge className="bg-black/80 text-white border-none text-xs px-2 py-0.5 font-semibold">
@@ -832,7 +832,7 @@ export default function VideoDetailPage() {
       {/* Info Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">视频信息</CardTitle>
+          <CardTitle className="text-base">文案信息</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">

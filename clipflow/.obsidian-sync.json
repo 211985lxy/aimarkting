@@ -1,0 +1,7 @@
+{
+  "obsidianApiUrl": "https://127.0.0.1:27124",
+  "obsidianToken": "",
+  "targetServerUrl": "http://localhost:3000",
+  "syncToken": "clipflow-obsidian-sync-secret",
+  "syncTag": "Aim/知识库"
+}

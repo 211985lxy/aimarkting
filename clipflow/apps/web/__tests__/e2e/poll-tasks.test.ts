@@ -338,7 +338,7 @@ describe("Poll Tasks Cron E2E", () => {
   });
 
   it("repairs missing demo video for ready avatar", async () => {
-    mockGenerateRawVideo.mockResolvedValue("demo-repair-task");
+    mockGenerateRawVideo.mockResolvedValue({ taskId: "demo-repair-task" });
 
     const avatar = await prisma.avatar.create({
       data: {

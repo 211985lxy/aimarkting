@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import {
   redis, cleanDatabase, disconnectAll, cleanRedis,
-  createAdminUser, createTemplate, json,
+  createAdminUser, createTemplate, json, req,
 } from "./helpers"
 import { GET } from "@/app/api/hot-topics/route"
 
@@ -56,7 +56,7 @@ describe("Public Hot Topics E2E", () => {
   })
 
   it("returns hot topics with template recommendations from real data", async () => {
-    const res = await GET()
+    const res = await GET(req("/api/hot-topics"))
     expect(res.status).toBe(200)
 
     const body = await json(res)
@@ -80,7 +80,7 @@ describe("Public Hot Topics E2E", () => {
   })
 
   it("includes Cache-Control header", async () => {
-    const res = await GET()
+    const res = await GET(req("/api/hot-topics"))
     expect(res.headers.get("Cache-Control")).toContain("max-age=300")
   })
 })

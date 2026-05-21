@@ -32,6 +32,61 @@ vi.mock("@/lib/script-generator", async (importOriginal) => {
   }
 })
 
+vi.mock("@/lib/pexels", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/pexels")>()
+  return {
+    ...actual,
+    searchVideos: vi.fn().mockResolvedValue({
+      total_results: 3,
+      videos: [
+        {
+          id: 991101,
+          width: 1920,
+          height: 1080,
+          url: "https://www.pexels.com/video/991101/",
+          duration: 8,
+          image: "https://images.example.com/991101.jpg",
+          user: { name: "Pexels Creator", url: "https://example.com", id: 123 },
+          video_files: [
+            { id: 991101, quality: "hd", file_type: "video/mp4", width: 1920, height: 1080, fps: 30, link: "https://videos.example.com/991101.mp4" }
+          ],
+          video_pictures: []
+        },
+        {
+          id: 991102,
+          width: 1920,
+          height: 1080,
+          url: "https://www.pexels.com/video/991102/",
+          duration: 8,
+          image: "https://images.example.com/991102.jpg",
+          user: { name: "Pexels Creator", url: "https://example.com", id: 123 },
+          video_files: [
+            { id: 991102, quality: "hd", file_type: "video/mp4", width: 1920, height: 1080, fps: 30, link: "https://videos.example.com/991102.mp4" }
+          ],
+          video_pictures: []
+        },
+        {
+          id: 991103,
+          width: 1920,
+          height: 1080,
+          url: "https://www.pexels.com/video/991103/",
+          duration: 8,
+          image: "https://images.example.com/991103.jpg",
+          user: { name: "Pexels Creator", url: "https://example.com", id: 123 },
+          video_files: [
+            { id: 991103, quality: "hd", file_type: "video/mp4", width: 1920, height: 1080, fps: 30, link: "https://videos.example.com/991103.mp4" }
+          ],
+          video_pictures: []
+        }
+      ]
+    }),
+    searchPhotos: vi.fn().mockResolvedValue({
+      total_results: 0,
+      photos: []
+    })
+  }
+})
+
 import {
   prisma,
   cleanDatabase,
@@ -180,6 +235,7 @@ describe("Three-Layer Video Creation Flow E2E", () => {
 
     // Remove OPENAI_API_KEY to force mock LLM path
     delete process.env.OPENAI_API_KEY
+    process.env.PEXELS_API_KEY_1 = "mock-key"
     await ensureThreeLayerFixtures()
   })
 
@@ -884,7 +940,7 @@ describe("Three-Layer Video Creation Flow E2E", () => {
 
   describe("POST /api/tasks with productionPlanId", () => {
     it("creates a task with lineage (structureId, packagingTemplateId, snapshots)", async () => {
-      mockGenerateVirtualmanBroadcast.mockResolvedValue("ext-plan-task-1")
+      mockGenerateVirtualmanBroadcast.mockResolvedValue({ taskId: "ext-plan-task-1", payload: {} })
 
       // Create a script and plan for this test
       const script = await prisma.script.create({
@@ -975,7 +1031,7 @@ describe("Three-Layer Video Creation Flow E2E", () => {
     })
 
     it("rejects already-used production plan", async () => {
-      mockGenerateVirtualmanBroadcast.mockResolvedValue("ext-plan-task-reuse")
+      mockGenerateVirtualmanBroadcast.mockResolvedValue({ taskId: "ext-plan-task-reuse", payload: {} })
 
       // Create and use a plan
       const script = await prisma.script.create({
@@ -1084,7 +1140,7 @@ describe("Three-Layer Video Creation Flow E2E", () => {
     })
 
     it("uses plan videoType when template config resolves to virtualman_video", async () => {
-      mockGenerateRawVideo.mockResolvedValue("ext-raw-video-task-1")
+      mockGenerateRawVideo.mockResolvedValue({ taskId: "ext-raw-video-task-1", payload: {} })
 
       await prisma.contentTemplate.update({
         where: { id: templateId },
@@ -1253,7 +1309,7 @@ describe("Three-Layer Video Creation Flow E2E", () => {
     })
 
     it("full lineage chain: structure → run → script → plan → task", async () => {
-      mockGenerateVirtualmanBroadcast.mockResolvedValue("ext-lineage-full-1")
+      mockGenerateVirtualmanBroadcast.mockResolvedValue({ taskId: "ext-lineage-full-1", payload: {} })
       mockGenerateScriptCandidates.mockResolvedValue({
         candidates: ["完整链路追溯脚本"],
         scores: [

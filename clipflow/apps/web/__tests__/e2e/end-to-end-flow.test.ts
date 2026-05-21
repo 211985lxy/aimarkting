@@ -297,7 +297,7 @@ describe("End-to-End Core Flows", () => {
         expiresAt: new Date(Date.now() + 3600_000).toISOString(),
       })
     mockCloneFastAvatar.mockResolvedValue("ext-avatar-task-2")
-    mockGenerateVirtualmanBroadcast.mockResolvedValue("ext-video-task-1")
+    mockGenerateVirtualmanBroadcast.mockResolvedValue({ taskId: "ext-video-task-1", payload: {} })
 
     const session = await registerUser("Core Flow User")
     await activateSession(session.token, userSequence)

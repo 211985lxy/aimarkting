@@ -163,12 +163,12 @@ describe('analyzeCompetitor — prompt structure', () => {
     })
   })
 
-  it('calls LLMClient with temperature=0.3, maxTokens=4000, responseFormat json_object', async () => {
+  it('calls LLMClient with temperature=0.3, maxTokens=3500, responseFormat json_object', async () => {
     await analyzeCompetitor(makeAccount(), [makeVideo()], [makeComment()], makeMetrics())
     expect(mockComplete).toHaveBeenCalledWith(
       expect.objectContaining({
         temperature: 0.3,
-        maxTokens: 4000,
+        maxTokens: 3500,
         responseFormat: { type: 'json_object' },
       }),
     )

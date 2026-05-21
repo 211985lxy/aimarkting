@@ -13,27 +13,37 @@ const USER_JWT_SECRET = process.env.JWT_SECRET || "user-secret-change-me"
 // ─── Database helpers ─────────────────────────────────────
 
 export async function cleanDatabase() {
-  // Delete in order to respect foreign keys
-  await prisma.publicAvatarPreviewPreference.deleteMany()
-  await prisma.publicAvatarPreviewCache.deleteMany()
+  // 1. 最先清理最底层的二级子依赖，防外键死锁
   await prisma.videoTask.deleteMany()
   await prisma.videoProductionPlan.deleteMany()
   await prisma.script.deleteMany()
   await prisma.contentGenerationRun.deleteMany()
+  await prisma.topicSelection.deleteMany()
+  await prisma.competitorAnalysis.deleteMany()
+  await prisma.knowledgeEntry.deleteMany()
+  await prisma.aimGeneration.deleteMany()
+  await prisma.publicAvatarPreviewPreference.deleteMany()
+  await prisma.publicAvatarPreviewCache.deleteMany()
+  
+  // 2. 清理一级依赖父表 (引用了 User，但被上面所引用)
   await prisma.ipProfile.deleteMany()
-  await prisma.asset.deleteMany()
   await prisma.avatar.deleteMany()
+  await prisma.asset.deleteMany()
   await prisma.activationCode.deleteMany()
+  
+  // 3. 最后清理一级核心用户
+  await prisma.user.deleteMany()
+  await prisma.adminUser.deleteMany()
+  
+  // 4. 清理独立配置和缓存表
   await prisma.systemSetting.deleteMany()
   await prisma.pexelsQueryCache.deleteMany()
   await prisma.pexelsMedia.deleteMany()
-  await prisma.user.deleteMany()
   await prisma.douyinHotItem.deleteMany()
   await prisma.douyinHotSnapshot.deleteMany()
   await prisma.contentTemplate.deleteMany()
   await prisma.videoStructure.deleteMany()
   await prisma.videoPackagingTemplate.deleteMany()
-  await prisma.adminUser.deleteMany()
 }
 
 export async function cleanRedis() {

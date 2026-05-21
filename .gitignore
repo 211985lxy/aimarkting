@@ -57,3 +57,21 @@ redis-data/
 
 # Uploads & media cache
 uploads/
+
+# Social auto upload cookies
+social-auto-upload/cookies/
+
+# Generated Prisma client
+clipflow/apps/web/src/generated/
+
+# QR code cache
+clipflow/apps/web/public/qrcodes/
+
+# Python uv lock (keep if needed)
+# social-auto-upload/uv.lock
+
+# Claude AI config
+.claude/
+
+# Virtual environments
+.venv-*/

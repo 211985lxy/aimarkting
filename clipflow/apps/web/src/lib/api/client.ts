@@ -200,12 +200,14 @@ export async function aiFillIpProfile(input: {
   return payload.data
 }
 
-export async function listHotTopics(): Promise<HotTopicsResponse> {
-  const payload = await request<{ data: HotTopicsResponse }>("/api/hot-topics", {
+export async function listHotTopics(input?: { source?: string }): Promise<HotTopicsResponse> {
+  const url = input?.source ? `/api/hot-topics?source=${encodeURIComponent(input.source)}` : "/api/hot-topics"
+  const payload = await request<{ data: HotTopicsResponse }>(url, {
     auth: false,
   })
   return payload.data
 }
+
 
 export async function getHotTopicInsight(input: {
   topicId: string
@@ -316,6 +318,84 @@ export async function updateScript(
   const payload = await request<{ data: ApiScript }>(`/api/scripts/${id}`, {
     method: "PATCH",
     body: JSON.stringify(input),
+  })
+  return payload.data
+}
+
+export interface QualityDimensionScore {
+  score: number       // 0-100（从后端 1-10 转换）
+  passed: boolean
+  feedback: string
+  details?: string
+}
+
+export interface QualityCheckReport {
+  editorial: QualityDimensionScore
+  aiTaste: QualityDimensionScore
+  attraction: QualityDimensionScore
+  logic: QualityDimensionScore
+  overall: { score: number; passed: boolean; needsRewrite: boolean }
+  rewriteCount: number
+}
+
+/** 将后端 1-10 分转换为 0-100 分 */
+function toPercent(score1to10: number): number {
+  return Math.round(score1to10 * 10)
+}
+
+export async function checkScriptQuality(input: {
+  content: string
+  topicTitle?: string
+  persona?: string | {
+    roleType?: string
+    oneLiner?: string
+    toneOfVoice?: string
+  }
+}): Promise<QualityCheckReport> {
+  const payload = await request<{
+    data: {
+      content: string
+      report: {
+        editorial: { score: number; passed: boolean; feedback: string; details?: string }
+        aiTaste: { score: number; passed: boolean; feedback: string; details?: string }
+        attraction: { score: number; passed: boolean; feedback: string; details?: string }
+        logic: { score: number; passed: boolean; feedback: string; details?: string }
+        overall: { score: number; passed: boolean; needsRewrite: boolean }
+        rewriteCount: number
+      }
+    }
+  }>("/api/scripts/quality-check", {
+    method: "POST",
+    body: JSON.stringify(input),
+    timeout: 30000, // 30 second timeout for quality check
+  })
+  const d = payload.data.report
+  return {
+    editorial: { ...d.editorial, score: toPercent(d.editorial.score) },
+    aiTaste: { ...d.aiTaste, score: toPercent(d.aiTaste.score) },
+    attraction: { ...d.attraction, score: toPercent(d.attraction.score) },
+    logic: { ...d.logic, score: toPercent(d.logic.score) },
+    overall: { ...d.overall, score: toPercent(d.overall.score) },
+    rewriteCount: d.rewriteCount,
+  }
+}
+
+export interface PolishResult {
+  original: string
+  polished: string
+  polishedDimensions: string[]
+}
+
+export async function polishScript(input: {
+  content: string
+  weakDimensions?: string[]
+  topicTitle?: string
+  persona?: string
+}): Promise<PolishResult> {
+  const payload = await request<{ data: PolishResult }>("/api/scripts/polish", {
+    method: "POST",
+    body: JSON.stringify(input),
+    timeout: 60000,
   })
   return payload.data
 }
@@ -632,4 +712,115 @@ export async function listCompetitorReports(
 
 export async function deleteCompetitorAnalysis(id: string): Promise<void> {
   await request(`/api/competitor/${id}`, { method: "DELETE" })
+}
+
+// ─── 知识库 ──────────────────────────────────────────────
+
+export interface KnowledgeEntry {
+  id: string
+  userId: string
+  category: string
+  title: string
+  content: string
+  tags: string[]
+  sourceType: string
+  sortOrder: number
+  status: string
+  createdAt: string
+  updatedAt: string
+}
+
+export async function listKnowledge(category?: string): Promise<KnowledgeEntry[]> {
+  const params = new URLSearchParams()
+  if (category) params.set("category", category)
+  return request<KnowledgeEntry[]>(`/api/knowledge?${params}`)
+}
+
+export async function createKnowledge(data: {
+  category: string
+  title: string
+  content: string
+  tags?: string[]
+}): Promise<KnowledgeEntry> {
+  return request<KnowledgeEntry>("/api/knowledge", {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateKnowledge(
+  id: string,
+  data: Partial<{
+    title: string
+    content: string
+    category: string
+    tags: string[]
+  }>
+): Promise<KnowledgeEntry> {
+  return request<KnowledgeEntry>(`/api/knowledge/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteKnowledge(id: string): Promise<void> {
+  await request(`/api/knowledge/${id}`, { method: "DELETE" })
+}
+
+// ─── AIM 生成 ────────────────────────────────────────────
+
+export type ContentFormat = "video_script" | "wechat_article" | "moments_post"
+
+export interface AimGenerateRequest {
+  rawInput: string
+  targetFormats: ContentFormat[]
+  topicTitle?: string
+  topicRationale?: string
+  hotTopic?: string
+  polishInstruction?: string
+}
+
+export interface AimGenerateResult {
+  format: ContentFormat
+  content: string
+  wordCount: number
+}
+
+export interface AimGenerateResponse {
+  id: string
+  results: AimGenerateResult[]
+  knowledgeUsed: { id: string; title: string; category: string }[]
+}
+
+export interface AimGeneration {
+  id: string
+  rawInput: string
+  videoScript: string | null
+  wechatArticle: string | null
+  momentsPost: string | null
+  formatsRequested: string[]
+  knowledgeUsed: { id: string; title: string; category: string }[]
+  createdAt: string
+}
+
+export async function generateAimContent(data: AimGenerateRequest): Promise<AimGenerateResponse> {
+  return request<AimGenerateResponse>("/api/aim/generate", {
+    method: "POST",
+    body: JSON.stringify(data),
+    timeout: 60000,
+  })
+}
+
+export async function listAimHistory(page = 1, pageSize = 20): Promise<AimGeneration[]> {
+  return request<AimGeneration[]>(`/api/aim/history?page=${page}&pageSize=${pageSize}`)
+}
+
+export async function transcribeAudio(audioBlob: Blob): Promise<{ text: string }> {
+  return request<{ text: string }>("/api/aim/transcribe", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/octet-stream",
+    },
+    body: audioBlob,
+  })
 }

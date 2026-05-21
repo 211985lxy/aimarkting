@@ -1,7 +1,7 @@
 "use client"
 
 import { useTranslations } from "next-intl"
-import { FileText, UserSquare, Zap, ChevronRight } from "lucide-react"
+import { BookOpen, Brain, DatabaseZap, FileText, MessageSquareText, ChevronRight } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 interface Step {
@@ -12,48 +12,47 @@ interface Step {
 }
 
 const steps: Step[] = [
-  { num: 1, titleKey: "step1Title", descKey: "step1Desc", Icon: FileText },
-  { num: 2, titleKey: "step2Title", descKey: "step2Desc", Icon: UserSquare },
-  { num: 3, titleKey: "step3Title", descKey: "step3Desc", Icon: Zap },
+  { num: 1, titleKey: "step1Title", descKey: "step1Desc", Icon: BookOpen },
+  { num: 2, titleKey: "step2Title", descKey: "step2Desc", Icon: DatabaseZap },
+  { num: 3, titleKey: "step3Title", descKey: "step3Desc", Icon: Brain },
+  { num: 4, titleKey: "step4Title", descKey: "step4Desc", Icon: FileText },
+  { num: 5, titleKey: "step5Title", descKey: "step5Desc", Icon: MessageSquareText },
 ]
 
 export function HowItWorksSection() {
   const t = useTranslations("HowItWorks")
 
   return (
-    <section id="how-it-works" className="py-16 sm:py-20 lg:py-24 px-4 sm:px-6 lg:px-8 bg-white">
+    <section id="how-it-works" className="bg-white px-4 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
       <div className="mx-auto max-w-7xl">
         <div className="text-center mb-12 sm:mb-16">
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[#1E1B4B] mb-4">
+          <h2 className="mb-4 text-2xl font-bold text-[#25211D] sm:text-3xl lg:text-4xl">
             {t("heading")}
           </h2>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+          <p className="mx-auto max-w-3xl text-lg text-[#5F5A52]">
             {t("subheading")}
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-4">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-5">
           {steps.map(({ num, titleKey, descKey, Icon }, idx) => (
             <div key={num} className="relative flex flex-col items-center">
-              {/* Card */}
-              <div className="flex flex-col items-center text-center gap-5 rounded-2xl border border-gray-200 bg-white p-8 w-full transition-all duration-200 hover:border-[#6366F1]/30 hover:shadow-lg hover:shadow-indigo-500/5">
-                {/* Step number + icon */}
+              <div className="flex h-full w-full flex-col items-center gap-5 rounded-xl border border-[#E8DED1] bg-white p-5 text-center transition-all duration-200 hover:border-[#D14A33]/30 hover:shadow-lg hover:shadow-[#8C4A2F]/5">
                 <div className="relative">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#6366F1] to-[#818CF8] text-white shadow-lg shadow-indigo-500/25">
-                    <Icon className="h-7 w-7" />
+                  <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#25211D] text-white shadow-lg shadow-[#25211D]/10">
+                    <Icon className="h-6 w-6" />
                   </div>
-                  <span className="absolute -top-2 -right-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#22C55E] text-xs font-bold text-white shadow-sm">
+                  <span className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#B88C33] text-xs font-bold text-white shadow-sm">
                     {num}
                   </span>
                 </div>
                 <div>
-                  <h3 className="text-xl font-semibold text-[#1E1B4B] mb-2">{t(titleKey)}</h3>
-                  <p className="text-muted-foreground leading-relaxed">{t(descKey)}</p>
+                  <h3 className="mb-2 text-base font-semibold text-[#25211D]">{t(titleKey)}</h3>
+                  <p className="text-sm leading-relaxed text-[#6F675E]">{t(descKey)}</p>
                 </div>
               </div>
-              {/* Connector arrow (hidden on last step and mobile) */}
               {idx < steps.length - 1 && (
-                <div className="hidden md:flex absolute top-1/2 -right-5 lg:-right-2.5 -translate-y-1/2 z-10">
-                  <ChevronRight className="h-5 w-5 text-[#6366F1]/40" />
+                <div className="absolute -right-4 top-1/2 z-10 hidden -translate-y-1/2 md:flex">
+                  <ChevronRight className="h-5 w-5 text-[#D14A33]/40" />
                 </div>
               )}
             </div>

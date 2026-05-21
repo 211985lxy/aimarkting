@@ -18,7 +18,7 @@ import {
   redis,
 } from "./helpers"
 
-const BRANDING_CACHE_KEY = "system:branding:v1"
+const BRANDING_CACHE_KEY = "system:branding:v2"
 
 let admin: { id: string; email: string; role: string }
 

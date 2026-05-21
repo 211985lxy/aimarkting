@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Plus_Jakarta_Sans } from "next/font/google"
 import { NextIntlClientProvider } from "next-intl"
 import { getMessages } from "next-intl/server"
@@ -17,20 +17,22 @@ export async function generateMetadata(): Promise<Metadata> {
   const branding = await getBrandingConfig()
 
   return {
-    title: `${branding.name} - AI 视频生成平台`,
-    description: `输入文案，自动生成 ${branding.name} 营销短视频`,
-    viewport: {
-      width: "device-width",
-      initialScale: 1,
-      maximumScale: 1,
-      userScalable: false,
-    },
+    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+    title: `${branding.name} - AI营销增长智能体`,
+    description: `${branding.name}，帮企业把业务资料、老板经验、项目案例训练成AI营销增长智能体`,
     icons: {
       icon: branding.logoUrl,
       shortcut: branding.logoUrl,
       apple: branding.logoUrl,
     },
   }
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 }
 
 export default async function RootLayout({

@@ -2,12 +2,12 @@
 
 import { useTranslations } from "next-intl"
 import {
-  MonitorPlay,
   MessageCircle,
   BookOpen,
-  Zap,
-  Music2,
-  Youtube,
+  BriefcaseBusiness,
+  FileText,
+  MessageSquareQuote,
+  PackageCheck,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -17,28 +17,28 @@ interface Platform {
 }
 
 const platforms: Platform[] = [
-  { nameKey: "douyin", Icon: Music2 },
-  { nameKey: "wxVideo", Icon: MessageCircle },
-  { nameKey: "xiaohongshu", Icon: BookOpen },
-  { nameKey: "kuaishou", Icon: Zap },
-  { nameKey: "tiktok", Icon: MonitorPlay },
-  { nameKey: "youtube", Icon: Youtube },
+  { nameKey: "businessDocs", Icon: BookOpen },
+  { nameKey: "founderKnowhow", Icon: MessageSquareQuote },
+  { nameKey: "projectCases", Icon: BriefcaseBusiness },
+  { nameKey: "productSellingPoints", Icon: PackageCheck },
+  { nameKey: "customerQa", Icon: MessageCircle },
+  { nameKey: "salesScripts", Icon: FileText },
 ]
 
 export function PlatformsSection() {
   const t = useTranslations("Platforms")
 
   return (
-    <section className="py-10 sm:py-14 px-4 sm:px-6 lg:px-8 bg-white border-b border-gray-100">
+    <section className="border-y border-[#E8DED1] bg-white px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <p className="text-center text-sm font-medium text-muted-foreground mb-8 tracking-wide uppercase">
+        <p className="mb-8 text-center text-sm font-semibold tracking-wide text-[#8A8175]">
           {t("heading")}
         </p>
-        <div className="flex flex-wrap justify-center items-center gap-8 sm:gap-12 lg:gap-16">
+        <div className="flex flex-wrap items-center justify-center gap-5 sm:gap-8 lg:gap-10">
           {platforms.map(({ nameKey, Icon }) => (
             <div
               key={nameKey}
-              className="flex items-center gap-2.5 text-muted-foreground/60 hover:text-[#6366F1] transition-colors duration-200 cursor-default"
+              className="flex cursor-default items-center gap-2.5 rounded-full border border-[#EFE7DC] bg-[#FAF8F3] px-4 py-2 text-[#5F5A52] transition-colors duration-200 hover:border-[#D14A33]/30 hover:text-[#D14A33]"
             >
               <Icon className="h-5 w-5" />
               <span className="text-sm font-medium">{t(nameKey)}</span>
