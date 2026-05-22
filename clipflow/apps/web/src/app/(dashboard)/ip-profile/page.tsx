@@ -265,6 +265,7 @@ function InlineStringField({
       <div className="space-y-1">
         {label && <Label className="text-xs text-muted-foreground">{label}</Label>}
         <Input
+          id={`inline-input-${label ? label.replace(/\s+/g, "-") : "field"}`}
           autoFocus
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -348,6 +349,7 @@ function BadgeEditor({
         ))}
         {adding ? (
           <Input
+            id={`badge-editor-input-${label ? label.replace(/\s+/g, "-") : "tags"}`}
             autoFocus
             value={newItem}
             onChange={(e) => setNewItem(e.target.value)}
@@ -1132,12 +1134,13 @@ function KnowledgeTab() {
               <div className="space-y-2">
                 <Label>类别</Label>
                 <Select
+                  id="knowledge-category-select"
                   value={entryCategory}
                   onValueChange={(value) => {
                     if (value) setEntryCategory(value)
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="knowledge-category-select-trigger">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1150,17 +1153,19 @@ function KnowledgeTab() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>标题</Label>
+                <Label htmlFor="knowledge-title-input">标题</Label>
                 <Input
+                  id="knowledge-title-input"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   placeholder="例如：15年空调维修经验"
                 />
               </div>
               <div className="space-y-2">
-                <Label>内容</Label>
+                <Label htmlFor="knowledge-content-textarea">内容</Label>
                 <div className="relative">
                   <Textarea
+                    id="knowledge-content-textarea"
                     value={content}
                     onChange={(event) => setContent(event.target.value)}
                     rows={6}

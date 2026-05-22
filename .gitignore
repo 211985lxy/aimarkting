@@ -75,3 +75,4 @@ clipflow/apps/web/public/qrcodes/
 
 # Virtual environments
 .venv-*/
+.gstack/

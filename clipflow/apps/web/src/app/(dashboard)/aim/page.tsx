@@ -453,7 +453,7 @@ export default function AimPage() {
                         </span>
                         {selected && (
                           <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xs">
-                            <Check className="h-3 w-3" />
+                            <Check className="h-3.5 w-3.5" />
                           </div>
                         )}
                       </div>
@@ -482,6 +482,7 @@ export default function AimPage() {
           <div className="space-y-2">
             <div className="relative">
               <Textarea
+                id="aim-raw-input"
                 value={rawInput}
                 onChange={(event) => setRawInput(event.target.value)}
                 rows={8}
@@ -627,6 +628,7 @@ export default function AimPage() {
             <div className="space-y-2">
               <p className="text-xs font-semibold text-foreground/80">文案审核与去 AI 味</p>
               <Textarea
+                id="aim-polish-instruction"
                 value={polishInstruction}
                 onChange={(event) => setPolishInstruction(event.target.value)}
                 rows={3}
@@ -669,6 +671,7 @@ export default function AimPage() {
           </div>
 
           <Button
+            id="aim-generate-btn"
             size="lg"
             onClick={handleGenerate}
             disabled={isGenerating}

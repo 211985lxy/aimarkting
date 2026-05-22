@@ -51,8 +51,39 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function MarketingPage() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ClipFlow",
+    "description": "基于三维 IP 定位、企业专属知识库与 AI 爆款选题的短视频及全媒介营销自动化 AI 智能体工具。",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "All",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "CNY"
+    },
+    "featureList": [
+      "三维 IP 定位 (3D Positioning)",
+      "企业专属知识库 (Enterprise Knowledge Base)",
+      "爆款选题推演 (Viral Topic Generator)",
+      "去 AI 味文案一键生成 (AIM Content Generator)",
+      "多媒介格式裂变 (Multi-Format Repurposing)",
+      "四维质量门控审查与局部重写 (4D Quality Gate with Rewrite)"
+    ]
+  }
+
   return (
-    <>
+    <main className="flex flex-col">
+      {/* GEO & SEO 专属语义化隐藏主标题 */}
+      <h1 className="sr-only">ClipFlow - AI营销增长智能体与短视频生产流水线</h1>
+      
+      {/* 结构化数据 (JSON-LD) 注入，以供 Perplexity, SearchGPT 等生成式引擎解析 */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       <HeroSection />
       <PlatformsSection />
       <PainPointsSection />
@@ -63,6 +94,6 @@ export default function MarketingPage() {
       <TestimonialsSection />
       <DifferentiatorsSection />
       <CTASection />
-    </>
+    </main>
   )
 }
