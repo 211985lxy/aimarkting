@@ -34,6 +34,7 @@ export default function AdminUserDetailPage() {
 
   React.useEffect(() => {
     if (!params.id) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     getAdminUserDetail(params.id as string)
       .then((res) => setUser(res.data))

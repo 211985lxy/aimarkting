@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withUserAuth } from "@/lib/user-auth"
-import { buildIpProfilePromptSnapshot } from "@/lib/ip-profile"
 import { LLMClient } from "@/lib/llm/client"
 import type { ExpressionBlueprint, TemplateVariable } from "@/types/content-template"
 
@@ -17,21 +16,16 @@ export const POST = withUserAuth(async (request, { user }) => {
     )
   }
 
-  const [template, ipProfile] = await Promise.all([
-    prisma.contentTemplate.findUnique({
-      where: { id: templateId, status: "published" },
-      select: {
-        id: true,
-        displayName: true,
-        description: true,
-        expressionBlueprint: true,
-        variables: true,
-      },
-    }),
-    prisma.ipProfile.findUnique({
-      where: { userId: user.id },
-    }),
-  ])
+  const template = await prisma.contentTemplate.findUnique({
+    where: { id: templateId, status: "published" },
+    select: {
+      id: true,
+      displayName: true,
+      description: true,
+      expressionBlueprint: true,
+      variables: true,
+    },
+  })
 
   if (!template) {
     return NextResponse.json({ error: "Template not found" }, { status: 404 })
@@ -45,9 +39,7 @@ export const POST = withUserAuth(async (request, { user }) => {
     return NextResponse.json({ data: { filledInputs: {} } })
   }
 
-  const ipContext = ipProfile
-    ? buildIpProfilePromptSnapshot(ipProfile)
-    : "用户未设置 IP 档案。"
+  const ipContext = ""
 
   const variableDescriptions = variables
     .map(

@@ -1,19 +1,44 @@
 import { PrismaClient } from './src/generated/prisma/client.js';
+import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient({});
+function createPrismaClient() {
+  const url = new URL(
+    (process.env.DATABASE_URL ?? "mysql://clipflow:clipflow123@127.0.0.1:3306/clipflow").replace(/^mysql:\/\//, "mariadb://")
+  )
+
+  return new PrismaClient({
+    adapter: new PrismaMariaDb({
+      host: url.hostname,
+      port: parseInt(url.port || "3306", 10),
+      user: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+      database: url.pathname.slice(1),
+    }),
+  })
+}
+
+const prisma = createPrismaClient();
 
 async function createActivationCodes() {
   try {
-    // 获取第一个用户作为创建者
-    const users = await prisma.user.findMany({ take: 1 });
-    if (users.length === 0) {
-      console.log('❌ 没有找到用户，请先注册一个账号');
-      return;
+    // 首先创建或获取一个 AdminUser 作为真正的创建者（满足外键约束）
+    const adminEmail = 'admin@clipflow.com';
+    let admin = await prisma.adminUser.findUnique({ where: { email: adminEmail } });
+    if (!admin) {
+      admin = await prisma.adminUser.create({
+        data: {
+          email: adminEmail,
+          password: 'skip-password-check',
+          name: 'System Admin',
+          role: 'admin',
+        }
+      });
+      console.log(`✓ 自动生成系统管理员: ${adminEmail}`);
     }
 
-    const creatorId = users[0].id;
-    console.log(`📧 使用用户 ${users[0].email} 创建激活码`);
+    const creatorId = admin.id;
+    console.log(`📧 使用系统管理员 ${admin.email} 创建激活码`);
 
     // 生成激活码
     const codes = [

@@ -3,30 +3,28 @@ import { TopicCardsSchema } from "@/lib/topic-validation"
 import type { TopicCard } from "@/lib/topic-validation"
 import { sampleElements, sampleWithHistory, pickStrategy } from "@/lib/topic-element-logic"
 import type { DerivationStrategy } from "@/lib/topic-element-logic"
-import { buildIpProfilePromptSnapshot } from "@/lib/ip-profile"
-import type { IpProfile, TopicElement } from "@/generated/prisma/client"
+import type { TopicElement } from "@/generated/prisma/client"
 
 const TOPIC_MODEL = process.env.TOPIC_GENERATION_MODEL || "openai/gpt-5.4"
 
 export interface TopicGenerationInput {
-  ipProfile: Pick<
-    IpProfile,
-    | "id"
-    | "displayName"
-    | "nickname"
-    | "industry"
-    | "primaryOffer"
-    | "targetAudience"
-    | "ipTraits"
-    | "toneOfVoice"
-    | "proofPoints"
-    | "callToAction"
-    | "profileVersion"
-    | "business"
-    | "persona"
-    | "content"
-    | "promptSnapshot"
-  >
+  ipProfile?: {
+    id?: string
+    displayName?: string | null
+    nickname?: string | null
+    industry?: string | null
+    primaryOffer?: string | null
+    targetAudience?: string | null
+    ipTraits?: string | null
+    toneOfVoice?: string | null
+    proofPoints?: string | null
+    callToAction?: string | null
+    profileVersion?: number | null
+    business?: unknown | null
+    persona?: unknown | null
+    content?: unknown | null
+    promptSnapshot?: string | null
+  } | null
   elements: Pick<
     TopicElement,
     "code" | "name" | "typeLabel" | "description"
@@ -126,29 +124,30 @@ export function buildTopicUserPrompt(
     selectedCodes.includes(e.code),
   )
 
-  // Use v2 promptSnapshot (3D positioning) when available, fall back to flat fields
-  const profileSection =
-    (ipProfile.profileVersion ?? 1) >= 2 && ipProfile.promptSnapshot
-      ? `## IP 档案（三维定位）\n${ipProfile.promptSnapshot}`
-      : [
-          "## IP 档案",
-          ipProfile.displayName ? `- 名称：${ipProfile.displayName}` : null,
-          ipProfile.industry ? `- 行业：${ipProfile.industry}` : null,
-          ipProfile.primaryOffer
-            ? `- 核心产品/服务：${ipProfile.primaryOffer}`
-            : null,
-          ipProfile.targetAudience
-            ? `- 目标受众：${ipProfile.targetAudience}`
-            : null,
-          ipProfile.ipTraits ? `- IP 特质：${ipProfile.ipTraits}` : null,
-          ipProfile.toneOfVoice ? `- 说话风格：${ipProfile.toneOfVoice}` : null,
-          ipProfile.proofPoints ? `- 信任背书：${ipProfile.proofPoints}` : null,
-          ipProfile.callToAction
-            ? `- 行动号召：${ipProfile.callToAction}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join("\n")
+  let profileSection = ""
+  if (ipProfile?.promptSnapshot) {
+    profileSection = `## IP 档案\n${ipProfile.promptSnapshot}`
+  } else if (ipProfile) {
+    profileSection = [
+      "## IP 档案",
+      ipProfile.displayName ? `- 名称：${ipProfile.displayName}` : null,
+      ipProfile.industry ? `- 行业：${ipProfile.industry}` : null,
+      ipProfile.primaryOffer
+        ? `- 核心产品/服务：${ipProfile.primaryOffer}`
+        : null,
+      ipProfile.targetAudience
+        ? `- 目标受众：${ipProfile.targetAudience}`
+        : null,
+      ipProfile.ipTraits ? `- IP 特质：${ipProfile.ipTraits}` : null,
+      ipProfile.toneOfVoice ? `- 说话风格：${ipProfile.toneOfVoice}` : null,
+      ipProfile.proofPoints ? `- 信任背书：${ipProfile.proofPoints}` : null,
+      ipProfile.callToAction
+        ? `- 行动号召：${ipProfile.callToAction}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("\n")
+  }
 
   const elementSection = [
     `## 本次使用的营销元素 (${selectedCodes.length}个)`,
@@ -157,7 +156,7 @@ export function buildTopicUserPrompt(
     ),
   ].join("\n")
 
-  return `${profileSection}\n\n${elementSection}\n\n请基于以上 IP 档案和营销元素，生成4个差异化的短视频选题卡片。每个选题都要巧妙融入指定的营销元素，并推荐最匹配的开场类型和文案结构。`
+  return `${profileSection ? profileSection + "\n\n" : ""}${elementSection}\n\n请基于以上${profileSection ? " IP 档案和" : ""}营销元素，生成4个差异化的短视频选题卡片。每个选题都要巧妙融入指定的营销元素，并推荐最匹配的开场类型和文案结构。`
 }
 
 export async function generateTopicCards(

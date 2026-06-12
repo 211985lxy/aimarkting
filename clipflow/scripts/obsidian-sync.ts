@@ -21,6 +21,8 @@ interface SyncConfig {
   syncToken: string        // 知识库同步验证令牌
   syncTag: string          // 只同步包含此 Tag 的笔记，默认 #Aim/知识库
   userId?: string          // 可选，绑定至指定用户 ID
+  obsidianVaultPath: string // 本地 Obsidian Vault 物理库绝对路径，例如: /Users/xiangyu/Documents/Vault
+  exportDir: string         // 生成文案保存的子文件夹，默认: ClipFlowGenerated
 }
 
 interface FileState {
@@ -40,6 +42,8 @@ const DEFAULT_CONFIG: SyncConfig = {
   targetServerUrl: "http://localhost:3000",
   syncToken: "clipflow-obsidian-sync-secret",
   syncTag: "Aim/知识库", // Frontmatter 标签不含 #，正文可带 #
+  obsidianVaultPath: "", // 默认为空，启用本地物理扫描时在此处配置绝对路径
+  exportDir: "ClipFlowGenerated",
 }
 
 const CONFIG_FILE = path.join(process.cwd(), ".obsidian-sync.json")
@@ -65,6 +69,28 @@ function loadConfig(): SyncConfig {
   }
   return DEFAULT_CONFIG
 }
+
+// 递归扫描本地文件夹中的 .md 笔记
+function scanLocalVault(dir: string, baseDir: string = dir): string[] {
+  let results: string[] = []
+  if (!fs.existsSync(dir)) return results
+  const list = fs.readdirSync(dir)
+  for (const file of list) {
+    // 忽略隐藏文件（以 . 开头的）和 node_modules
+    if (file.startsWith(".") || file === "node_modules") continue
+    const filePath = path.join(dir, file)
+    const stat = fs.statSync(filePath)
+    if (stat && stat.isDirectory()) {
+      results = results.concat(scanLocalVault(filePath, baseDir))
+    } else if (file.endsWith(".md")) {
+      // 算出相对于 Vault 根目录的相对路径，格式统一为 Unix 风格（斜杠 /）
+      const relativePath = path.relative(baseDir, filePath).replace(/\\/g, "/")
+      results.push(relativePath)
+    }
+  }
+  return results
+}
+
 
 function loadState(): SyncState {
   if (fs.existsSync(STATE_FILE)) {
@@ -238,25 +264,43 @@ async function main() {
   const force = process.argv.includes("--force")
   const config = loadConfig()
 
-  if (!config.obsidianToken) {
-    console.error("❌ 错误: 未在 .obsidian-sync.json 配置文件中检测到 obsidianToken。")
-    console.error("请参考 Obsidian 社区插件 [Local REST API] 的安装步骤，生成 Token 并填入配置文件。")
+  const isPhysicalMode = config.obsidianVaultPath && fs.existsSync(config.obsidianVaultPath)
+
+  if (!isPhysicalMode && !config.obsidianToken) {
+    console.error("❌ 错误: 未在 .obsidian-sync.json 配置文件中检测到 obsidianToken 或有效的 obsidianVaultPath。")
+    console.error("请配置有效的 obsidianVaultPath 以使用物理直读模式，或者安装 Obsidian Local REST API 插件并配置 Token。")
     process.exit(1)
   }
 
   console.log("⚙️  正在初始化 Obsidian CLI 本地知识同步程序...")
   console.log(`   - 目标云端: ${config.targetServerUrl}`)
   console.log(`   - 筛选标签: #${config.syncTag}`)
+  if (isPhysicalMode) {
+    console.log(`   - 模式: 🟢 物理磁盘直连模式`)
+    console.log(`   - 绝对路径: ${config.obsidianVaultPath}`)
+  } else {
+    console.log(`   - 模式: 🌐 Local REST API 模式`)
+  }
 
   const state = force ? { lastSyncTime: 0, files: {} } : loadState()
   let allFiles: { path: string }[] = []
 
-  try {
-    allFiles = await getFilesList(config.obsidianApiUrl, config.obsidianToken)
-  } catch (e) {
-    console.error("❌ 错误: 无法连接本地 Obsidian REST 服务，请确保 Obsidian 处于打开状态且已启用插件。")
-    console.error("   详情:", (e as Error).message)
-    process.exit(1)
+  if (isPhysicalMode) {
+    try {
+      allFiles = scanLocalVault(config.obsidianVaultPath).map((p) => ({ path: p }))
+    } catch (e) {
+      console.error("❌ 错误: 递归扫描本地 Vault 文件夹失败。")
+      console.error("   详情:", (e as Error).message)
+      process.exit(1)
+    }
+  } else {
+    try {
+      allFiles = await getFilesList(config.obsidianApiUrl, config.obsidianToken)
+    } catch (e) {
+      console.error("❌ 错误: 无法连接本地 Obsidian REST 服务，请确保 Obsidian 处于打开状态且已启用插件。")
+      console.error("   详情:", (e as Error).message)
+      process.exit(1)
+    }
   }
 
   console.log(`📂 在本地 Vault 中共扫描到 ${allFiles.length} 个 Markdown 笔记。`)
@@ -274,7 +318,21 @@ async function main() {
 
     try {
       // 1. 获取元数据，用于增量校验
-      const meta = await getFileMetadata(config.obsidianApiUrl, config.obsidianToken, filePath)
+      let meta: FileMetadata
+
+      if (isPhysicalMode) {
+        const absoluteFilePath = path.join(config.obsidianVaultPath, filePath)
+        const stat = fs.statSync(absoluteFilePath)
+        const mtime = Math.round(stat.mtimeMs || stat.mtime.getTime())
+        meta = {
+          mtime,
+          ctime: Math.round(stat.birthtimeMs || stat.birthtime.getTime()),
+          size: stat.size
+        }
+      } else {
+        meta = await getFileMetadata(config.obsidianApiUrl, config.obsidianToken, filePath)
+      }
+
       const prevState = state.files[filePath]
 
       // 如果修改时间未变且处于增量模式，则跳过获取正文以极速提效
@@ -284,7 +342,13 @@ async function main() {
       }
 
       // 2. 读取文件内容
-      const rawMarkdown = await getFileContent(config.obsidianApiUrl, config.obsidianToken, filePath)
+      let rawMarkdown: string
+      if (isPhysicalMode) {
+        const absoluteFilePath = path.join(config.obsidianVaultPath, filePath)
+        rawMarkdown = fs.readFileSync(absoluteFilePath, "utf-8")
+      } else {
+        rawMarkdown = await getFileContent(config.obsidianApiUrl, config.obsidianToken, filePath)
+      }
       const { frontmatter, content } = parseFrontmatter(rawMarkdown)
 
       // 3. 判断是否需要同步

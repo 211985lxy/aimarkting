@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { buildIpProfileView } from "@/lib/ip-profile"
 import { withUserAuth } from "@/lib/user-auth"
 import {
   HotTopicIntelligenceError,
@@ -30,7 +29,7 @@ export const POST = withUserAuth(async (request, { user, params }) => {
     )
   }
 
-  const [{ topic, insight }, template, structure, ipProfile] = await Promise.all([
+  const [{ topic, insight }, template, structure] = await Promise.all([
     getOrGenerateHotTopicInsight(topicId),
     prisma.contentTemplate.findUnique({
       where: { id: templateId, status: "published" },
@@ -54,9 +53,6 @@ export const POST = withUserAuth(async (request, { user, params }) => {
         blueprint: true,
       },
     }),
-    prisma.ipProfile.findUnique({
-      where: { userId: user.id },
-    }),
   ])
 
   if (!template) {
@@ -67,27 +63,12 @@ export const POST = withUserAuth(async (request, { user, params }) => {
     return NextResponse.json({ error: "Video structure not found" }, { status: 400 })
   }
 
-  const profileView = buildIpProfileView(ipProfile)
-  if (!profileView.profile || !profileView.isComplete) {
-    return NextResponse.json(
-      {
-        error: "IP profile is incomplete",
-        data: {
-          profile: profileView.profile,
-          isComplete: profileView.isComplete,
-          missingFields: profileView.missingFields,
-        },
-      },
-      { status: 412 },
-    )
-  }
-
   try {
     const expressionBlueprint = template.expressionBlueprint as ExpressionBlueprint | null
     const fit = await evaluateHotTopicFit({
       topicTitle: topic.title,
       insight,
-      ipProfile: profileView.profile,
+      ipProfile: undefined,
       template: {
         ...template,
         expressionBlueprint,

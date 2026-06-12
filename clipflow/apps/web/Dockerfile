@@ -1,13 +1,14 @@
 FROM node:20-alpine AS base
 RUN apk add --no-cache libc6-compat ffmpeg
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 
 FROM base AS deps
-COPY package.json package-lock.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
 WORKDIR /app
@@ -19,8 +20,8 @@ ENV REDIS_URL="redis://localhost:6379"
 COPY --from=deps /app/ ./
 COPY . .
 
-RUN npm -w @clipflow/web exec prisma generate
-RUN npm -w @clipflow/web run build
+RUN pnpm --dir apps/web exec prisma generate
+RUN pnpm --filter @clipflow/web build
 
 FROM base AS web-runner
 WORKDIR /app
@@ -31,10 +32,11 @@ ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 
 COPY --from=builder /app/apps/web/public ./apps/web/public
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/apps/web/messages ./apps/web/messages
-COPY --from=builder /app/node_modules/mysql2 ./node_modules/mysql2
 
 EXPOSE 3000
 
@@ -47,9 +49,10 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/package-lock.json ./package-lock.json
+COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/web ./apps/web
 COPY --from=builder /app/packages/shared ./packages/shared
 
-CMD ["npm", "-w", "@clipflow/web", "run", "worker:task-recovery"]
+CMD ["pnpm", "--dir", "apps/web", "worker:task-recovery"]

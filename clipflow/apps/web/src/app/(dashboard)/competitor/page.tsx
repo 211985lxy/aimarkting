@@ -28,6 +28,7 @@ import {
   listCompetitorReports,
   deleteCompetitorAnalysis,
 } from "@/lib/api/client"
+import { extractPureUrl, checkUrlType } from "@/lib/tikhub/url-parser"
 import { ApiError } from "@/lib/api/client"
 import type { ApiCompetitorReport, CompetitorAnalysisStatus } from "@/types/api"
 
@@ -212,6 +213,7 @@ export default function CompetitorPage() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadReports(page)
   }, [page, loadReports])
 
@@ -228,11 +230,26 @@ export default function CompetitorPage() {
       return
     }
 
+    // Validate if it is a video or note URL instead of account profile
+    const typeError = checkUrlType(trimmed)
+    if (typeError) {
+      setSubmitError(typeError)
+      return
+    }
+
+    // Extract the pure URL and update the input field for high-quality UX feedback
+    const pureUrl = extractPureUrl(trimmed)
+    if (!pureUrl) {
+      setSubmitError("链接格式不正确，请重新输入")
+      return
+    }
+
+    setUrl(pureUrl)
     setSubmitting(true)
     setSubmitError(null)
 
     try {
-      const result = await startCompetitorAnalysis(trimmed)
+      const result = await startCompetitorAnalysis(pureUrl)
       router.push(`/competitor/${result.id}`)
     } catch (err) {
       if (err instanceof ApiError) {

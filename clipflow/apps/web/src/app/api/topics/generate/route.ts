@@ -52,8 +52,7 @@ export const POST = withUserAuth(async (request, { user }) => {
 
   const refreshCount = typeof body.refreshCount === "number" ? body.refreshCount : 0
 
-  const [ipProfile, elements, recentSelections] = await Promise.all([
-    prisma.ipProfile.findUnique({ where: { userId: user.id } }),
+  const [elements, recentSelections] = await Promise.all([
     prisma.topicElement.findMany({
       where: { status: "published" },
       orderBy: { sortOrder: "asc" },
@@ -66,14 +65,6 @@ export const POST = withUserAuth(async (request, { user }) => {
       select: { elementCodes: true, candidates: true },
     }),
   ])
-
-  if (!ipProfile || !ipProfile.isComplete) {
-    console.warn(`[${requestId}] IP profile incomplete for user ${user.id}`)
-    return NextResponse.json(
-      { error: "请先完成 IP 档案填写" },
-      { status: 400 },
-    )
-  }
 
   if (elements.length < 2) {
     console.error(
@@ -107,7 +98,7 @@ export const POST = withUserAuth(async (request, { user }) => {
   const startTime = Date.now()
 
   const result = await generateTopicCards({
-    ipProfile,
+    ipProfile: null,
     elements,
     forcedElementCodes,
     recentElementSets,
@@ -127,7 +118,7 @@ export const POST = withUserAuth(async (request, { user }) => {
   const selection = await prisma.topicSelection.create({
     data: {
       userId: user.id,
-      ipProfileId: ipProfile.id,
+      ipProfileId: "",
       elementCodes: result.elementCodes as unknown as Prisma.InputJsonValue,
       candidates: result.cards as unknown as Prisma.InputJsonValue,
       promptText: result.promptText,

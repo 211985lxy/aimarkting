@@ -148,12 +148,23 @@ function sanitizeErrorForUser(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err)
   // User-safe messages from analyzer pass through
   if (msg.startsWith('AI 分析')) return msg
+  
+  // 如果是本地物理抓取失败，直接透传该明确的业务和诊断报错，避免被下方的模糊过滤误杀
+  if (msg.includes('本地物理抓取失败')) {
+    return msg
+  }
+  
+  // Explicitly warn about missing TIKHUB_API_KEY (精准匹配，绝不误杀)
+  if (msg.includes('TIKHUB_API_KEY environment variable is not set')) {
+    return '未配置 TIKHUB_API_KEY 环境变量，请在 .env.local 中配置以启用同行对标功能'
+  }
+  
   // Classify common errors into user-friendly messages
   if (msg.includes('TikHub') || msg.includes('HTTP 4') || msg.includes('HTTP 5')) {
-    return '数据采集失败，请稍后重试'
+    return '数据采集失败，请稍后重试（提示：请确保输入的是【个人主页链接】，而非单个视频或笔记的链接）'
   }
   if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('504')) {
     return 'AI 分析超时，请稍后重试'
   }
-  return '分析过程中发生错误，请重试'
+  return '分析过程中发生错误，请重试（提示：请确保输入的是【个人主页链接】，而非单个视频或笔记的链接）'
 }

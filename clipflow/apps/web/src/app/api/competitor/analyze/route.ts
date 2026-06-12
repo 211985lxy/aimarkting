@@ -35,7 +35,7 @@ export const POST = withUserAuth(async (request, { user }) => {
   const analysis = await prisma.competitorAnalysis.create({
     data: {
       userId: user.id,
-      targetUrl: rawUrl,
+      targetUrl: parsed.pureUrl,
       platform: parsed.platform,
       platformUserId: parsed.rawUserId ?? null,
       status: 'pending',

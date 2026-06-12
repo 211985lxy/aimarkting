@@ -1,13 +1,26 @@
 import { prisma } from "@/lib/prisma"
 import { LLMClient } from "@/lib/llm/client"
-import { buildIpProfilePromptSnapshot } from "@/lib/ip-profile"
 
-export type ContentFormat = "video_script" | "wechat_article" | "moments_post"
+export type ContentFormat =
+  | "video_script"
+  | "wechat_article"
+  | "moments_post"
+  | "community_message"
+  | "shooting_brief"
+  | "raw_copy"
+
+export type AimTaskType =
+  | "polish_copy"
+  | "write_script"
+  | "quality_check"
+  | "repurpose"
 
 interface AimInput {
   userId: string
+  projectId?: string
   rawInput: string
   targetFormats: ContentFormat[]
+  taskType?: AimTaskType
   topicTitle?: string
   topicRationale?: string
   hotTopic?: string
@@ -53,6 +66,44 @@ const FORMAT_INSTRUCTIONS: Record<ContentFormat, string> = {
 - 可以用emoji但不要过多
 - 最后一句引导互动（提问/评论/私信）
 - 不要用#话题标签`,
+
+  community_message: `【社群运营文案】
+要求：
+- 80-220字，适合微信群/企微群发布
+- 第一行先说明和群成员有关的痛点、机会或提醒，不能像广告
+- 正文用「共情/洞察/行动」结构，但不要写小标题
+- 语气自然，像群主或运营负责人在群里提醒大家
+- 必须有一个轻量互动动作，例如回复关键词、评论问题、私信领取、报名咨询
+- 不要承诺结果，不要制造暴富焦虑，不要使用夸张符号刷屏`,
+
+  raw_copy: `【原始文案】
+要求：
+- 300-800字纯文本
+- 不套用任何爆款开头、文案结构或结尾模板
+- 不做去AI味处理，保持自然流畅
+- 围绕用户输入的核心信息展开，保留信息密度
+- 可以适当分段，但不要加小标题
+- 适合作为后续精修、改编的基础初稿`,
+
+  shooting_brief: `【拍摄交接单】
+要求：
+- 输出给拍摄、剪辑、运营执行，必须具体、清楚、可落地
+- 必须包含以下字段，字段名不能省略：
+视频标题：
+核心观点：
+目标客户：
+视频目标：涨粉 / 建信任 / 引流 / 成交 / 客户教育 / 招商加盟（选择最适合的一项）
+拍摄形式：口播 / 访谈 / 场景展示 / 混剪（选择最适合的一项）
+建议时长：
+脚本正文：
+必拍镜头：
+补充素材：
+封面文案：
+评论区引导：
+私域承接话术：
+事实风险提醒：
+- 必拍镜头至少给 3 条，评论区引导和私域承接话术必须能直接复制使用
+- 不承诺效果，不写保证涨粉、保证成交、月入多少等高风险表达`,
 }
 
 function asStringArray(value: unknown): string[] {
@@ -162,6 +213,9 @@ function parseMultiFormatResponse(
     video_script: undefined,
     wechat_article: undefined,
     moments_post: undefined,
+    community_message: undefined,
+    shooting_brief: undefined,
+    raw_copy: undefined,
   }
 
   for (let i = 0; i < formats.length; i++) {
@@ -193,21 +247,35 @@ function parseMultiFormatResponse(
 export async function generateAimContent(input: AimInput) {
   const llm = LLMClient.shared()
 
-  const [ipProfile, knowledge, viralStructureBlock] = await Promise.all([
-    prisma.ipProfile.findUnique({
-      where: { userId: input.userId },
-    }),
+  if (input.projectId) {
+    const project = await prisma.clientProject.findFirst({
+      where: {
+        id: input.projectId,
+        userId: input.userId,
+        status: "active",
+      },
+      select: { id: true },
+    })
+    if (!project) {
+      throw new Error("客户项目不存在或已归档")
+    }
+  }
+
+  const [knowledge, viralStructureBlock] = await Promise.all([
     prisma.knowledgeEntry.findMany({
-      where: { userId: input.userId, status: "active" },
+      where: {
+        userId: input.userId,
+        status: "active",
+        ...(input.projectId
+          ? { OR: [{ projectId: input.projectId }, { projectId: null }] }
+          : {}),
+      },
       orderBy: { sortOrder: "asc" },
       take: 200,
     }),
     buildViralStructureBlock(),
   ])
 
-  const ipSnapshot = ipProfile
-    ? ipProfile.promptSnapshot || buildIpProfilePromptSnapshot(ipProfile)
-    : ""
   const knowledgeBlock = buildKnowledgeBlock(knowledge)
 
   const formatBlocks = input.targetFormats
@@ -227,11 +295,19 @@ export async function generateAimContent(input: AimInput) {
     .filter(Boolean)
     .join("\n\n")
 
-const systemPrompt = `你是一个企业营销内容专家。根据用户提供的信息，结合企业IP档案和知识库，生成高质量的营销内容。
+const systemPrompt = `你是一个企业营销内容专家。根据用户提供的信息，结合企业知识库，生成高质量的营销内容。
 
-${ipSnapshot}
 ${knowledgeBlock}
 ${viralStructureBlock}
+
+内部工作流程：
+1. 先判断输入内容类型：公众号长文、老板口述、原始文案、客户问题、产品卖点、对标文案或热点选题。
+2. 如果用户提供对标文案，只学习它的开头方式、结构节奏、表达密度和转化设计，不照抄具体表达。
+3. 如果用户提供公众号长文，优先提炼其中最适合短视频传播的一个核心观点，不要把整篇文章压缩成流水账。
+4. 开头必须单独优化：用冲突、反差、痛点、利益或好奇心打开，避免平铺直叙。
+5. 正文必须单独优化结构：按问题、判断、案例、行动或反差递进组织，让用户能听懂、能拍摄、能转化。
+6. 必须结合企业知识库中的产品卖点、客户痛点、老板经验和项目案例，让内容适合当下企业，而不是生成通用文案。
+7. 如果上下文包含垂类行业热点，只能自然融合和业务相关的部分，禁止硬蹭热点。
 
 创作规则：
 - 先判断用户输入最适合哪一种开头、文案结构和结尾类型，再开始写。
@@ -272,14 +348,20 @@ ${input.targetFormats.map((format) => `===FORMAT:${format}===\n（在这里输�
   const record = await prisma.aimGeneration.create({
     data: {
       userId: input.userId,
+      projectId: input.projectId || null,
       rawInput: input.rawInput,
       inputSource: "text",
       videoScript: parsed.video_script || null,
       wechatArticle: parsed.wechat_article || null,
       momentsPost: parsed.moments_post || null,
+      communityMessage: parsed.community_message || null,
+      shootingBrief: parsed.shooting_brief || null,
+      rawCopy: parsed.raw_copy || null,
       formatsRequested: input.targetFormats,
       knowledgeUsed,
-      ipSnapshotUsed: ipSnapshot || null,
+      topicTitle: input.topicTitle || null,
+      hotTopic: input.hotTopic || null,
+      polishInstruction: input.polishInstruction || null,
       model: completion.model,
       totalTokens: completion.usage?.totalTokens || null,
       status: "completed",

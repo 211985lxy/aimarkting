@@ -9,7 +9,6 @@ import type {
   ApiContentGenerationRun,
   ApiHotTopicFit,
   ApiHotTopicInsight,
-  ApiIpProfile,
   ApiPublicAssetVoice,
   ApiPublicVirtualman,
   ApiPublicAvatarPreviewDefaults,
@@ -25,13 +24,10 @@ import type {
   BackgroundMusicSelection,
   MaterialAssignment,
   HotTopicsResponse,
-  IpProfileResponse,
   PaginatedResponse,
   PackagingMaterialSuggestionsResponse,
   PublicTemplateDetail,
   PublicTemplateListItem,
-  GeneratePositioningRequest,
-  GeneratePositioningResponse,
   ApiTopicGenerateResponse,
   ApiTopicSelectResponse,
   ApiOpeningType,
@@ -158,47 +154,6 @@ export async function saveAuthVideo(authVideoUrl: string): Promise<ApiUser> {
   return payload.user
 }
 
-export async function getIpProfile(): Promise<IpProfileResponse> {
-  const payload = await request<{ data: IpProfileResponse }>("/api/ip-profile")
-  return payload.data
-}
-
-export async function upsertIpProfile(
-  input: Partial<ApiIpProfile>
-): Promise<IpProfileResponse> {
-  const payload = await request<{ data: IpProfileResponse }>("/api/ip-profile", {
-    method: "PUT",
-    body: JSON.stringify(input),
-  })
-  return payload.data
-}
-
-export async function generatePositioning(
-  input: GeneratePositioningRequest
-): Promise<GeneratePositioningResponse> {
-  const response = await request<GeneratePositioningResponse>("/api/ip-profile/generate-positioning", {
-    method: "POST",
-    body: JSON.stringify(input),
-    timeout: 45000, // 45 second timeout for LLM positioning generation (retry may extend)
-  })
-  if (!response?.data?.business || !response?.data?.persona || !response?.data?.content) {
-    throw new ApiError("AI 生成结果结构不完整，请重试", 500, response)
-  }
-  return response
-}
-
-export async function aiFillIpProfile(input: {
-  userInput: string
-}): Promise<{ filledFields: Record<string, string> }> {
-  const payload = await request<{ data: { filledFields: Record<string, string> } }>(
-    "/api/ip-profile/ai-fill",
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    }
-  )
-  return payload.data
-}
 
 export async function listHotTopics(input?: { source?: string }): Promise<HotTopicsResponse> {
   const url = input?.source ? `/api/hot-topics?source=${encodeURIComponent(input.source)}` : "/api/hot-topics"
@@ -769,11 +724,25 @@ export async function deleteKnowledge(id: string): Promise<void> {
 
 // ─── AIM 生成 ────────────────────────────────────────────
 
-export type ContentFormat = "video_script" | "wechat_article" | "moments_post"
+export type ContentFormat =
+  | "video_script"
+  | "wechat_article"
+  | "moments_post"
+  | "community_message"
+  | "shooting_brief"
+  | "raw_copy"
+
+export type AimTaskType =
+  | "polish_copy"
+  | "write_script"
+  | "quality_check"
+  | "repurpose"
 
 export interface AimGenerateRequest {
   rawInput: string
-  targetFormats: ContentFormat[]
+  targetFormats?: ContentFormat[]
+  taskType?: AimTaskType
+  projectId?: string
   topicTitle?: string
   topicRationale?: string
   hotTopic?: string
@@ -794,13 +763,24 @@ export interface AimGenerateResponse {
 
 export interface AimGeneration {
   id: string
+  projectId?: string | null
   rawInput: string
   videoScript: string | null
   wechatArticle: string | null
   momentsPost: string | null
+  communityMessage: string | null
+  shootingBrief: string | null
+  rawCopy: string | null
   formatsRequested: string[]
   knowledgeUsed: { id: string; title: string; category: string }[]
   createdAt: string
+  hotTopic?: string | null
+  polishInstruction?: string | null
+  qualityScores?: unknown
+  topicTitle?: string | null
+  workflowStatus?: string
+  reviewNote?: string | null
+  publishedAt?: string | null
 }
 
 export async function generateAimContent(data: AimGenerateRequest): Promise<AimGenerateResponse> {
@@ -811,8 +791,72 @@ export async function generateAimContent(data: AimGenerateRequest): Promise<AimG
   })
 }
 
-export async function listAimHistory(page = 1, pageSize = 20): Promise<AimGeneration[]> {
-  return request<AimGeneration[]>(`/api/aim/history?page=${page}&pageSize=${pageSize}`)
+export async function listAimHistory(page = 1, pageSize = 20, projectId?: string): Promise<AimGeneration[]> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  })
+  if (projectId) params.set("projectId", projectId)
+  return request<AimGeneration[]>(`/api/aim/history?${params.toString()}`)
+}
+
+export interface ClientProject {
+  id: string
+  name: string
+  companyName: string | null
+  industry: string | null
+  targetCustomer: string | null
+  offer: string | null
+  deliveryGoal: string | null
+  status: string
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+  _count?: { aimGenerations: number }
+  aimGenerations?: Array<{
+    id: string
+    rawInput: string
+    workflowStatus: string
+    createdAt: string
+  }>
+}
+
+export interface CreateClientProjectRequest {
+  name: string
+  companyName?: string
+  industry?: string
+  targetCustomer?: string
+  offer?: string
+  deliveryGoal?: string
+  notes?: string
+}
+
+export async function listClientProjects(status = "active"): Promise<ClientProject[]> {
+  return request<ClientProject[]>(`/api/projects?status=${encodeURIComponent(status)}`)
+}
+
+export async function createClientProject(data: CreateClientProjectRequest): Promise<ClientProject> {
+  return request<ClientProject>("/api/projects", {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateClientProject(id: string, data: Partial<CreateClientProjectRequest> & { status?: string }): Promise<ClientProject> {
+  return request<ClientProject>(`/api/projects/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateAimWorkflowStatus(id: string, data: {
+  workflowStatus: string
+  reviewNote?: string
+}): Promise<AimGeneration> {
+  return request<AimGeneration>(`/api/aim/history/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  })
 }
 
 export async function transcribeAudio(audioBlob: Blob): Promise<{ text: string }> {
@@ -822,5 +866,50 @@ export async function transcribeAudio(audioBlob: Blob): Promise<{ text: string }
       "Content-Type": "application/octet-stream",
     },
     body: audioBlob,
+  })
+}
+
+export async function uploadKnowledgeDocument(
+  file: File,
+  category: string
+): Promise<{ created: number; entries: KnowledgeEntry[] }> {
+  const token = useAuthStore.getState().token || getStoredAuthToken()
+
+  const formData = new FormData()
+  formData.append("file", file)
+  formData.append("category", category)
+
+  const response = await fetch("/api/knowledge/upload", {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+    // 不设置 Content-Type，让浏览器自动处理 multipart boundary
+  })
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      useAuthStore.getState().clearSession()
+    }
+    const payload = await response.json().catch(() => null)
+    throw new ApiError(
+      typeof payload?.error === "string" ? payload.error : `上传失败: ${response.status}`,
+      response.status,
+      payload
+    )
+  }
+
+  return response.json()
+}
+
+export interface AimChatMessage {
+  role: "user" | "assistant"
+  content: string
+}
+
+export async function chatAim(messages: AimChatMessage[]): Promise<{ content: string }> {
+  return request<{ content: string }>("/api/aim/chat", {
+    method: "POST",
+    body: JSON.stringify({ messages }),
+    timeout: 30000,
   })
 }

@@ -1,7 +1,6 @@
 import { createHash } from "crypto"
 import { prisma } from "@/lib/prisma"
 import { redis } from "@/lib/redis"
-import { buildIpProfilePromptSnapshot } from "@/lib/ip-profile"
 import { LLMClient } from "@/lib/llm/client"
 import type { ExpressionBlueprint, HotTopic } from "@/types/content-template"
 import type { ApiHotTopicFit, ApiHotTopicInsight } from "@/types/api"
@@ -44,18 +43,18 @@ interface SearchEvidence {
 interface FitInput {
   topicTitle: string
   insight: ApiHotTopicInsight
-  ipProfile: {
-    id: string
-    displayName: string | null
-    nickname: string | null
-    industry: string | null
-    primaryOffer: string | null
-    targetAudience: string | null
-    ipTraits: string | null
-    toneOfVoice: string | null
-    proofPoints: string | null
-    callToAction: string | null
-    promptSnapshot: string | null
+  ipProfile?: {
+    id?: string
+    displayName?: string | null
+    nickname?: string | null
+    industry?: string | null
+    primaryOffer?: string | null
+    targetAudience?: string | null
+    ipTraits?: string | null
+    toneOfVoice?: string | null
+    proofPoints?: string | null
+    callToAction?: string | null
+    promptSnapshot?: string | null
     // v2 fields (JSON columns, validated at runtime)
     profileVersion?: number | null
     business?: Record<string, unknown> | null
@@ -263,8 +262,7 @@ export async function getOrGenerateHotTopicInsight(
 export async function evaluateHotTopicFit(
   input: FitInput,
 ): Promise<ApiHotTopicFit> {
-  const ipSnapshot =
-    input.ipProfile.promptSnapshot || buildIpProfilePromptSnapshot(input.ipProfile as Parameters<typeof buildIpProfilePromptSnapshot>[0])
+  const ipSnapshot = input.ipProfile?.promptSnapshot || ""
   const cacheKey = buildFitCacheKey(input, ipSnapshot)
   const cachedFit = await prisma.hotTopicFitCache.findUnique({
     where: { cacheKey },
@@ -311,7 +309,7 @@ export async function evaluateHotTopicFit(
         topicTitle: input.topicTitle,
         templateId: input.template.id,
         structureId: input.structure.id,
-        ipProfileId: input.ipProfile.id,
+        ipProfileId: input.ipProfile?.id || "",
         fitJson: JSON.parse(JSON.stringify(fit)),
       },
     })
@@ -428,7 +426,7 @@ async function evaluateHotTopicFitUncached(
     bridgeReason: asString(parsed.bridgeReason, "当前业务与热点缺少自然桥接点。"),
     recommendedAngle: asString(parsed.recommendedAngle, "回到业务核心价值，不要强行引用热点。"),
     recommendedHook: asString(parsed.recommendedHook, "从业务判断或用户痛点切入。"),
-    ctaDirection: asString(parsed.ctaDirection, input.ipProfile.callToAction || "引导用户进一步咨询或互动。"),
+    ctaDirection: asString(parsed.ctaDirection, input.ipProfile?.callToAction || "引导用户进一步咨询或互动。"),
     caution: asStringArray(parsed.caution),
     evaluatedAt: new Date().toISOString(),
   }
@@ -912,7 +910,7 @@ function buildFitCacheKey(input: FitInput, ipSnapshot: string): string {
     templateScriptTemplate: input.template.scriptTemplate,
     structureId: input.structure.id,
     structureBlueprint: input.structure.blueprint,
-    ipProfileId: input.ipProfile.id,
+    ipProfileId: input.ipProfile?.id || "",
     ipSnapshot,
     inputs: normalizeRecord(input.inputs),
   })

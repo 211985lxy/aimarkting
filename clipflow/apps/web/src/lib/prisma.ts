@@ -22,6 +22,7 @@ function hasRequiredDelegates(client: PrismaClient): boolean {
     videoProductionPlan?: { fields?: { recommendationContext?: unknown } }
     pexelsMedia?: { fields?: { provider?: unknown } }
     pexelsQueryCache?: { fields?: { provider?: unknown } }
+    clientProject?: { findMany?: unknown }
   }
 
   return (
@@ -33,6 +34,7 @@ function hasRequiredDelegates(client: PrismaClient): boolean {
     && prismaClient.videoProductionPlan?.fields?.recommendationContext !== undefined
     && prismaClient.pexelsMedia?.fields?.provider !== undefined
     && prismaClient.pexelsQueryCache?.fields?.provider !== undefined
+    && typeof prismaClient.clientProject?.findMany === "function"
   )
 }
 

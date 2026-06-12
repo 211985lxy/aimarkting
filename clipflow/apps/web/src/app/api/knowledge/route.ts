@@ -8,12 +8,14 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url)
     const category = url.searchParams.get("category")
     const status = url.searchParams.get("status") || "active"
+    const projectId = url.searchParams.get("projectId")
 
     const entries = await prisma.knowledgeEntry.findMany({
       where: {
         userId: user.id,
         status,
         ...(category ? { category } : {}),
+        ...(projectId ? { projectId } : {}),
       },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
     })
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await authenticateRequest(request)
     const body = await request.json()
-    const { category, title, content, tags, sourceType } = body
+    const { category, title, content, tags, sourceType, projectId } = body
 
     if (!category || !title || !content) {
       return NextResponse.json(
@@ -43,6 +45,7 @@ export async function POST(request: NextRequest) {
     const entry = await prisma.knowledgeEntry.create({
       data: {
         userId: user.id,
+        projectId: projectId || null,
         category,
         title,
         content,

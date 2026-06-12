@@ -11,9 +11,13 @@ export async function GET(request: NextRequest) {
       50,
       Math.max(1, parseInt(url.searchParams.get("pageSize") || "20", 10))
     )
+    const projectId = url.searchParams.get("projectId")
 
     const records = await prisma.aimGeneration.findMany({
-      where: { userId: user.id },
+      where: {
+        userId: user.id,
+        ...(projectId ? { projectId } : {}),
+      },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,

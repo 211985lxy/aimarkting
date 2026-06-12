@@ -18,6 +18,11 @@ import { generateScriptCandidates } from "@/lib/script-generator"
 import { buildIpProfilePromptSnapshot } from "@/lib/ip-profile"
 import type { StructureBlueprint } from "@/lib/script-generator"
 
+type GenerateScriptParams = Parameters<typeof generateScriptCandidates>[0]
+type ScriptTemplateParam = GenerateScriptParams["template"]
+type ScriptIpProfileParam = NonNullable<GenerateScriptParams["ipProfile"]>
+type PromptSnapshotProfileParam = Parameters<typeof buildIpProfilePromptSnapshot>[0]
+
 // ─── Env guard ─────────────────────────────────────────────
 
 const HAS_API_KEY = !!process.env.THEROUTER_API_KEY
@@ -352,8 +357,8 @@ const INDUSTRIES: IndustryFixture[] = [
 // ─── Compute promptSnapshots before tests ───────────────────
 
 for (const fixture of INDUSTRIES) {
-  fixture.v1Profile.promptSnapshot = buildIpProfilePromptSnapshot(fixture.v1Profile as any)
-  fixture.v2Profile.promptSnapshot = buildIpProfilePromptSnapshot(fixture.v2Profile as any)
+  fixture.v1Profile.promptSnapshot = buildIpProfilePromptSnapshot(fixture.v1Profile as PromptSnapshotProfileParam)
+  fixture.v2Profile.promptSnapshot = buildIpProfilePromptSnapshot(fixture.v2Profile as PromptSnapshotProfileParam)
 }
 
 // ─── Tests ───────────────────────────────────────────────────
@@ -362,16 +367,16 @@ describeIfKey("v2 quality regression", () => {
   for (const industry of INDUSTRIES) {
     it(`${industry.name}: v2 scores >= v1 scores (within 5-point tolerance)`, { timeout: 120_000 }, async () => {
       const v1Result = await generateScriptCandidates({
-        template: TEMPLATE as any,
+        template: TEMPLATE as ScriptTemplateParam,
         inputs: industry.briefInputs,
-        ipProfile: industry.v1Profile as any,
+        ipProfile: industry.v1Profile as ScriptIpProfileParam,
         structure: STRUCTURE,
       })
 
       const v2Result = await generateScriptCandidates({
-        template: TEMPLATE as any,
+        template: TEMPLATE as ScriptTemplateParam,
         inputs: industry.briefInputs,
-        ipProfile: industry.v2Profile as any,
+        ipProfile: industry.v2Profile as ScriptIpProfileParam,
         structure: STRUCTURE,
       })
 

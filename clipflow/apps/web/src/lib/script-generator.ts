@@ -1,10 +1,9 @@
 import { renderTemplate } from "@/lib/template-engine"
 import { LLMClient } from "@/lib/llm"
 import { buildHotTopicPromptSection } from "@/lib/hot-topic-intelligence"
-import type { IpProfile, ContentTemplate } from "@/generated/prisma/client"
+import type { ContentTemplate } from "@/generated/prisma/client"
 import type { ApiHotTopicFit, ApiHotTopicInsight } from "@/types/api"
 import type { ExpressionBlueprint, TemplateVariable } from "@/types/content-template"
-import type { BusinessPositioning, PersonaDesign } from "@/types/ip-profile-v2"
 
 // ─── Model configuration ──────────────────────────────────
 // Meta-prompt generation & scoring: Sonnet 4.6 (analytical, structured)
@@ -82,24 +81,22 @@ interface GenerateScriptCandidatesParams {
     insight: ApiHotTopicInsight
     fit: ApiHotTopicFit
   } | null
-  ipProfile: Pick<
-    IpProfile,
-    | "displayName"
-    | "nickname"
-    | "industry"
-    | "primaryOffer"
-    | "targetAudience"
-    | "ipTraits"
-    | "toneOfVoice"
-    | "proofPoints"
-    | "callToAction"
-    | "promptSnapshot"
-  > & {
+  ipProfile?: {
+    displayName?: string | null
+    nickname?: string | null
+    industry?: string | null
+    primaryOffer?: string | null
+    targetAudience?: string | null
+    ipTraits?: string | null
+    toneOfVoice?: string | null
+    proofPoints?: string | null
+    callToAction?: string | null
+    promptSnapshot?: string | null
     profileVersion?: number | null
     business?: unknown | null
     persona?: unknown | null
     content?: unknown | null
-  }
+  } | null
   structure?: {
     displayName: string
     blueprint: StructureBlueprint
@@ -309,11 +306,15 @@ function buildContextBlock(params: GenerateScriptCandidatesParams): string {
     .map(([key, value]) => `- ${key}: ${value}`)
     .join("\n")
 
-  const sections: string[] = [
-    "【个人IP档案】",
-    ipProfile.promptSnapshot || "未提供",
-    "",
-  ]
+  const sections: string[] = []
+
+  if (ipProfile?.promptSnapshot) {
+    sections.push(
+      "【个人IP档案】",
+      ipProfile.promptSnapshot,
+      "",
+    )
+  }
 
   // COPY-01: Inject topic title + element tags when available
   if (topicContext) {
@@ -618,21 +619,18 @@ interface ResolvedScoringFields {
 function resolveScriptScoringFields(
   ipProfile: GenerateScriptCandidatesParams["ipProfile"]
 ): ResolvedScoringFields {
-  const business = ipProfile.business && typeof ipProfile.business === "object"
-    ? (ipProfile.business as BusinessPositioning)
-    : null
-  const persona = ipProfile.persona && typeof ipProfile.persona === "object"
-    ? (ipProfile.persona as PersonaDesign)
-    : null
+  if (!ipProfile) {
+    return { displayName: "", nickname: "", industry: "", ipTraits: "", toneOfVoice: "", callToAction: "", proofPoints: "", targetAudience: "" }
+  }
   return {
     displayName: ipProfile.displayName || "",
     nickname: ipProfile.nickname || "",
-    industry: ipProfile.industry || business?.core || "",
-    ipTraits: ipProfile.ipTraits || (Array.isArray(persona?.traits) ? persona.traits.join("、") : "") || "",
-    toneOfVoice: ipProfile.toneOfVoice || persona?.expressionStyle || "",
+    industry: ipProfile.industry || "",
+    ipTraits: ipProfile.ipTraits || "",
+    toneOfVoice: ipProfile.toneOfVoice || "",
     callToAction: ipProfile.callToAction || "",
     proofPoints: ipProfile.proofPoints || "",
-    targetAudience: ipProfile.targetAudience || business?.audience || "",
+    targetAudience: ipProfile.targetAudience || "",
   }
 }
 

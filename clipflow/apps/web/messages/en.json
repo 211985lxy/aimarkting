@@ -9,13 +9,13 @@
     "login": "Log In"
   },
   "Hero": {
-    "badge": "AI Marketing Growth Agent",
-    "title": "Not an AI writing tool,",
-    "titleHighlight": "an enterprise marketing brain",
-    "subtitle": "{name} structures company materials, founder expertise, project cases, product selling points, and customer Q&A into a knowledge base, then trains an agent that serves marketing.",
-    "cta": "Train the Marketing Brain",
-    "ctaSecondary": "Open Workspace",
-    "trustLine": "{count}+ businesses already on board"
+    "badge": "AIM AI Short-Video Marketing Department",
+    "title": "Help you",
+    "titleHighlight": "build your market",
+    "subtitle": "{name} turns founder expertise, product selling points, customer questions, and deal cases into topics, scripts, shooting briefs, and private-domain follow-up scripts.",
+    "cta": "Book a Diagnosis",
+    "ctaSecondary": "Open AIM Workspace",
+    "trustLine": "Built around a 7-day minimum content acquisition loop"
   },
   "Platforms": {
     "heading": "AIM captures these enterprise marketing assets and turns them into reusable growth capabilities",
@@ -139,9 +139,9 @@
     "diff6Desc": "Every script can be checked across editing quality, AI taste, hook strength, and logic."
   },
   "CTA": {
-    "heading": "Turn enterprise marketing assets into your AIM growth brain",
-    "subtext": "Start with materials, expertise, cases, selling points, and customer Q&A to train a company-specific AI marketing agent.",
-    "button": "Start Training AIM",
+    "heading": "Turn company expertise into an AI short-video marketing department",
+    "subtext": "Start with founder expertise, selling points, customer questions, and deal cases. Run the loop from topics to scripts, shooting briefs, publishing, and review.",
+    "button": "Book a Diagnosis",
     "note": "No download needed · Works in your browser"
   },
   "Footer": {

@@ -6,12 +6,9 @@ import { BrandLogo } from "@/components/branding/brand-logo"
 import { useBranding } from "@/components/providers/branding-provider"
 import {
   Sparkles,
-  Database,
-  Flame,
-  BarChart2,
-  ShieldCheck,
   LayoutDashboard,
   Settings,
+  BriefcaseBusiness,
 } from "lucide-react"
 import {
   Sidebar,
@@ -41,29 +38,11 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
   {
-    label: "工作台",
+    label: "主流程",
     items: [
       { title: "工作台", href: "/home", icon: LayoutDashboard },
-    ],
-  },
-  {
-    label: "信息库",
-    items: [
-      { title: "企业知识库", href: "/ip-profile", icon: Database },
-      { title: "热点追踪", href: "/hot-topics", icon: Flame },
-      { title: "对标账号", href: "/competitor", icon: BarChart2 },
-    ],
-  },
-  {
-    label: "内容生产",
-    items: [
-      { title: "AIM 灵感生成", href: "/aim", icon: Sparkles },
-    ],
-  },
-  {
-    label: "质量检控",
-    items: [
-      { title: "内容质量检控", href: "/quality-check", icon: ShieldCheck },
+      { title: "IP营销全案", href: "/projects", icon: BriefcaseBusiness },
+      { title: "AI内容工作台", href: "/aim", icon: Sparkles },
     ],
   },
 ]
@@ -98,7 +77,7 @@ export function AppSidebar() {
             )}
           >
             <Sparkles className="h-4 w-4 text-amber-200 animate-pulse" />
-            <span>AIM 一键生成</span>
+            <span>AI内容工作台</span>
           </Link>
         </div>
 

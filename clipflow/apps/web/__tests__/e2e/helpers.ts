@@ -13,37 +13,56 @@ const USER_JWT_SECRET = process.env.JWT_SECRET || "user-secret-change-me"
 // ─── Database helpers ─────────────────────────────────────
 
 export async function cleanDatabase() {
-  // 1. 最先清理最底层的二级子依赖，防外键死锁
-  await prisma.videoTask.deleteMany()
-  await prisma.videoProductionPlan.deleteMany()
-  await prisma.script.deleteMany()
-  await prisma.contentGenerationRun.deleteMany()
-  await prisma.topicSelection.deleteMany()
-  await prisma.competitorAnalysis.deleteMany()
-  await prisma.knowledgeEntry.deleteMany()
-  await prisma.aimGeneration.deleteMany()
-  await prisma.publicAvatarPreviewPreference.deleteMany()
-  await prisma.publicAvatarPreviewCache.deleteMany()
+  // ── 高精度数据级逻辑隔离 ──
+  // 为了防止运行测试时将本地开发环境的真实用户、IP 档案和知识库误删，
+  // 我们只清理以 "@test.com" 结尾的测试账户以及它们产生的数据资产！
+
+  // 1. 最先清理最底层的二级子依赖（仅限测试用户的数据，防外键死锁）
+  await prisma.videoTask.deleteMany({ where: { user: { email: { endsWith: "@test.com" } } } })
+  await prisma.videoProductionPlan.deleteMany({ where: { user: { email: { endsWith: "@test.com" } } } })
+  await prisma.script.deleteMany({ where: { user: { email: { endsWith: "@test.com" } } } })
+  await prisma.contentGenerationRun.deleteMany({ where: { user: { email: { endsWith: "@test.com" } } } })
+  await prisma.topicSelection.deleteMany({ where: { user: { email: { endsWith: "@test.com" } } } })
+  await prisma.competitorAnalysis.deleteMany({ where: { user: { email: { endsWith: "@test.com" } } } })
+  await prisma.knowledgeEntry.deleteMany({ where: { user: { email: { endsWith: "@test.com" } } } })
+  await prisma.aimGeneration.deleteMany({ where: { user: { email: { endsWith: "@test.com" } } } })
+  await prisma.publicAvatarPreviewPreference.deleteMany({ where: { user: { email: { endsWith: "@test.com" } } } })
   
-  // 2. 清理一级依赖父表 (引用了 User，但被上面所引用)
-  await prisma.ipProfile.deleteMany()
-  await prisma.avatar.deleteMany()
-  await prisma.asset.deleteMany()
-  await prisma.activationCode.deleteMany()
+  // 预览缓存：只清理被测试用户 preference 关联的缓存记录
+  await prisma.publicAvatarPreviewCache.deleteMany({
+    where: { preferences: { some: { user: { email: { endsWith: "@test.com" } } } } }
+  })
   
-  // 3. 最后清理一级核心用户
-  await prisma.user.deleteMany()
-  await prisma.adminUser.deleteMany()
+  // 2. 清理一级依赖父表 (仅限测试用户的关联记录)
+  await prisma.ipProfile.deleteMany({ where: { user: { email: { endsWith: "@test.com" } } } })
+  await prisma.avatar.deleteMany({ where: { user: { email: { endsWith: "@test.com" } } } })
+  await prisma.asset.deleteMany({ where: { user: { email: { endsWith: "@test.com" } } } })
   
-  // 4. 清理独立配置和缓存表
-  await prisma.systemSetting.deleteMany()
-  await prisma.pexelsQueryCache.deleteMany()
-  await prisma.pexelsMedia.deleteMany()
-  await prisma.douyinHotItem.deleteMany()
-  await prisma.douyinHotSnapshot.deleteMany()
-  await prisma.contentTemplate.deleteMany()
-  await prisma.videoStructure.deleteMany()
-  await prisma.videoPackagingTemplate.deleteMany()
+  // 激活码：只清除测试管理员创建或被测试用户使用的激活码
+  await prisma.activationCode.deleteMany({
+    where: {
+      OR: [
+        { admin: { email: { endsWith: "@test.com" } } },
+        { user: { email: { endsWith: "@test.com" } } }
+      ]
+    }
+  })
+  
+  // 3. 最后清理一级核心用户中的测试专用账户
+  await prisma.user.deleteMany({ where: { email: { endsWith: "@test.com" } } })
+  await prisma.adminUser.deleteMany({ where: { email: { endsWith: "@test.com" } } })
+  
+  // 4. 精准清理测试临时模板，保留全局开发环境配置与系统资产
+  const testAdminIds = (await prisma.adminUser.findMany({
+    where: { email: { endsWith: "@test.com" } },
+    select: { id: true }
+  })).map(a => a.id)
+
+  if (testAdminIds.length > 0) {
+    await prisma.contentTemplate.deleteMany({
+      where: { createdBy: { in: testAdminIds } }
+    })
+  }
 }
 
 export async function cleanRedis() {

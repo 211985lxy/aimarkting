@@ -47,7 +47,6 @@ import {
   createProductionPlan,
   createVideoTask,
   getVideoTask,
-  getIpProfile,
   listAssets,
   uploadFileToStorage,
   registerAsset,
@@ -67,13 +66,13 @@ import type {
   ApiPackagingTemplateRecommendation,
   ApiVideoPackagingTemplate,
   ApiScript,
-  IpProfileResponse,
   BackgroundMusicSelection,
   MaterialAssignment,
   ApiTopicCard,
   ApiOpeningType,
   ApiCopyStructure,
   ApiEndingType,
+  IpProfileResponse,
 } from "@/types/api";
 import type { QualityCheckReport } from "@/lib/api/client";
 import { QualityReportCard } from "@/components/quality-report";
@@ -225,8 +224,6 @@ export default function CreateVideoPage() {
   const [selectedCopyStructureCode, setSelectedCopyStructureCode] = useState<string | null>(null);
   const [selectedEndingCode, setSelectedEndingCode] = useState<string | null>(null);
   const [fallbackTemplateId, setFallbackTemplateId] = useState<string | null>(null);
-  const [ipProfile, setIpProfile] = useState<IpProfileResponse | null>(null);
-  const [ipProfileLoading, setIpProfileLoading] = useState(true);
   const [generatedScripts, setGeneratedScripts] = useState<ApiScript[]>([]);
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
   const [editedScript, setEditedScript] = useState("");
@@ -264,8 +261,8 @@ export default function CreateVideoPage() {
   const resolvedPackaging = selectedPackaging;
   const resolvedPackagingRecommendation = resolvedPackaging?.recommendation ?? null;
   const resolvedPackagingLabel = resolvedPackaging?.name ?? "未选择";
-  const ipProfileReady = !!ipProfile?.isComplete && !!ipProfile.profile;
-  const hasThreeDPositioning = !!ipProfile?.profile?.business && !!ipProfile.profile.persona && !!ipProfile.profile.content;
+  const ipProfileReady = true;
+  const hasThreeDPositioning = true;
   const blockingAiMaterials = useMemo(
     () => getBlockingAiMaterials(materials),
     [materials],
@@ -276,7 +273,7 @@ export default function CreateVideoPage() {
   );
 
   // Readiness checks
-  const phase0Ready = ipProfileReady && !!selectedTopicCard && !!topicSelectionId;
+  const phase0Ready = !!selectedTopicCard && !!topicSelectionId;
   const phase1Ready = !!selectedScriptId && !!editedScript.trim();
   const phase2Ready =
     !!resolvedPackaging
@@ -453,15 +450,6 @@ export default function CreateVideoPage() {
       assetsLoadedRef.current = true;
       setAssetsLoading(false);
     }
-  }, []);
-
-  // Load IP profile
-  useEffect(() => {
-    setIpProfileLoading(true);
-    getIpProfile()
-      .then(setIpProfile)
-      .catch(() => {})
-      .finally(() => setIpProfileLoading(false));
   }, []);
 
   // Load fallback template ID on mount (first published template)
@@ -1047,12 +1035,8 @@ export default function CreateVideoPage() {
           topicRefreshCount={topicRefreshCount}
           hotTopicTitle={hotTopicTitle}
           ipProfileReady={ipProfileReady}
-          ipProfileLoading={ipProfileLoading}
+          ipProfileLoading={false}
           onGenerateTopics={async () => {
-            if (!ipProfileReady) {
-              toast.error("请先完成基础问卷并确认三维 IP 档案");
-              return;
-            }
             setTopicLoading(true);
             try {
               const result = await generateTopics(undefined, topicRefreshCount);
@@ -1114,7 +1098,7 @@ export default function CreateVideoPage() {
           isGenerating={isGenerating}
           isDegraded={isDegraded}
           onGenerate={handleGenerateScripts}
-          ipProfile={ipProfile}
+          ipProfile={null}
           hotTopicTitle={hotTopicTitle}
           onNext={handleProceedToPackaging}
           onBack={prevPhase}

@@ -27,6 +27,11 @@ type LifecycleRule = {
   };
 };
 
+type OssLifecycleClient = {
+  putBucketLifecycle(bucket: string, rules: LifecycleRule[]): Promise<void>;
+  getBucketLifecycle(bucket: string): Promise<{ rules?: LifecycleRule[] }>;
+};
+
 const LIFECYCLE_RULES: LifecycleRule[] = [
   {
     id: "transition-1080p-to-ia",
@@ -76,6 +81,7 @@ function createOssClient(): OSS {
 
 export async function applyLifecyclePolicy(): Promise<void> {
   const client = createOssClient();
+  const lifecycleClient = client as unknown as OssLifecycleClient;
   const bucket = process.env.OSS_BUCKET!;
 
   console.log(`[oss-lifecycle] Applying lifecycle rules to bucket: ${bucket}`);
@@ -84,12 +90,12 @@ export async function applyLifecyclePolicy(): Promise<void> {
   );
 
   // Type assertion: ali-oss SDK supports lifecycle API but types may be incomplete
-  await (client as any).putBucketLifecycle(bucket, LIFECYCLE_RULES);
+  await lifecycleClient.putBucketLifecycle(bucket, LIFECYCLE_RULES);
 
   console.log("[oss-lifecycle] Lifecycle rules applied successfully.");
   console.log("[oss-lifecycle] Verifying...");
 
-  const result = await (client as any).getBucketLifecycle(bucket);
+  const result = await lifecycleClient.getBucketLifecycle(bucket);
   const rules = result.rules || [];
   console.log(`[oss-lifecycle] Active rules: ${rules.length}`);
   for (const rule of rules) {
@@ -101,8 +107,9 @@ export async function applyLifecyclePolicy(): Promise<void> {
 
 export async function getLifecyclePolicy(): Promise<LifecycleRule[]> {
   const client = createOssClient();
+  const lifecycleClient = client as unknown as OssLifecycleClient;
   const bucket = process.env.OSS_BUCKET!;
-  const result = await (client as any).getBucketLifecycle(bucket);
+  const result = await lifecycleClient.getBucketLifecycle(bucket);
   return result.rules || [];
 }
 

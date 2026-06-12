@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { withUserAuth } from "@/lib/user-auth";
-import { buildIpProfilePromptSnapshot } from "@/lib/ip-profile";
 import { LLMClient } from "@/lib/llm/client";
 import {
   computeQueryHash,
@@ -35,7 +34,6 @@ import type {
   PexelsVideoPicture,
 } from "@/types/pexels";
 import type { PixabayImage } from "@/types/pixabay";
-import type { BusinessPositioning } from "@/types/ip-profile-v2";
 
 const MATERIAL_PLAN_MODEL =
   process.env.PACKAGING_MATERIAL_PLAN_MODEL || "openai/gpt-5-mini";
@@ -1031,7 +1029,7 @@ export const POST = withUserAuth(async (request, { user }) => {
     );
   }
 
-  const [script, ipProfile, packagingTemplate, structure] = await Promise.all([
+  const [script, packagingTemplate, structure] = await Promise.all([
     prisma.script.findUnique({
       where: { id: scriptId },
       select: {
@@ -1039,9 +1037,6 @@ export const POST = withUserAuth(async (request, { user }) => {
         userId: true,
         content: true,
       },
-    }),
-    prisma.ipProfile.findUnique({
-      where: { userId: user.id },
     }),
     prisma.videoPackagingTemplate.findUnique({
       where: { id: packagingTemplateId },
@@ -1094,17 +1089,14 @@ export const POST = withUserAuth(async (request, { user }) => {
       )
     : undefined
 
-  const businessObj = ipProfile?.business && typeof ipProfile.business === "object" && !Array.isArray(ipProfile.business)
-    ? (ipProfile.business as unknown as BusinessPositioning)
-    : null;
-  const storedIndustry = ipProfile?.industry || businessObj?.core || null;
-  const effectiveOffer = ipProfile?.primaryOffer || businessObj?.differentiator || null;
-  const effectiveAudience = ipProfile?.targetAudience || businessObj?.audience || null;
+  const storedIndustry = null;
+  const effectiveOffer = null;
+  const effectiveAudience = null;
 
   // LLM-based industry inference: use content signals (IP name, script, offer)
   // to determine the REAL industry, overriding potentially wrong stored value.
   const inferred = await inferIndustryFromContent({
-    ipName: ipProfile?.displayName || ipProfile?.nickname || null,
+    ipName: null,
     storedIndustry,
     primaryOffer: effectiveOffer,
     targetAudience: effectiveAudience,
@@ -1118,7 +1110,7 @@ export const POST = withUserAuth(async (request, { user }) => {
     maxCount,
     packagingTemplateName: packagingTemplate.name,
     scriptContent: effectiveScript,
-    ipProfileSnapshot: buildIpProfilePromptSnapshot(ipProfile ?? {}),
+    ipProfileSnapshot: "",
     preferredRoles,
     industry: effectiveIndustry,
     primaryOffer: effectiveOffer,

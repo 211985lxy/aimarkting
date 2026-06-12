@@ -51,6 +51,7 @@ export default function AdminUsersPage() {
   }, [page, search, planFilter])
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchUsers()
   }, [fetchUsers])
 

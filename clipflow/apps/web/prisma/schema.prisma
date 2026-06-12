@@ -33,6 +33,7 @@ model User {
   competitorAnalyses             CompetitorAnalysis[]
   knowledgeEntries               KnowledgeEntry[]
   aimGenerations                 AimGeneration[]
+  clientProjects                 ClientProject[]
 }
 
 model Avatar {
@@ -267,6 +268,7 @@ model IpProfile {
 model KnowledgeEntry {
   id         String   @id @default(cuid())
   userId     String
+  projectId  String?
   category   String // boss_experience | product_usp | customer_pain | project_case | customer_qa
   title      String
   content    String   @db.Text
@@ -277,10 +279,36 @@ model KnowledgeEntry {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id])
+  user    User           @relation(fields: [userId], references: [id])
+  project ClientProject? @relation(fields: [projectId], references: [id])
 
   @@index([userId, category])
   @@index([userId, status])
+  @@index([projectId])
+}
+
+// ─── 客户项目 / 交付空间 ─────────────────────────────────
+
+model ClientProject {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  companyName    String?
+  industry       String?
+  targetCustomer String?  @db.Text
+  offer          String?  @db.Text
+  deliveryGoal   String?  @db.Text
+  status         String   @default("active") // active | paused | archived
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user             User             @relation(fields: [userId], references: [id])
+  aimGenerations   AimGeneration[]
+  knowledgeEntries KnowledgeEntry[]
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
 }
 
 // ─── AIM 生成记录 ───────────────────────────────────────
@@ -288,15 +316,25 @@ model KnowledgeEntry {
 model AimGeneration {
   id               String   @id @default(cuid())
   userId           String
+  projectId        String?
   rawInput         String   @db.Text
   inputSource      String   @default("text") // text | voice
   videoScript      String?  @db.Text
   wechatArticle    String?  @db.Text
   momentsPost      String?  @db.Text
+  communityMessage String?  @db.Text
+  shootingBrief    String?  @db.Text
+  rawCopy          String?  @db.Text
   formatsRequested Json     @default("[]")
   knowledgeUsed    Json     @default("[]")
   ipSnapshotUsed   String?  @db.Text
   qualityScores    Json?
+  topicTitle       String?
+  hotTopic         String?
+  polishInstruction String? @db.Text
+  workflowStatus   String   @default("draft")
+  reviewNote       String?  @db.Text
+  publishedAt      DateTime?
   model            String?
   totalTokens      Int?
   status           String   @default("completed")
@@ -304,9 +342,12 @@ model AimGeneration {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id])
+  user    User           @relation(fields: [userId], references: [id])
+  project ClientProject? @relation(fields: [projectId], references: [id])
 
   @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, projectId, createdAt(sort: Desc)])
+  @@index([userId, workflowStatus])
 }
 
 model ContentGenerationRun {

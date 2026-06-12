@@ -58,6 +58,7 @@ export default function AdminSettingsPage() {
   }, [])
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSettings()
   }, [fetchSettings])
 
@@ -163,6 +164,7 @@ function SettingRow({
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setValue(setting.value)
   }, [setting.value])
 

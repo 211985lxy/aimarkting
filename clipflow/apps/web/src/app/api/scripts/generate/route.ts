@@ -10,7 +10,6 @@ import {
   getOrGenerateHotTopicInsight,
 } from "@/lib/hot-topic-intelligence"
 import type { StructureBlueprint, TopicContext, HotTopicFusionContext } from "@/lib/script-generator"
-import { buildIpProfileView } from "@/lib/ip-profile"
 import type { ApiHotTopicFit, ApiHotTopicInsight } from "@/types/api"
 import type { ExpressionBlueprint, TemplateVariable } from "@/types/content-template"
 
@@ -76,7 +75,7 @@ export const POST = withUserAuth(async (request, { user }) => {
     )
   }
 
-  const [template, ipProfile, videoStructure] = await Promise.all([
+  const [template, videoStructure] = await Promise.all([
     prisma.contentTemplate.findUnique({
       where: { id: templateId, status: "published" },
       select: {
@@ -88,9 +87,6 @@ export const POST = withUserAuth(async (request, { user }) => {
         hookType: true,
         variables: true,
       },
-    }),
-    prisma.ipProfile.findUnique({
-      where: { userId: user.id },
     }),
     prisma.videoStructure.findFirst({
       where: {
@@ -120,22 +116,6 @@ export const POST = withUserAuth(async (request, { user }) => {
 
   console.log(`[${requestId}] Loaded template "${template.displayName}" and structure "${videoStructure.displayName}"`)
 
-  const profileView = buildIpProfileView(ipProfile)
-  if (!profileView.profile || !profileView.isComplete) {
-    console.warn(`[${requestId}] IP profile incomplete for user ${user.id}, missing: ${profileView.missingFields.join(', ')}`)
-    return NextResponse.json(
-      {
-        error: "IP profile is incomplete",
-        data: {
-          profile: profileView.profile,
-          isComplete: profileView.isComplete,
-          missingFields: profileView.missingFields,
-        },
-      },
-      { status: 412 }
-    )
-  }
-
   const definitions = Array.isArray(template.variables)
     ? (template.variables as unknown as TemplateVariable[])
     : []
@@ -164,7 +144,7 @@ export const POST = withUserAuth(async (request, { user }) => {
       const fit = await evaluateHotTopicFit({
         topicTitle: topic.title,
         insight,
-        ipProfile: profileView.profile,
+        ipProfile: undefined,
         template: {
           id: template.id,
           displayName: template.displayName,
@@ -243,7 +223,7 @@ export const POST = withUserAuth(async (request, { user }) => {
               fit: hotTopicFit,
             }
           : null,
-      ipProfile: profileView.profile,
+      ipProfile: null,
       structure: {
         displayName: videoStructure.displayName,
         blueprint,
@@ -269,7 +249,7 @@ export const POST = withUserAuth(async (request, { user }) => {
       const run = await tx.contentGenerationRun.create({
         data: {
           userId: user.id,
-          ipProfileId: profileView.profile!.id,
+          ipProfileId: "",
           templateId: template.id,
           structureId: videoStructure.id,
           structureSnapshot: blueprint as unknown as Prisma.InputJsonValue,
@@ -300,7 +280,7 @@ export const POST = withUserAuth(async (request, { user }) => {
               content,
               sourceTemplateId: template.id,
               generationRunId: run.id,
-              ipProfileId: profileView.profile!.id,
+              ipProfileId: "",
               structureId: videoStructure.id,
               status: "candidate",
               qualityScore: generation.scores[i]?.overall ?? null,
@@ -326,7 +306,7 @@ export const POST = withUserAuth(async (request, { user }) => {
                 content,
                 sourceTemplateId: template.id,
                 generationRunId: run.id,
-                ipProfileId: profileView.profile!.id,
+                ipProfileId: "",
                 structureId: videoStructure.id,
                 status: "candidate",
                 qualityScore: generation.hotTopicScores?.[i]?.overall ?? null,

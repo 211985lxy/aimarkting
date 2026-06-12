@@ -24,7 +24,7 @@ import type { ApiUser } from "@/types/api"
 
 export default function AccountPage() {
   const router = useRouter()
-  const { user, logout } = useAuthStore()
+  const { user, clearSession } = useAuthStore()
   const [currentUser, setCurrentUser] = useState<ApiUser | null>(null)
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export default function AccountPage() {
   const remainingPercent = dailyLimit > 0 ? (remaining / dailyLimit) * 100 : 0
 
   function handleLogout() {
-    logout()
+    clearSession()
     router.push("/login")
   }
 

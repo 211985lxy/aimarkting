@@ -17,4 +17,9 @@ export const redis =
     },
   })
 
+redis.on("error", () => {
+  // Redis is an optional cache layer for most app flows. Callers fall back to
+  // direct fetches, so avoid noisy unhandled error logs during builds/dev.
+})
+
 if (process.env.NODE_ENV !== "production") globalForRedis.redis = redis

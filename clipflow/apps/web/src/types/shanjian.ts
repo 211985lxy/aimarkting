@@ -341,5 +341,4 @@ export interface TaskResult {
   errorMessage?: string
 }
 
-export interface WebhookPayload extends TaskResult {
-}
+export type WebhookPayload = TaskResult

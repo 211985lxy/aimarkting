@@ -56,7 +56,10 @@ export default function AdminTemplatesPage() {
     }
   }, [page, statusFilter, contentTypeFilter, token])
 
-  React.useEffect(() => { fetchTemplates() }, [fetchTemplates])
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchTemplates()
+  }, [fetchTemplates])
 
   const totalPages = Math.ceil(total / pageSize)
 

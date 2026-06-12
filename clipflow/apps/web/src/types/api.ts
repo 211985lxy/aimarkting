@@ -40,12 +40,12 @@ export interface ApiIpProfile {
   profileVersion?: number;
   surveyIndustry?: string | null;
   surveyTargetCustomer?: string | null;
-  surveyMonetization?: any | null;  // JSON type
+  surveyMonetization?: unknown | null;  // JSON type
   surveyPersonalTraits?: string | null;
   surveyContentGoal?: string | null;
-  business?: any | null;  // JSON type
-  persona?: any | null;   // JSON type
-  content?: any | null;   // JSON type
+  business?: unknown | null;  // JSON type
+  persona?: unknown | null;   // JSON type
+  content?: unknown | null;   // JSON type
 }
 
 export interface IpProfileResponse {
