@@ -8,7 +8,7 @@
 - 2C4G 起步
 - Docker + Docker Compose
 - Nginx
-- 一个已解析到服务器的域名
+- 一个已解析到服务器的域名（例如 `mingyuan-ai.com`）
 
 ## 2. 安装基础软件
 
@@ -103,7 +103,7 @@ cp infra/nginx.mingyuan.conf /etc/nginx/sites-available/mingyuan
 nano /etc/nginx/sites-available/mingyuan
 ```
 
-把 `your-domain.com` 改成真实域名。
+把 `mingyuan-ai.com` 改成你最终绑定的真实域名。
 
 ```bash
 ln -sf /etc/nginx/sites-available/mingyuan /etc/nginx/sites-enabled/mingyuan
@@ -114,7 +114,7 @@ systemctl reload nginx
 ## 8. 配置 HTTPS
 
 ```bash
-certbot --nginx -d your-domain.com
+certbot --nginx -d mingyuan-ai.com
 certbot renew --dry-run
 ```
 
@@ -123,11 +123,11 @@ certbot renew --dry-run
 打开：
 
 ```text
-https://your-domain.com/login
-https://your-domain.com/admin/login
-https://your-domain.com/home
-https://your-domain.com/projects
-https://your-domain.com/aim
+https://mingyuan-ai.com/login
+https://mingyuan-ai.com/admin/login
+https://mingyuan-ai.com/home
+https://mingyuan-ai.com/projects
+https://mingyuan-ai.com/aim
 ```
 
 必须验证：
