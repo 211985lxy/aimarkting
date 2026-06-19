@@ -20,6 +20,34 @@
 
 ## 项目架构
 
+```mermaid
+flowchart TD
+    subgraph Root ["ClipFlow 根工作区"]
+        direction TB
+        subgraph CF ["clipflow (Turborepo Monorepo)"]
+            direction LR
+            Web["apps/web (Next.js 16 App Router)"]
+            Shared["packages/shared (共享逻辑与类型)"]
+            K8s["k8s (容器编排部署配置)"]
+            Web <--> Shared
+        end
+        
+        subgraph SAU ["social-auto-upload (社交发布自动化)"]
+            PythonCLI["Python CLI & Uploader"]
+            FlaskBackend["Flask Backend (SQLite)"]
+            PythonCLI <--> FlaskBackend
+        end
+
+        Scripts["scripts/ (系统运维与发布脚本)"]
+        Docs["docs/ (系统架构与业务文档)"]
+    end
+
+    Web -->|本地 RPC / CLI 管道交互| SAU
+    Web -->|Prisma ORM| MySQL[("MySQL / MariaDB")]
+    Web -->|TheRouter API 网关| LLM["LLM Provider (Claude / GPT)"]
+    Web -->|OpenAPI 渲染接口| Shanjian["闪剪数字人平台"]
+```
+
 ```
 ClipFlow/
 ├── clipflow/                    # 核心应用（Turborepo monorepo）

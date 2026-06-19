@@ -1,0 +1,8 @@
+{
+  "obsidianApiUrl": "https://127.0.0.1:27124",
+  "obsidianToken": "",
+  "targetServerUrl": "http://localhost:3000",
+  "syncToken": "mingyuan-obsidian-sync-secret",
+  "syncTag": "Aim/知识库",
+  "obsidianVaultPath": "/Users/xiangyu/Library/Mobile Documents/iCloud~md~obsidian/Documents/灵感库"
+}

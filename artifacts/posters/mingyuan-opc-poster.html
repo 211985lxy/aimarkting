@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>明远 OPC 分享海报</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      color: #063f3a;
+      background: #d7fbf0;
+    }
+
+    .poster {
+      position: relative;
+      width: 1080px;
+      height: 1920px;
+      padding: 46px 56px 50px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 92% 9%, rgba(255, 214, 98, 0.42), transparent 24%),
+        radial-gradient(circle at 81% 28%, rgba(3, 190, 164, 0.26), transparent 27%),
+        linear-gradient(135deg, #f4fffb 0%, #d8fbf0 42%, #c2f5e9 100%);
+    }
+
+    .poster::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(6, 128, 117, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(6, 128, 117, 0.06) 1px, transparent 1px);
+      background-size: 34px 34px;
+      mask-image: radial-gradient(circle at 74% 24%, rgba(0, 0, 0, 0.5), transparent 44%);
+      pointer-events: none;
+    }
+
+    .poster::after {
+      content: "";
+      position: absolute;
+      right: -60px;
+      top: 116px;
+      width: 460px;
+      height: 720px;
+      border-radius: 50%;
+      border: 2px solid rgba(0, 139, 126, 0.2);
+      transform: rotate(-14deg);
+      pointer-events: none;
+    }
+
+    .skyline {
+      position: absolute;
+      right: 40px;
+      top: 256px;
+      width: 410px;
+      height: 420px;
+      opacity: 0.22;
+    }
+
+    .brand-row {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 30px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: 0;
+      color: #006c63;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 52px;
+      height: 52px;
+      border: 5px solid #006c63;
+      border-radius: 50%;
+      font-size: 30px;
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .station {
+      padding: 14px 28px 15px;
+      border-radius: 18px;
+      color: #fff;
+      font-size: 33px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #09b89f, #007f73);
+      box-shadow: 0 12px 22px rgba(0, 132, 116, 0.24);
+    }
+
+    .hero {
+      position: relative;
+      z-index: 3;
+      width: 620px;
+    }
+
+    .kicker {
+      margin: 0 0 16px;
+      color: #007368;
+      font-size: 32px;
+      line-height: 1.25;
+      font-weight: 800;
+    }
+
+    .headline {
+      margin: 0;
+      color: #00645c;
+      font-size: 71px;
+      line-height: 1.12;
+      font-weight: 900;
+      letter-spacing: 0;
+      text-shadow: 0 3px 0 rgba(255, 255, 255, 0.9);
+    }
+
+    .subline {
+      margin: 20px 0 28px;
+      color: #00766c;
+      font-size: 30px;
+      line-height: 1.35;
+      font-weight: 800;
+    }
+
+    .portrait-wrap {
+      position: absolute;
+      z-index: 2;
+      right: 20px;
+      top: 292px;
+      width: 392px;
+      height: 520px;
+      border-radius: 44px;
+      overflow: hidden;
+      box-shadow: 0 24px 48px rgba(0, 96, 87, 0.20);
+      background: linear-gradient(135deg, #fff7c7, #d8fff4);
+    }
+
+    .portrait-wrap::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      background: linear-gradient(180deg, transparent 0%, transparent 62%, rgba(216, 251, 240, 0.32) 100%);
+      pointer-events: none;
+    }
+
+    .portrait {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: 53% 23%;
+      transform: scale(1.18);
+    }
+
+    .title-card {
+      position: relative;
+      z-index: 4;
+      width: 646px;
+      margin-top: 18px;
+      padding: 28px 34px 30px;
+      border: 3px solid rgba(255, 255, 255, 0.78);
+      border-radius: 24px;
+      color: #fff;
+      background: linear-gradient(135deg, #00bea9 0%, #009181 100%);
+      box-shadow:
+        0 16px 28px rgba(0, 137, 122, 0.22),
+        inset 0 0 24px rgba(255, 255, 255, 0.2);
+    }
+
+    .title-card h2 {
+      margin: 0;
+      font-size: 42px;
+      line-height: 1.34;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+
+    .meta-card {
+      position: relative;
+      z-index: 4;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      width: 646px;
+      margin-top: 20px;
+      padding: 24px 32px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 14px 28px rgba(0, 98, 91, 0.14);
+      backdrop-filter: blur(6px);
+    }
+
+    .meta-row {
+      display: flex;
+      align-items: center;
+      gap: 17px;
+      color: #143f3c;
+      font-size: 28px;
+      line-height: 1.3;
+      font-weight: 650;
+    }
+
+    .meta-icon {
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      color: #fff;
+      font-size: 25px;
+      background: linear-gradient(135deg, #00bfa8, #007a70);
+    }
+
+    .card {
+      position: relative;
+      z-index: 4;
+      width: 100%;
+      margin-top: 24px;
+      padding: 28px 34px 30px;
+      border: 2px solid rgba(255, 255, 255, 0.62);
+      border-radius: 26px;
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 14px 34px rgba(0, 91, 84, 0.14);
+      backdrop-filter: blur(8px);
+    }
+
+    .speaker-card {
+      margin-top: 210px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin: 0 0 18px;
+      color: #006c63;
+      font-size: 36px;
+      line-height: 1.2;
+      font-weight: 900;
+    }
+
+    .section-icon {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 13px;
+      color: #fff;
+      font-size: 27px;
+      background: linear-gradient(135deg, #02baa3, #00766b);
+    }
+
+    .speaker-list,
+    .fit-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .speaker-list li,
+    .fit-list li {
+      position: relative;
+      margin: 0 0 10px;
+      padding-left: 42px;
+      color: #153d3a;
+      font-size: 24px;
+      line-height: 1.42;
+      font-weight: 560;
+    }
+
+    .speaker-list li:last-child,
+    .fit-list li:last-child {
+      margin-bottom: 0;
+    }
+
+    .speaker-list li::before,
+    .fit-list li::before {
+      position: absolute;
+      left: 0;
+      top: 1px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      color: #fff;
+      text-align: center;
+      font-size: 18px;
+      line-height: 28px;
+      font-weight: 800;
+      background: #08a895;
+    }
+
+    .speaker-list li:nth-child(1)::before,
+    .fit-list li:nth-child(1)::before { content: "1"; }
+    .speaker-list li:nth-child(2)::before,
+    .fit-list li:nth-child(2)::before { content: "2"; }
+    .speaker-list li:nth-child(3)::before,
+    .fit-list li:nth-child(3)::before { content: "3"; }
+    .speaker-list li:nth-child(4)::before,
+    .fit-list li:nth-child(4)::before { content: "4"; }
+
+    .gain-card {
+      padding-bottom: 22px;
+    }
+
+    .gain-list {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 9px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .gain-list li {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 16px;
+      align-items: start;
+      padding: 8px 0 12px;
+      border-bottom: 1px dashed rgba(0, 117, 108, 0.25);
+      color: #143d39;
+      font-size: 23px;
+      line-height: 1.36;
+      font-weight: 560;
+    }
+
+    .gain-list li:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .num {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      color: #fff;
+      font-size: 24px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #05bca6, #00766b);
+      box-shadow: 0 8px 14px rgba(0, 118, 107, 0.18);
+    }
+
+    .gain-list strong {
+      color: #006b62;
+      font-size: 25px;
+      font-weight: 900;
+    }
+
+    .note {
+      position: relative;
+      z-index: 4;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-top: 22px;
+      padding: 18px 26px;
+      border-radius: 22px;
+      color: #11413d;
+      font-size: 23px;
+      line-height: 1.42;
+      font-weight: 650;
+      background: rgba(255, 255, 255, 0.72);
+      box-shadow: 0 10px 24px rgba(0, 91, 84, 0.10);
+    }
+
+    .note-icon {
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 15px;
+      color: #fff;
+      font-size: 29px;
+      background: linear-gradient(135deg, #03b79f, #00796f);
+    }
+
+    .cta {
+      position: absolute;
+      z-index: 5;
+      left: 56px;
+      right: 56px;
+      bottom: 44px;
+      height: 86px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 3px solid rgba(255, 255, 255, 0.65);
+      border-radius: 43px;
+      color: #fff;
+      font-size: 42px;
+      line-height: 1;
+      font-weight: 900;
+      background: linear-gradient(135deg, #02bba4 0%, #008276 60%, #006b63 100%);
+      box-shadow: 0 16px 34px rgba(0, 109, 99, 0.28);
+    }
+
+    .spark {
+      position: absolute;
+      z-index: 4;
+      width: 18px;
+      height: 18px;
+      transform: rotate(45deg);
+      background: #009486;
+      box-shadow: 0 0 20px rgba(0, 148, 134, 0.35);
+    }
+
+    .spark.one {
+      left: 650px;
+      top: 250px;
+    }
+
+    .spark.two {
+      right: 62px;
+      top: 214px;
+      width: 13px;
+      height: 13px;
+    }
+
+    .spark.three {
+      right: 105px;
+      bottom: 82px;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <main class="poster">
+    <svg class="skyline" viewBox="0 0 410 420" aria-hidden="true">
+      <path d="M20 380H390" fill="none" stroke="#00796f" stroke-width="5" stroke-linecap="round"/>
+      <path d="M76 380V210h58v170M166 380V136h54v244M252 380V82l44-44 44 44v298" fill="none" stroke="#00796f" stroke-width="7" stroke-linejoin="round"/>
+      <path d="M108 248h12M108 285h12M108 322h12M188 178h14M188 218h14M188 258h14M274 132h18M274 178h18M274 224h18M274 270h18" fill="none" stroke="#00796f" stroke-width="7" stroke-linecap="round"/>
+      <path d="M24 300c70-26 114-52 158-95 45-45 76-94 112-167" fill="none" stroke="#00a996" stroke-width="8" stroke-linecap="round"/>
+      <path d="M288 50l5-39 29 27" fill="none" stroke="#00a996" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+
+    <div class="spark one"></div>
+    <div class="spark two"></div>
+    <div class="spark three"></div>
+
+    <header class="brand-row">
+      <div class="brand">
+        <span class="brand-mark">生</span>
+        <span>生财有术</span>
+      </div>
+      <div class="station">深圳站</div>
+    </header>
+
+    <section class="hero">
+      <p class="kicker">本周三下午 · OPC 深度分享</p>
+      <h1 class="headline">28岁创业5年：短视频改变了我，AI正在放大机会</h1>
+      <p class="subline">商业定位 × AI短视频获客 × 私域成交</p>
+    </section>
+
+    <figure class="portrait-wrap">
+      <img class="portrait" src="file:///Users/xiangyu/Downloads/IMG_6663.JPG" alt="明远演讲照片" />
+    </figure>
+
+    <section class="title-card">
+      <h2>《从800万播放到500个精准客资：我如何搭建一人公司的商业闭环》</h2>
+    </section>
+
+    <section class="meta-card">
+      <div class="meta-row">
+        <span class="meta-icon">日</span>
+        <span><strong>时间：</strong>6月10日（周三）15:00</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-icon">址</span>
+        <span><strong>地点：</strong>深圳生财有术联合办公 会议室</span>
+      </div>
+    </section>
+
+    <section class="card speaker-card">
+      <h3 class="section-title"><span class="section-icon">人</span>嘉宾：明远</h3>
+      <ul class="speaker-list">
+        <li>28岁创业5年，长期研究内容获客、商业定位与私域成交</li>
+        <li>短视频累计800万播放，沉淀500个精准客资</li>
+        <li>从流量、客资到6位数年度顾问合作，持续打磨高价值服务</li>
+        <li>正在用AI重构内容生产、客户筛选和交付流程</li>
+      </ul>
+    </section>
+
+    <section class="card gain-card">
+      <h3 class="section-title"><span class="section-icon">火</span>你将收获</h3>
+      <ul class="gain-list">
+        <li><span class="num">1</span><span><strong>短视频获客框架</strong>：800万播放背后，什么内容真正能带来精准客户</span></li>
+        <li><span class="num">2</span><span><strong>流量变收入路径</strong>：为什么500个客资不等于成交，问题卡在哪里</span></li>
+        <li><span class="num">3</span><span><strong>高价值服务设计</strong>：如何把个人能力产品化、定价和交付</span></li>
+        <li><span class="num">4</span><span><strong>AI放大个人公司</strong>：如何用AI提升内容、私域、交付的效率</span></li>
+        <li><span class="num">5</span><span><strong>商业闭环地图</strong>：从内容曝光到私域信任，再到高客单成交</span></li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h3 class="section-title"><span class="section-icon">合</span>适合谁？</h3>
+      <ul class="fit-list">
+        <li>正在做短视频、IP、自媒体、知识服务或咨询顾问的人</li>
+        <li>有流量、有客户线索，但成交和交付还不稳定的人</li>
+        <li>想把个人能力变成高价值服务，而不是只卖时间的人</li>
+        <li>想用AI搭建“一人公司”商业闭环的创业者</li>
+      </ul>
+    </section>
+
+    <aside class="note">
+      <span class="note-icon">聊</span>
+      <span>明远会结合真实创业经历，拆解短视频获客、私域承接和AI放大个人公司的关键动作。</span>
+    </aside>
+
+    <footer class="cta">👇 席位有限，立即接龙报名！</footer>
+  </main>
+</body>
+</html>

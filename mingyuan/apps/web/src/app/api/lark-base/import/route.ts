@@ -1,0 +1,34 @@
+import { NextRequest, NextResponse } from "next/server"
+import { authenticateRequest, authErrorResponse } from "@/lib/user-auth"
+import { prisma } from "@/lib/prisma"
+import { importLarkBaseKnowledge } from "@/lib/lark-base-tool"
+
+const TABLE_TYPES = new Set(["topic_review", "project_management", "data_archive"])
+
+export async function POST(request: NextRequest) {
+  try {
+    const user = await authenticateRequest(request)
+    const body = await request.json()
+
+    if (typeof body.projectId !== "string" || !body.projectId.trim()) {
+      return NextResponse.json({ error: "projectId 必填" }, { status: 400 })
+    }
+    if (typeof body.tableType !== "string" || !TABLE_TYPES.has(body.tableType)) {
+      return NextResponse.json({ error: "tableType 无效" }, { status: 400 })
+    }
+
+    const result = await importLarkBaseKnowledge({
+      userId: user.id,
+      projectId: body.projectId.trim(),
+      tableType: body.tableType,
+      db: prisma,
+    })
+
+    return NextResponse.json(result)
+  } catch (error) {
+    return authErrorResponse(error) ?? NextResponse.json(
+      { error: error instanceof Error ? error.message : "飞书导入失败" },
+      { status: 500 },
+    )
+  }
+}

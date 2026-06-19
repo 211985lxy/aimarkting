@@ -1,50 +1,214 @@
-import { NextRequest, NextResponse } from "next/server"
+"use client"
 
-const AIHOT_BASE = "https://aihot.virxact.com/api/public"
-const UA = "ClipFlow/1.0 (https://clipflow.ai; contact@clipflow.ai)"
+import { useState, useRef, useCallback } from "react"
+import { Upload, FileText, X, Loader2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { uploadKnowledgeDocument, ApiError } from "@/lib/api/client"
+import { toast } from "sonner"
 
-// In-memory cache: 5min TTL for daily (changes once per day)
-let cache: { key: string; data: unknown; expires: number } | null = null
-const CACHE_TTL = 5 * 60_000
+const SUPPORTED_FORMATS = ".pdf,.docx,.xlsx,.txt,.csv,.md"
+const ACCEPTED_EXTENSIONS = new Set([".pdf", ".docx", ".xlsx", ".txt", ".csv", ".md"])
+const MAX_SIZE_MB = 10
+const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
 
-function getCache(key: string): unknown | null {
-  if (cache && cache.key === key && Date.now() < cache.expires) return cache.data
-  return null
+const KNOWLEDGE_CATEGORIES = [
+  { value: "boss_experience", label: "老板经验" },
+  { value: "product_usp", label: "产品卖点" },
+  { value: "customer_pain", label: "客户痛点" },
+  { value: "project_case", label: "项目案例" },
+  { value: "customer_qa", label: "客户问答" },
+] as const
+
+function getExtension(name: string): string {
+  const i = name.lastIndexOf(".")
+  return i === -1 ? "" : name.slice(i).toLowerCase()
 }
 
-function setCache(key: string, data: unknown) {
-  cache = { key, data, expires: Date.now() + CACHE_TTL }
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-// GET /api/hot-topics/ai/daily        → latest daily
-// GET /api/hot-topics/ai/daily/2026-05-07 → specific date (handled by [date]/route.ts)
-export async function GET() {
-  const cacheKey = "daily:latest"
-  const cached = getCache(cacheKey)
-  if (cached) return NextResponse.json({ data: cached })
+interface UploadDocumentDialogProps {
+  onUploaded: () => void
+}
 
-  try {
-    const res = await fetch(`${AIHOT_BASE}/daily`, {
-      headers: { "User-Agent": UA },
-      next: { revalidate: 0 },
-    })
+export function UploadDocumentDialog({ onUploaded }: UploadDocumentDialogProps) {
+  const [open, setOpen] = useState(false)
+  const [category, setCategory] = useState("boss_experience")
+  const [file, setFile] = useState<File | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => null)
-      return NextResponse.json(
-        { error: body?.error || `AIHOT upstream error: ${res.status}` },
-        { status: res.status === 404 ? 404 : 502 }
-      )
+  const reset = useCallback(() => {
+    setFile(null)
+    setDragOver(false)
+    setUploading(false)
+  }, [])
+
+  function validateFile(f: File): string | null {
+    const ext = getExtension(f.name)
+    if (!ACCEPTED_EXTENSIONS.has(ext)) {
+      return `不支持的文件格式 (.${ext})。支持: PDF、Word(.docx)、Excel(.xlsx)、TXT、CSV、Markdown`
     }
-
-    const data = await res.json()
-    setCache(cacheKey, data)
-    return NextResponse.json({ data })
-  } catch (err) {
-    console.error("[AIHOT daily] fetch failed:", err)
-    return NextResponse.json(
-      { error: "AI 日报服务暂时不可用，请稍后重试" },
-      { status: 502 }
-    )
+    if (f.size === 0) return "文件为空"
+    if (f.size > MAX_SIZE_BYTES) return `文件大小超过限制（最大 ${MAX_SIZE_MB}MB）`
+    return null
   }
+
+  function handleFileSelect(f: File | undefined) {
+    if (!f) return
+    const error = validateFile(f)
+    if (error) {
+      toast.error(error)
+      return
+    }
+    setFile(f)
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragOver(false)
+    const f = e.dataTransfer.files[0]
+    handleFileSelect(f)
+  }
+
+  async function handleUpload() {
+    if (!file) return
+    setUploading(true)
+    try {
+      const result = await uploadKnowledgeDocument(file, category)
+      toast.success(`导入成功，创建了 ${result.created} 条知识条目`)
+      setOpen(false)
+      reset()
+      onUploaded()
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "上传失败，请重试"
+      toast.error(msg)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v)
+        if (!v) reset()
+      }}
+    >
+      <DialogTrigger render={<Button className="cursor-pointer" />}>
+        <Upload className="mr-2 h-4 w-4" />
+        导入文档
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>导入文档</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {/* 类别选择 */}
+          <div className="space-y-2">
+            <Label>知识类别</Label>
+            <Select value={category} onValueChange={(v) => v && setCategory(v)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {KNOWLEDGE_CATEGORIES.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 拖拽上传区 */}
+          <div className="space-y-2">
+            <Label>选择文件</Label>
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => inputRef.current?.click()}
+              className={[
+                "flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-8 cursor-pointer transition-all duration-200",
+                dragOver
+                  ? "border-primary bg-primary/5 scale-[1.01]"
+                  : file
+                    ? "border-emerald-500/40 bg-emerald-500/5"
+                    : "border-muted-foreground/25 hover:border-primary/40 hover:bg-muted/50",
+              ].join(" ")}
+            >
+              <input
+                ref={inputRef}
+                type="file"
+                accept={SUPPORTED_FORMATS}
+                className="hidden"
+                onChange={(e) => handleFileSelect(e.target.files?.[0])}
+              />
+
+              {file ? (
+                <>
+                  <FileText className="h-10 w-10 text-emerald-500" />
+                  <div className="text-center space-y-1">
+                    <p className="text-sm font-medium text-foreground">{file.name}</p>
+                    <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setFile(null) }}
+                    className="rounded-full p-1 hover:bg-muted-foreground/10 transition-colors"
+                  >
+                    <X className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Upload className="h-8 w-8 text-muted-foreground/50" />
+                  <div className="text-center space-y-1">
+                    <p className="text-sm text-muted-foreground">
+                      拖拽文件到此处，或 <span className="text-primary font-medium">点击选择</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground/60">
+                      支持 PDF、Word、Excel、TXT、CSV、Markdown（最大 {MAX_SIZE_MB}MB）
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleUpload} disabled={!file || uploading}>
+              {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {uploading ? "解析中..." : "导入"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
 }

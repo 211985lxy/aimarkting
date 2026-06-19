@@ -1,0 +1,82 @@
+<svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.6"/>
+    </pattern>
+    <marker id="arrow-cyan" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-emerald" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrow-violet" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#a78bfa"/>
+    </marker>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap');
+      text { font-family: 'JetBrains Mono', 'Noto Sans SC', 'PingFang SC', sans-serif; }
+      .title { font-size: 34px; font-weight: 700; fill: #f8fafc; }
+      .subtitle { font-size: 18px; font-weight: 500; fill: #94a3b8; }
+      .node-title { font-size: 26px; font-weight: 700; fill: #f8fafc; }
+      .node-sub { font-size: 16px; font-weight: 500; fill: #cbd5e1; }
+      .small { font-size: 14px; font-weight: 500; fill: #94a3b8; }
+      .center-title { font-size: 34px; font-weight: 700; fill: #f8fafc; }
+      .center-sub { font-size: 18px; font-weight: 500; fill: #cbd5e1; }
+      .gold { fill: #fbbf24; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="#0f172a"/>
+  <rect width="1600" height="900" fill="url(#grid)" opacity="0.8"/>
+  <rect x="0" y="0" width="1600" height="900" fill="#020617" opacity="0.25"/>
+
+  <text x="70" y="84" class="title">WorkBuddy：桌面端 AI Agent 工作框架</text>
+  <text x="72" y="120" class="subtitle">模型思考，工具执行，Skill 固化流程，本地电脑接近真实工作现场。</text>
+
+  <rect x="540" y="315" width="520" height="250" rx="26" fill="#020617"/>
+  <rect x="540" y="315" width="520" height="250" rx="26" fill="rgba(8,51,68,0.35)" stroke="#22d3ee" stroke-width="2.5"/>
+  <text x="800" y="398" class="center-title" text-anchor="middle">WorkBuddy</text>
+  <text x="800" y="438" class="center-sub" text-anchor="middle">桌面端 AI Agent</text>
+  <line x1="635" y1="470" x2="965" y2="470" stroke="#334155" stroke-width="2"/>
+  <text x="800" y="510" class="small" text-anchor="middle">接任务 → 拆步骤 → 调工具 → 跑流程 → 交结果</text>
+
+  <path d="M 610 315 C 560 255, 500 235, 425 235" fill="none" stroke="#a78bfa" stroke-width="3" marker-end="url(#arrow-violet)"/>
+  <rect x="150" y="160" width="300" height="150" rx="18" fill="#0f172a"/>
+  <rect x="150" y="160" width="300" height="150" rx="18" fill="rgba(76,29,149,0.42)" stroke="#a78bfa" stroke-width="2"/>
+  <text x="300" y="212" class="node-title" text-anchor="middle">模型</text>
+  <text x="300" y="245" class="node-sub" text-anchor="middle">大脑</text>
+  <text x="300" y="282" class="small" text-anchor="middle">理解任务 / 推理规划</text>
+
+  <path d="M 990 315 C 1040 255, 1100 235, 1175 235" fill="none" stroke="#fbbf24" stroke-width="3" marker-end="url(#arrow-amber)"/>
+  <rect x="1150" y="160" width="300" height="150" rx="18" fill="#0f172a"/>
+  <rect x="1150" y="160" width="300" height="150" rx="18" fill="rgba(120,53,15,0.36)" stroke="#fbbf24" stroke-width="2"/>
+  <text x="1300" y="212" class="node-title" text-anchor="middle">工具</text>
+  <text x="1300" y="245" class="node-sub" text-anchor="middle">手脚</text>
+  <text x="1300" y="282" class="small" text-anchor="middle">读写文件 / 搜索 / 执行代码</text>
+
+  <path d="M 610 565 C 560 625, 500 650, 425 650" fill="none" stroke="#60a5fa" stroke-width="3" marker-end="url(#arrow-cyan)"/>
+  <rect x="150" y="585" width="300" height="150" rx="18" fill="#0f172a"/>
+  <rect x="150" y="585" width="300" height="150" rx="18" fill="rgba(59,130,246,0.34)" stroke="#60a5fa" stroke-width="2"/>
+  <text x="300" y="637" class="node-title" text-anchor="middle">Skill</text>
+  <text x="300" y="670" class="node-sub" text-anchor="middle">专业 SOP</text>
+  <text x="300" y="707" class="small" text-anchor="middle">固化流程 / 稳定复用</text>
+
+  <path d="M 990 565 C 1040 625, 1100 650, 1175 650" fill="none" stroke="#34d399" stroke-width="3" marker-end="url(#arrow-emerald)"/>
+  <rect x="1150" y="585" width="300" height="150" rx="18" fill="#0f172a"/>
+  <rect x="1150" y="585" width="300" height="150" rx="18" fill="rgba(6,78,59,0.42)" stroke="#34d399" stroke-width="2"/>
+  <text x="1300" y="637" class="node-title" text-anchor="middle">本地环境</text>
+  <text x="1300" y="670" class="node-sub" text-anchor="middle">办公桌</text>
+  <text x="1300" y="707" class="small" text-anchor="middle">访问文件夹 / 批量处理 / 直接保存</text>
+
+  <rect x="560" y="655" width="480" height="76" rx="16" fill="#020617"/>
+  <rect x="560" y="655" width="480" height="76" rx="16" fill="rgba(30,41,59,0.68)" stroke="#475569" stroke-width="1.5"/>
+  <text x="800" y="685" class="small" text-anchor="middle">Prompt 解决“这一次怎么做”</text>
+  <text x="800" y="714" class="gold" font-size="18" text-anchor="middle">Skill 解决“以后都按这个标准做”</text>
+
+  <rect x="230" y="790" width="1140" height="54" rx="16" fill="#020617"/>
+  <rect x="230" y="790" width="1140" height="54" rx="16" fill="rgba(120,53,15,0.28)" stroke="#fbbf24" stroke-width="1.8"/>
+  <text x="800" y="825" class="gold" font-size="22" text-anchor="middle">AI 从聊天走向干活，关键变化不是更会说话，而是开始能使用工具、固化流程、处理真实文件。</text>
+</svg>
