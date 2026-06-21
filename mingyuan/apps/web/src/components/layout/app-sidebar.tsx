@@ -9,10 +9,8 @@ import {
   LayoutDashboard,
   Settings,
   BriefcaseBusiness,
-  Newspaper,
   BarChart2,
   Target,
-  FileText,
 } from "lucide-react"
 import {
   Sidebar,
@@ -49,20 +47,26 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
   {
-    label: "内容生产",
+    label: "创作中心",
     items: [
-      { title: "工作台", href: "/home", icon: LayoutDashboard },
-      { title: "选题策划官", href: "/topic-planning", icon: Target },
-      { title: "AI HOT 简报", href: "/ai-hot", icon: Newspaper },
-      { title: "对标账号调查", href: "/competitor", icon: BarChart2 },
-      { title: "文案提取分析", href: "/video-copy", icon: FileText },
+      { title: "工作总览", href: "/home", icon: LayoutDashboard },
       { title: "IP营销全案", href: "/projects", icon: BriefcaseBusiness },
+      { title: "市场洞察", href: "/competitor", icon: BarChart2 },
+      { title: "选题中心", href: "/topic-planning", icon: Target },
     ],
   },
 ]
 
 const footerItems: NavItem[] = [
   { title: "账户设置", href: "/account", icon: Settings },
+]
+
+const coreAimAgentIds: AimAgentId[] = [
+  "business_system_diagnosis",
+  "business_diagnosis",
+  "ip_video",
+  "deep_copywriter",
+  "content_review",
 ]
 
 export function AppSidebar() {
@@ -101,15 +105,14 @@ export function AppSidebar() {
         {/* 导航分组 */}
         {navGroups.map((group) => (
           <SidebarGroup key={group.label}>
-            <SidebarGroupLabel className="px-3 text-xs font-semibold tracking-widest text-muted-foreground/75">
+            <SidebarGroupLabel className="px-3 text-sm font-semibold tracking-wide text-foreground/80">
               {group.label}
             </SidebarGroupLabel>
             <SidebarGroupContent className="mt-1">
               <SidebarMenu>
                 {group.items.map((item) => {
-                  const active = item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href)
+                  const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
+
                   return (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton
@@ -133,14 +136,14 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
 
-        {/* 内容智能体：4 个入口常驻（所有页面）；「最近内容」仅 /aim 显示 */}
+        {/* AIM 智能体入口常驻（所有页面）；「最近内容」仅 /aim 显示 */}
         <SidebarGroup>
-          <SidebarGroupLabel className="px-3 text-xs font-semibold tracking-widest text-muted-foreground/75">
-            内容智能体
+          <SidebarGroupLabel className="px-3 text-sm font-semibold tracking-wide text-foreground/80">
+            AIM 智能体
           </SidebarGroupLabel>
             <SidebarGroupContent className="mt-1">
               <div className="space-y-1 px-2">
-                {AIM_AGENT_OPTIONS.map((a) => {
+                {coreAimAgentIds.map((id) => AIM_AGENT_OPTIONS.find((a) => a.id === id)!).map((a) => {
                   const Icon = a.icon
                   const active = isAim && a.id === activeAgent
                   return (

@@ -9,6 +9,7 @@ import type {
   ApiContentGenerationRun,
   ApiHotTopicFit,
   ApiHotTopicInsight,
+  ApiTopicRecommendationMode,
   ApiPublicAssetVoice,
   ApiPublicVirtualman,
   ApiPublicAvatarPreviewDefaults,
@@ -37,6 +38,7 @@ import type {
   CompetitorReportsResponse,
   ApiAiHotBriefing,
   ApiVideoCopyExtraction,
+  ApiAgentApiKeySummary,
 } from "@/types/api"
 
 class ApiError extends Error {
@@ -57,13 +59,20 @@ type RequestOptions = RequestInit & {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { auth = true, headers, timeout, ...init } = options
+  const { auth = true, headers, timeout, signal, ...init } = options
   const token = auth
     ? useAuthStore.getState().token || getStoredAuthToken()
     : null
 
   // Add timeout support using AbortController
   const controller = new AbortController()
+  let abortedBySignal = false
+  const abortFromSignal = () => {
+    abortedBySignal = true
+    controller.abort()
+  }
+  if (signal?.aborted) abortFromSignal()
+  else if (signal) signal.addEventListener("abort", abortFromSignal, { once: true })
   const timeoutId = timeout
     ? setTimeout(() => controller.abort(), timeout)
     : null
@@ -80,6 +89,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     })
 
     if (timeoutId) clearTimeout(timeoutId)
+    if (signal) signal.removeEventListener("abort", abortFromSignal)
 
     const payload = await response
       .json()
@@ -100,8 +110,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     return payload as T
   } catch (error) {
     if (timeoutId) clearTimeout(timeoutId)
+    if (signal) signal.removeEventListener("abort", abortFromSignal)
 
     if (error instanceof Error && error.name === "AbortError") {
+      if (abortedBySignal) {
+        throw new ApiError("请求已停止", 499, { code: "ABORTED", originalPath: path })
+      }
       throw new ApiError(
         "请求超时，请检查网络连接或稍后重试",
         408,
@@ -137,6 +151,11 @@ export async function registerUser(input: {
 export async function getCurrentUser(): Promise<ApiUser> {
   const payload = await request<{ user: ApiUser }>("/api/auth/me")
   return payload.user
+}
+
+export async function listAgentApiKeys(): Promise<ApiAgentApiKeySummary[]> {
+  const payload = await request<{ items: ApiAgentApiKeySummary[] }>("/api/account/agent-keys")
+  return payload.items
 }
 
 export async function activateUser(code: string): Promise<ApiUser> {
@@ -607,6 +626,7 @@ export async function generateTopics(
     knowledgeEntryIds?: string[]
     elementCodes?: string[]
     refreshCount?: number
+    recommendationMode?: ApiTopicRecommendationMode
   },
 ): Promise<ApiTopicGenerateResponse> {
   const body: Record<string, unknown> = {}
@@ -614,6 +634,7 @@ export async function generateTopics(
   if (input?.knowledgeEntryIds?.length) body.knowledgeEntryIds = input.knowledgeEntryIds
   if (input?.elementCodes) body.elementCodes = input.elementCodes
   if (typeof input?.refreshCount === "number") body.refreshCount = input.refreshCount
+  if (input?.recommendationMode) body.recommendationMode = input.recommendationMode
   const payload = await request<{ data: ApiTopicGenerateResponse }>(
     "/api/topics/generate",
     {
@@ -688,7 +709,7 @@ export async function deleteCompetitorAnalysis(id: string): Promise<void> {
   await request(`/api/competitor/${id}`, { method: "DELETE" })
 }
 
-// ─── Watch Accounts（对标账号监控看板） ────────────────────
+// ─── Watch Accounts（对标账号分析） ────────────────────
 
 export interface WatchAccount {
   id: string
@@ -702,6 +723,7 @@ export interface WatchAccount {
     videoId: string
     title: string
     coverUrl: string
+    videoUrl?: string
     createTime: number
     views: number
     likes: number
@@ -713,6 +735,7 @@ export interface WatchAccount {
     videoId: string
     title: string
     coverUrl: string
+    videoUrl?: string
     createTime: number
     views: number
     likes: number
@@ -762,7 +785,20 @@ export async function refreshWatchAccounts(accountId?: string): Promise<WatchRef
   })
 }
 
-// ─── Video Copy Extraction（视频文案提取分析） ───────────────
+export async function extractWatchAccountVideo(input: {
+  watchAccountId: string
+  videoUrl: string
+  videoTitle?: string
+  coverUrl?: string
+}): Promise<ApiVideoCopyExtraction> {
+  return request<ApiVideoCopyExtraction>("/api/competitor/watch-accounts/videos/extract", {
+    method: "POST",
+    body: JSON.stringify(input),
+    timeout: 20000,
+  })
+}
+
+// ─── Video Copy Extraction（爆款文案拆解） ───────────────
 
 export async function listVideoCopyExtractions(): Promise<{ items: ApiVideoCopyExtraction[] }> {
   return request<{ items: ApiVideoCopyExtraction[] }>("/api/video-copy-extractions")
@@ -865,6 +901,7 @@ export type AimTaskType =
   | "repurpose"
 
 export interface AimGenerateRequest {
+  agentId?: string
   rawInput: string
   targetFormats?: ContentFormat[]
   taskType?: AimTaskType
@@ -909,11 +946,12 @@ export interface AimGeneration {
   publishedAt?: string | null
 }
 
-export async function generateAimContent(data: AimGenerateRequest): Promise<AimGenerateResponse> {
+export async function generateAimContent(data: AimGenerateRequest, signal?: AbortSignal): Promise<AimGenerateResponse> {
   return request<AimGenerateResponse>("/api/aim/generate", {
     method: "POST",
     body: JSON.stringify(data),
     timeout: 60000,
+    signal,
   })
 }
 
@@ -1105,14 +1143,69 @@ export type AimChatToolAction =
 export async function chatAim(
   messages: AimChatMessage[],
   options?: {
+    agentId?: string
     projectId?: string
     toolAction?: AimChatToolAction
     resultId?: string
+    signal?: AbortSignal
   },
 ): Promise<{ content: string; toolResult?: unknown }> {
+  const { signal, ...bodyOptions } = options ?? {}
   return request<{ content: string; toolResult?: unknown }>("/api/aim/chat", {
     method: "POST",
-    body: JSON.stringify({ messages, ...options }),
+    body: JSON.stringify({ messages, ...bodyOptions }),
     timeout: 30000,
+    signal,
+  })
+}
+
+// ─── Inspiration（灵感收集） ─────────────────────────────
+
+export interface InspirationItem {
+  id: string
+  userId: string
+  source: string
+  content: string
+  aiStatus: string
+  generatedTopics: Array<{ title: string; rationale: string }> | null
+  generatedContent: AimGenerateResponse | null
+  aimGenerationId: string | null
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function listInspirations(status?: string): Promise<{ items: InspirationItem[] }> {
+  const params = new URLSearchParams()
+  if (status) params.set("status", status)
+  return request<{ items: InspirationItem[] }>(`/api/inspiration?${params}`)
+}
+
+export async function createInspiration(data: {
+  content: string
+  source?: string
+  autoProcess?: boolean
+}): Promise<InspirationItem> {
+  return request<InspirationItem>("/api/inspiration", {
+    method: "POST",
+    body: JSON.stringify(data),
+    timeout: 5000,
+  })
+}
+
+export async function processInspiration(id: string): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>(`/api/inspiration/${id}/process`, {
+    method: "POST",
+  })
+}
+
+export async function generateFromInspiration(
+  id: string,
+  data: { projectId: string; topicTitle?: string }
+): Promise<AimGenerateResponse> {
+  return request<AimGenerateResponse>(`/api/inspiration/${id}/generate`, {
+    method: "POST",
+    body: JSON.stringify(data),
+    timeout: 60000,
   })
 }

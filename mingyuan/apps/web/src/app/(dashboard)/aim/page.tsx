@@ -13,19 +13,25 @@ import {
   Sparkles,
   Video,
   ShieldCheck,
-  Wand2,
   Plus,
+  ArrowRight,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { MarkdownRenderer } from "@/components/markdown-renderer"
+import { AimPromptComposer } from "@/components/aim/aim-prompt-composer"
+import { ActionStrip } from "@/components/workbench/action-strip"
+import { AiResultPanel } from "@/components/workbench/ai-result-panel"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   generateAimContent,
+  getVideoCopyExtraction,
   checkScriptQuality,
   chatAim,
+  ApiError,
   listClientProjects,
   updateAimWorkflowStatus,
   type AimGenerateResponse,
@@ -45,6 +51,7 @@ import {
   type AimAgentMeta,
 } from "@/lib/aim-ui-config"
 import { useAimWorkspaceStore } from "@/lib/aim-workspace-store"
+import { shouldOpenDeepCopywriter } from "@/lib/video-copy-routing"
 
 interface AimAgentOption extends AimAgentMeta {
   intro: string
@@ -57,14 +64,24 @@ interface AimAgentOption extends AimAgentMeta {
 /** 各智能体的运行时扩展字段（id/title/description/icon/defaultFormats 来自共享配置 aim-ui-config） */
 const AGENT_EXTRAS: Record<AimAgentId, Omit<AimAgentOption, keyof AimAgentMeta>> = {
   ip_video: {
-    intro: "我是你的脚本创作官。把公众号文章、客户问题、产品卖点或老板口述丢给我，我会生成短视频脚本、口播稿和拍摄交接单。",
-    placeholder: "和我说说：你想做什么内容？素材、目标人群、卖点都可以贴进来…",
-    defaultInstruction: "去 AI 味，保留真人表达的犹豫、判断和具体细节，少用套话。视频脚本采用痛点-钩子-干货-行动号召的经典IP获客结构。",
+    intro: "我是你的内容生产官。选题、脚本、朋友圈、长文和发布前质检都在这里处理，先把素材、主题或老板口述丢进来。",
+    placeholder: "说说今天要生产什么内容：选题、原始想法、老板口述、客户问题都可以…",
+    defaultInstruction: "去 AI 味，保留真人表达的犹豫、判断和具体细节，少用套话。先判断内容类型，再输出适合发布的内容交付物。",
     quickPrompts: [
-      "少儿美术机构同城获客：想通过短视频招募学员，目前粉丝少，怎么重新做口播？",
-      "老板会议即兴表达：粘贴老板在会上的金句片段，快速整理为干货口播脚本。",
+      "把这个选题写成短视频口播，并顺手给一版朋友圈承接。",
+      "粘贴老板在会上的金句片段，整理成可拍脚本和拍摄交接单。",
     ],
-    primaryActionLabel: "生成文案交付物",
+    primaryActionLabel: "生成内容",
+  },
+  deep_copywriter: {
+    intro: "我是你的深度文案官。把想法、视频原文、老板口述或对标文案给我，我会先用选择题挖观点，最后只生成一篇完整深度长文。",
+    placeholder: "粘贴想法、视频原文、老板口述、对标文案或想借势的热点，我先帮你挖观点再写母稿…",
+    defaultInstruction: "先用3-5个半开放选择题挖出用户真实观点；每题选项必须按 A. / B. / C. / D. 独立成行输出，方便用户点击。用户完成选择后，生成时只输出一篇完整深度长文正文，不输出观点确认卡、大纲、开头钩子、拆分方向或平台分发建议。热点只能自然融合，禁止硬蹭或编造。",
+    quickPrompts: [
+      "根据这段视频原文，先问我几个观点选择题，再打磨成适合我表达的深度母稿。",
+      "我有一个观点，先帮我挖出真实态度和可借势热点，再写成有钩子、有结构的母稿。",
+    ],
+    primaryActionLabel: "生成深度母稿",
   },
   business_diagnosis: {
     intro: "我是你的定位策划官。告诉我你的产品、卖给谁、目前怎么获客、卡在哪，我会输出 IP 定位、内容定位和成交路径建议。",
@@ -76,25 +93,26 @@ const AGENT_EXTRAS: Record<AimAgentId, Omit<AimAgentOption, keyof AimAgentMeta>>
     ],
     primaryActionLabel: "生成诊断报告",
   },
-  wechat_article: {
-    intro: "我是你的长文写作官。给我一个主题、核心观点或案例大纲，我会先帮你把立意和结构打磨清楚，再拓展成一篇结构完整、论证有力的深度长文。",
-    placeholder: "想写什么主题？核心观点、案例、提纲都可以…",
-    defaultInstruction: "保持客观专业但不失温度的笔触，使用‘痛点引入 - 核心论点 - 经典案例拆解 - 行动建议’的结构，多用短句，避免空洞说教。",
+  business_system_diagnosis: {
+    intro: "我是你的商业诊断官。告诉我业务类型、现状数据、卡点和目标，我会诊断商业模式、流量转化、交付结构和核心矛盾。",
+    placeholder: "说说你的业务、目前数据、卡在哪、想达到什么结果…",
+    defaultInstruction: "按商业诊断官结构输出：业务现状说明、模糊概念澄清、生意系统四层诊断、核心矛盾判断、行业参照校验、多视角复核、三条调整路径、本周最小动作。",
     quickPrompts: [
-      "企业数字化转型：传统外贸企业如何通过数字化工具提升 3 倍效率的案例拆解。",
-      "中小企业落地大模型：避开大模型在中小企业落地时的 3 个核心误区与对策。",
+      "老板 IP 做了三个月没成交，帮我诊断问题。",
+      "工程服务账号有播放但没客户，帮我找核心矛盾。",
+      "我有产品但不知道怎么获客和成交，帮我做生意体检。",
     ],
-    primaryActionLabel: "生成公众号文章",
+    primaryActionLabel: "生成诊断报告",
   },
-  moments_conversion: {
-    intro: "我是你的私域转化官。把客户反馈、成交喜报或限时福利发我，我会生成朋友圈文案和私域承接话术。",
-    placeholder: "客户反馈、成交喜报、限时福利都可以贴进来…",
-    defaultInstruction: "像真实的朋友在分享，包含‘真实场景 + 痛点唤醒 + 成交事实 + 评论区引流钩子’，严防微商套路。",
+  content_review: {
+    intro: "我是你的数据复盘官。把已发布内容、播放互动数据、评论和转化情况发给我，我会判断这条内容为什么有效或失效，并给出下一轮优化和复用方向。",
+    placeholder: "贴一条已发布内容的数据、评论、脚本或链接复盘记录…",
+    defaultInstruction: "按发布后复盘结构输出：表现判断、成功或失败原因、下一轮优化动作、可复用资产、可延展新选题、是否沉淀进知识库。不要泛泛夸奖，必须给明确判断。",
     quickPrompts: [
-      "学员喜报：刚收到一个学员的喜报，通过我们指导拿到了大厂 offer，做咨询引导。",
-      "分享会门票：今晚 8 点线上闭门分享会，写一条朋友圈吸引精准客户私信报名。",
+      "这条视频播放高但咨询少，帮我复盘问题并给下一条优化方向。",
+      "这条内容评论区反馈不错，帮我拆成可复用选题和朋友圈文案方向。",
     ],
-    primaryActionLabel: "生成朋友圈文案",
+    primaryActionLabel: "生成复盘报告",
   },
 }
 
@@ -129,6 +147,46 @@ function workflowStatusLabel(status?: string | null) {
   return WORKFLOW_STATUS_OPTIONS.find((item) => item.value === status)?.label || "草稿"
 }
 
+interface ChoiceGroup {
+  question: string
+  options: Array<{ label: string; text: string }>
+}
+
+function cleanChoiceText(text: string) {
+  return text.replace(/^#+\s*/, "").replace(/\*\*/g, "").trim()
+}
+
+function extractChoiceGroups(content: string): ChoiceGroup[] {
+  const lines = content.split("\n")
+  const groups: ChoiceGroup[] = []
+  for (let i = 0; i < lines.length; i += 1) {
+    const first = lines[i].trim().match(/^([A-D])[\s.、．)]\s*(.+)$/)
+    if (!first) continue
+
+    const options = []
+    let j = i
+    while (j < lines.length) {
+      const match = lines[j].trim().match(/^([A-D])[\s.、．)]\s*(.+)$/)
+      if (!match) break
+      const text = cleanChoiceText(match[2])
+      if (text.length > 0 && text.length <= 120) options.push({ label: match[1], text })
+      j += 1
+    }
+
+    let question = "请选择一个方向"
+    for (let k = i - 1; k >= 0; k -= 1) {
+      const line = cleanChoiceText(lines[k])
+      if (line && !/^([A-D])[\s.、．)]/.test(line)) {
+        question = line
+        break
+      }
+    }
+    if (options.length > 1) groups.push({ question, options })
+    i = j
+  }
+  return groups
+}
+
 /** 生成一个稳定的临时 id（组件内使用，避免 Math.random 之外的库依赖） */
 let _seq = 0
 function nextId(prefix = "m") {
@@ -142,6 +200,104 @@ interface ChatMessage {
   content: string
   deliverables?: AimGenerateResponse | null
   qualityReport?: QualityCheckReport | null
+}
+
+function ChoiceStepper({
+  groups,
+  busy,
+  onSubmit,
+}: {
+  groups: ChoiceGroup[]
+  busy: boolean
+  onSubmit: (text: string) => void
+}) {
+  const [step, setStep] = useState(0)
+  const [answers, setAnswers] = useState<Record<number, string>>({})
+  const group = groups[step]
+  if (!group) return null
+
+  const selected = answers[step]
+  const isLast = step === groups.length - 1
+
+  function next() {
+    if (!selected) return
+    if (!isLast) {
+      setStep((current) => current + 1)
+      return
+    }
+    onSubmit(groups.map((item, index) => `${index + 1}. ${item.question}\n${answers[index]}`).join("\n\n"))
+  }
+
+  return (
+    <div className="mt-3 max-w-xl rounded-xl border bg-muted/20 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-muted-foreground">
+          {step + 1}/{groups.length} · {group.question}
+        </p>
+        <Button size="sm" variant="ghost" className="h-7 px-2" disabled={busy || !selected} onClick={next}>
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="grid gap-2">
+        {group.options.map((option) => {
+          const value = `${option.label}. ${option.text}`
+          return (
+            <Button
+              key={value}
+              type="button"
+              variant={selected === value ? "default" : "outline"}
+              className="h-auto justify-start whitespace-normal px-3 py-2 text-left text-xs"
+              disabled={busy}
+              onClick={() => setAnswers((current) => ({ ...current, [step]: value }))}
+            >
+              <span className="mr-1 font-semibold">{option.label}</span>
+              {option.text}
+            </Button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+const AIM_DRAFT_STORAGE_KEY = "aim-workbench-draft-v1"
+
+interface AimDraft {
+  selectedAgentId: AimAgentId
+  selectedProjectId: string
+  input: string
+  messages: ChatMessage[]
+}
+
+function loadAimDraft(): AimDraft | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.sessionStorage.getItem(AIM_DRAFT_STORAGE_KEY)
+    if (!raw) return null
+    const draft = JSON.parse(raw) as Partial<AimDraft>
+    if (!isValidAimAgent(draft.selectedAgentId) || !Array.isArray(draft.messages)) return null
+    return {
+      selectedAgentId: draft.selectedAgentId,
+      selectedProjectId: typeof draft.selectedProjectId === "string" ? draft.selectedProjectId : "",
+      input: typeof draft.input === "string" ? draft.input : "",
+      messages: draft.messages,
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveAimDraft(draft: AimDraft) {
+  if (typeof window === "undefined") return
+  try {
+    if (!draft.input.trim() && draft.messages.length === 0) {
+      window.sessionStorage.removeItem(AIM_DRAFT_STORAGE_KEY)
+      return
+    }
+    window.sessionStorage.setItem(AIM_DRAFT_STORAGE_KEY, JSON.stringify(draft))
+  } catch {
+    // ponytail: losing a browser draft is better than breaking the editor.
+  }
 }
 
 function getHistoryContents(item: AimGeneration) {
@@ -164,7 +320,7 @@ const ZhuJianContent = memo(function ZhuJianContent({ text }: { text: string }) 
         const parts = line.split(regex)
         if (parts.length > 1) {
           return (
-            <p key={index} className="text-sm sm:text-[15px] leading-loose my-2 text-[#2c2b2a] dark:text-[#f3ede2]">
+            <p key={index} className="text-sm sm:text-base leading-loose my-2 text-[#2c2b2a] dark:text-[#f3ede2]">
               {parts.map((part, pIdx) => {
                 if (part.startsWith("【") && part.endsWith("】")) {
                   if (part === "【画面】") {
@@ -193,7 +349,7 @@ const ZhuJianContent = memo(function ZhuJianContent({ text }: { text: string }) 
           )
         }
         return (
-          <p key={index} className="text-sm sm:text-[15px] leading-loose my-2 text-[#2c2b2a] dark:text-[#f3ede2] min-h-6">
+          <p key={index} className="text-sm sm:text-base leading-loose my-2 text-[#2c2b2a] dark:text-[#f3ede2] min-h-6">
             {line}
           </p>
         )
@@ -209,15 +365,48 @@ function DeliverableBubble({
   onQuality,
   onMarkStatus,
   isBusy,
+  onUpdateResults,
 }: {
   deliverables: AimGenerateResponse
   onRepurpose: (format: ContentFormat) => void
   onQuality: () => void
   onMarkStatus: (status: string) => void
   isBusy: boolean
+  onUpdateResults?: (newResults: AimGenerateResponse["results"]) => void
 }) {
   const [activeTab, setActiveTab] = useState<ContentFormat>(deliverables.results[0]?.format || "raw_copy")
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null)
+  
+  const [isEditing, setIsEditing] = useState(false)
+  const [editingText, setEditingText] = useState("")
+
+  const activeFormat = deliverables.results.some((r) => r.format === activeTab)
+    ? activeTab
+    : deliverables.results[0]?.format || "raw_copy"
+
+  useEffect(() => {
+    startTransition(() => setIsEditing(false))
+  }, [activeTab, deliverables])
+
+  const handleStartEdit = (content: string) => {
+    setEditingText(content)
+    setIsEditing(true)
+  }
+
+  const handleSaveEdit = (format: ContentFormat) => {
+    if (!onUpdateResults) return
+    const newResults = deliverables.results.map((r) =>
+      r.format === format
+        ? { ...r, content: editingText, wordCount: editingText.length }
+        : r
+    )
+    onUpdateResults(newResults)
+    setIsEditing(false)
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+  }
 
   async function copyText(content: string, format?: string) {
     await navigator.clipboard.writeText(content)
@@ -234,70 +423,122 @@ function DeliverableBubble({
   const hasVideo = deliverables.results.some((r) => r.format === "video_script")
 
   return (
-    <div className="mt-3 rounded-xl border border-primary/20 bg-card p-4 shadow-xs">
-      <div className="mb-3 flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-primary" />
-        <span className="text-sm font-semibold text-foreground">交付物</span>
-        {deliverables.knowledgeUsed?.length > 0 && (
+    <div className="mt-2 w-full">
+      <AiResultPanel
+        title="AI 交付物"
+        icon={<Sparkles className="h-4 w-4 text-primary animate-pulse" />}
+        meta={deliverables.knowledgeUsed?.length > 0 ? (
           <Badge variant="secondary" className="text-[10px]">已用知识库 {deliverables.knowledgeUsed.length} 条</Badge>
-        )}
-      </div>
-
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ContentFormat)}>
-        <TabsList className="flex h-auto flex-wrap justify-start">
+        ) : null}
+        flat
+      >
+        <Tabs value={activeFormat} onValueChange={(v) => setActiveTab(v as ContentFormat)} className="w-full">
+          <TabsList className="flex h-auto flex-wrap justify-start bg-transparent p-0 gap-1 mb-4 border-b border-border/40 pb-1 rounded-none">
+            {deliverables.results.map((item) => (
+              <TabsTrigger
+                key={item.format}
+                value={item.format}
+                className="text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-muted/80 data-[state=active]:shadow-none"
+              >
+                {FORMAT_LABELS[item.format]}
+              </TabsTrigger>
+            ))}
+          </TabsList>
           {deliverables.results.map((item) => (
-            <TabsTrigger key={item.format} value={item.format}>
-              {FORMAT_LABELS[item.format]}
-            </TabsTrigger>
+            <TabsContent key={item.format} value={item.format} className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="bg-muted/50 text-[11px]">{FORMAT_LABELS[item.format]} · {item.wordCount} 字</Badge>
+                  {isEditing && item.format === activeFormat && (
+                    <span className="text-[10px] text-primary animate-pulse font-medium">编辑中...</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {isEditing && item.format === activeFormat ? (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 text-xs px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                        onClick={() => handleSaveEdit(item.format)}
+                      >
+                        保存
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs px-2 text-muted-foreground"
+                        onClick={handleCancelEdit}
+                      >
+                        取消
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      {onUpdateResults && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs px-2.5"
+                          onClick={() => handleStartEdit(item.content)}
+                        >
+                          编辑
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" className="h-7 text-xs px-2.5" onClick={() => copyText(item.content, item.format)}>
+                        {copiedFormat === item.format ? <Check className="h-3.5 w-3.5 mr-1" /> : <Clipboard className="h-3.5 w-3.5 mr-1" />}
+                        复制
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="max-h-[600px] overflow-y-auto py-1">
+                {isEditing && item.format === activeFormat ? (
+                  <textarea
+                    className="w-full min-h-[350px] max-h-[500px] p-3 text-sm sm:text-base leading-relaxed bg-muted/10 text-foreground border border-border/80 rounded-lg focus:ring-1 focus:ring-primary focus:border-transparent outline-none font-sans resize-y"
+                    value={editingText}
+                    onChange={(e) => setEditingText(e.target.value)}
+                    placeholder="请输入并修改文案内容..."
+                  />
+                ) : item.format === "video_script" ? (
+                  <ZhuJianContent text={item.content} />
+                ) : (
+                  <MarkdownRenderer content={item.content} />
+                )}
+              </div>
+            </TabsContent>
           ))}
-        </TabsList>
-        {deliverables.results.map((item) => (
-          <TabsContent key={item.format} value={item.format} className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Badge variant="secondary">{FORMAT_LABELS[item.format]} · {item.wordCount} 字</Badge>
-              <Button size="sm" variant="outline" onClick={() => copyText(item.content, item.format)}>
-                {copiedFormat === item.format ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
-                复制
-              </Button>
-            </div>
-            <div className="max-h-80 overflow-y-auto rounded-lg border bg-muted/20 p-3">
-              {item.format === "video_script" ? (
-                <ZhuJianContent text={item.content} />
-              ) : (
-                <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-7">{item.content}</pre>
-              )}
-            </div>
-          </TabsContent>
-        ))}
-      </Tabs>
+        </Tabs>
 
-      <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
-        {!hasMoments && hasVideo && (
-          <Button size="sm" variant="outline" onClick={() => onRepurpose("moments_post")} disabled={isBusy}>
-            <MessageCircle className="h-3.5 w-3.5 mr-1" /> 生成朋友圈
+        <ActionStrip>
+          {!hasMoments && hasVideo && (
+            <Button size="sm" variant="outline" onClick={() => onRepurpose("moments_post")} disabled={isBusy}>
+              <MessageCircle className="h-3.5 w-3.5 mr-1" /> 生成朋友圈
+            </Button>
+          )}
+          {!hasWechat && hasVideo && (
+            <Button size="sm" variant="outline" onClick={() => onRepurpose("wechat_article")} disabled={isBusy}>
+              <FileText className="h-3.5 w-3.5 mr-1" /> 生成公众号
+            </Button>
+          )}
+          {!hasBrief && hasVideo && (
+            <Button size="sm" variant="outline" onClick={() => onRepurpose("shooting_brief")} disabled={isBusy}>
+              <Video className="h-3.5 w-3.5 mr-1" /> 拍摄交接单
+            </Button>
+          )}
+          {hasVideo && (
+            <Button size="sm" variant="outline" onClick={onQuality} disabled={isBusy}>
+              <ShieldCheck className="h-3.5 w-3.5 mr-1" /> 进入质检
           </Button>
-        )}
-        {!hasWechat && hasVideo && (
-          <Button size="sm" variant="outline" onClick={() => onRepurpose("wechat_article")} disabled={isBusy}>
-            <FileText className="h-3.5 w-3.5 mr-1" /> 生成公众号
-          </Button>
-        )}
-        {!hasBrief && hasVideo && (
-          <Button size="sm" variant="outline" onClick={() => onRepurpose("shooting_brief")} disabled={isBusy}>
-            <Video className="h-3.5 w-3.5 mr-1" /> 拍摄交接单
-          </Button>
-        )}
-        {hasVideo && (
-          <Button size="sm" variant="outline" onClick={onQuality} disabled={isBusy}>
-            <ShieldCheck className="h-3.5 w-3.5 mr-1" /> 进入质检
-          </Button>
-        )}
-        {deliverables.id && !deliverables.id.startsWith("polish-") && (
-          <Button size="sm" variant="outline" onClick={() => onMarkStatus("ready_to_shoot")} disabled={isBusy}>
-            <Send className="h-3.5 w-3.5 mr-1" /> 标记待拍摄
-          </Button>
-        )}
-      </div>
+          )}
+          {deliverables.id && !deliverables.id.startsWith("polish-") && (
+            <Button size="sm" variant="outline" onClick={() => onMarkStatus("ready_to_shoot")} disabled={isBusy}>
+              <Send className="h-3.5 w-3.5 mr-1" /> 标记待拍摄
+            </Button>
+          )}
+        </ActionStrip>
+      </AiResultPanel>
     </div>
   )
 }
@@ -309,16 +550,20 @@ export default function AimPage() {
   const topicTitleParam = searchParams.get("topicTitle")
   const topicRationaleParam = searchParams.get("topicRationale")
   const projectIdParam = searchParams.get("projectId")
+  const videoCopyExtractionIdParam = searchParams.get("videoCopyExtractionId")
+  const modeParam = searchParams.get("mode")
+  const ideaParam = searchParams.get("idea")
   const activeAgentId: AimAgentId = isValidAimAgent(agentParam) ? agentParam : DEFAULT_AIM_AGENT
-  const [selectedAgentId, setSelectedAgentId] = useState<AimAgentId>(activeAgentId)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [input, setInput] = useState("")
+  const [initialDraft] = useState<AimDraft | null>(() => loadAimDraft())
+  const [selectedAgentId, setSelectedAgentId] = useState<AimAgentId>(() => agentParam ? activeAgentId : initialDraft?.selectedAgentId || activeAgentId)
+  const [messages, setMessages] = useState<ChatMessage[]>(() => initialDraft?.messages || [])
+  const [input, setInput] = useState(() => initialDraft?.input || "")
   const [isThinking, setIsThinking] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isQualityChecking, setIsQualityChecking] = useState(false)
   const [loadingIndex, setLoadingIndex] = useState(0)
   const [projects, setProjects] = useState<ClientProject[]>([])
-  const [selectedProjectId, setSelectedProjectId] = useState("")
+  const [selectedProjectId, setSelectedProjectId] = useState(() => initialDraft?.selectedProjectId || "")
 
   // 历史记录由侧边栏共享 store 管理（侧边栏渲染列表、生成成功后刷新、点击后触发加载）
   const storeHistory = useAimWorkspaceStore((s) => s.history)
@@ -327,8 +572,41 @@ export default function AimPage() {
   const clearLoadTarget = useAimWorkspaceStore((s) => s.clearLoadTarget)
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const requestAbortRef = useRef<AbortController | null>(null)
 
-  const agent = AGENT_OPTIONS.find((a) => a.id === selectedAgentId)!
+  const agent = useMemo(() => {
+    const baseAgent = AGENT_OPTIONS.find((a) => a.id === selectedAgentId)!
+    if (selectedAgentId === "ip_video" && modeParam === "asset_pack") {
+      return {
+        ...baseAgent,
+        title: "内容生产官 · 内容资产包",
+        intro: "我是内容生产官的内容资产包模式。一键为你的选题、对标文案或原始想法生成短视频脚本、拍摄交接单、朋友圈、社群运营、公众号文章全套宣发资产。",
+        placeholder: "说说今天要生产什么内容：选题、原始想法、对标文案、老板口述均可，我将为您一键生成全套内容资产包...",
+        defaultFormats: [
+          "video_script" as const,
+          "shooting_brief" as const,
+          "moments_post" as const,
+          "community_message" as const,
+          "wechat_article" as const,
+        ],
+        quickPrompts: [
+          "把这个选题生成全套内容资产包（含短视频脚本、朋友圈、公众号等）。",
+          "基于老板的这段金句，一键输出全套宣发资产包。",
+        ],
+        primaryActionLabel: "生成全套资产包",
+      }
+    }
+    if (selectedAgentId === "ip_video") {
+      return {
+        ...baseAgent,
+        title: "内容生产官 · 单篇创作",
+        defaultFormats: ["video_script" as const],
+        placeholder: "说说今天要生产什么内容：选题、原始想法、老板口述、客户问题都可以…",
+        primaryActionLabel: "生成短视频脚本",
+      }
+    }
+    return baseAgent
+  }, [selectedAgentId, modeParam])
 
   const { isRecording, isTranscribing, startRecording, stopRecording } = useAudioRecorder({
     transcribeFn: transcribeAudio,
@@ -336,24 +614,38 @@ export default function AimPage() {
   })
 
   useEffect(() => {
-    listClientProjects().then(setProjects).catch(() => {})
+    listClientProjects()
+      .then((items) => {
+        setProjects(items)
+        setSelectedProjectId((current) => current || items[0]?.id || "")
+      })
+      .catch(() => {})
   }, [])
+
+  const lastAgentParamRef = useRef(agentParam)
+
+  useEffect(() => {
+    saveAimDraft({ selectedAgentId, selectedProjectId, input, messages })
+  }, [input, messages, selectedAgentId, selectedProjectId])
 
   // 切换智能体（由全局侧边栏的 ?agent= 驱动）：同步选中态并重置当前对话
   useEffect(() => {
+    if (lastAgentParamRef.current === agentParam) return
+    lastAgentParamRef.current = agentParam
     startTransition(() => {
       setSelectedAgentId(activeAgentId)
       setMessages([])
       setInput("")
     })
-  }, [activeAgentId])
+  }, [activeAgentId, agentParam])
 
   useEffect(() => {
-    if (!topicTitleParam && !topicRationaleParam && !projectIdParam) return
+    if (!topicTitleParam && !topicRationaleParam && !projectIdParam && !ideaParam) return
 
     const prefillLines = [
       topicTitleParam ? `选题：${topicTitleParam}` : null,
       topicRationaleParam ? `选题依据：${topicRationaleParam}` : null,
+      ideaParam ? `创作灵感：${ideaParam}` : null,
     ].filter(Boolean)
 
     startTransition(() => {
@@ -366,8 +658,47 @@ export default function AimPage() {
     nextParams.delete("topicTitle")
     nextParams.delete("topicRationale")
     nextParams.delete("projectId")
+    nextParams.delete("idea")
     router.replace(nextParams.toString() ? `/aim?${nextParams.toString()}` : "/aim")
-  }, [projectIdParam, router, searchParams, topicRationaleParam, topicTitleParam])
+  }, [projectIdParam, router, searchParams, topicRationaleParam, topicTitleParam, ideaParam])
+
+  useEffect(() => {
+    if (!videoCopyExtractionIdParam) return
+
+    getVideoCopyExtraction(videoCopyExtractionIdParam)
+      .then((record) => {
+        const isDeepCopy = shouldOpenDeepCopywriter(record)
+        const prefill = [
+          isDeepCopy
+            ? "请基于下面这条长对标文案，结合我的知识库，改写成适合我自己的深度母稿。"
+            : "请基于下面这条对标文案，结合我的知识库，改写成适合我自己的口播文案。",
+          "",
+          "改写原则：",
+          "1. 开头第一句话不要轻易变，除非明显不适合我的产品和人设。",
+          "2. 中间结构框架不要轻易变，保留原文的信息推进顺序和节奏。",
+          "3. 只替换产品、案例、用户痛点、人设表达和行动引导。",
+          "",
+          record.videoTitle ? `对标标题：${record.videoTitle}` : null,
+          "对标原文：",
+          record.transcript || "",
+          record.analysisResult ? "\n已有拆解：" : null,
+          record.analysisResult ? JSON.stringify(record.analysisResult, null, 2) : null,
+        ].filter(Boolean).join("\n")
+
+        startTransition(() => {
+          if (isDeepCopy) setSelectedAgentId("deep_copywriter")
+          setMessages([])
+          setInput(prefill)
+        })
+        toast.success("已带入对标文案")
+      })
+      .catch(() => toast.error("对标文案加载失败"))
+      .finally(() => {
+        const nextParams = new URLSearchParams(searchParams.toString())
+        nextParams.delete("videoCopyExtractionId")
+        router.replace(nextParams.toString() ? `/aim?${nextParams.toString()}` : "/aim")
+      })
+  }, [router, searchParams, videoCopyExtractionIdParam])
 
   // 侧边栏点击「最近内容」：把记录加载为一次对话（数据来自共享 store，无需额外请求）
   useEffect(() => {
@@ -412,6 +743,7 @@ export default function AimPage() {
   function resetConversation() {
     setMessages([])
     setInput("")
+    if (typeof window !== "undefined") window.sessionStorage.removeItem(AIM_DRAFT_STORAGE_KEY)
   }
 
   /** 把对话里的用户输入拼成生成素材 */
@@ -424,7 +756,7 @@ export default function AimPage() {
   function detectLarkToolAction(text: string): AimChatToolAction | null {
     if (!/飞书/.test(text)) return null
     if (/同步.*选题|导入.*选题/.test(text)) return "import_lark_topics"
-    if (/热点|竞品|对标|数据/.test(text) && /导入|同步/.test(text)) return "import_lark_archive_data"
+    if (/热点|竞品|优质账号|参考|数据/.test(text) && /导入|同步/.test(text)) return "import_lark_archive_data"
     if (/项目/.test(text) && /导入|同步/.test(text)) return "import_lark_project_data"
     if (/回写|同步到飞书|同步.*脚本|同步.*内容/.test(text)) return "export_lark_generation"
     return null
@@ -434,9 +766,10 @@ export default function AimPage() {
     return [...messages].reverse().find((m) => m.deliverables?.id)?.deliverables?.id
   }
 
-  async function handleSend() {
-    const text = input.trim()
+  async function sendText(text: string) {
     if (!text) return
+    const controller = new AbortController()
+    requestAbortRef.current = controller
     const userMsg: ChatMessage = { id: nextId(), role: "user", content: text }
     const thread = [...messages, userMsg]
     setMessages(thread)
@@ -445,7 +778,7 @@ export default function AimPage() {
     try {
       const toolAction = detectLarkToolAction(text)
       if (toolAction && !selectedProjectId) {
-        toast.error("请先选择 IP 营销全案")
+        toast.error("你的 IP 营销全案还在配置中")
         return
       }
       const resultId = toolAction === "export_lark_generation" ? latestDeliverableId() : undefined
@@ -456,17 +789,25 @@ export default function AimPage() {
       const { content } = await chatAim(
         thread.map((m) => ({ role: m.role, content: m.content })),
         {
+          agentId: selectedAgentId,
           projectId: selectedProjectId || undefined,
           toolAction: toolAction || undefined,
           resultId,
+          signal: controller.signal,
         },
       )
       setMessages((prev) => [...prev, { id: nextId(), role: "assistant", content }])
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "对话失败，请稍后重试")
+      if (error instanceof ApiError && error.status === 499) toast.info("已停止")
+      else toast.error(error instanceof Error ? error.message : "对话失败，请稍后重试")
     } finally {
+      if (requestAbortRef.current === controller) requestAbortRef.current = null
       setIsThinking(false)
     }
+  }
+
+  async function handleSend() {
+    await sendText(input.trim())
   }
 
   async function handleGenerate() {
@@ -476,19 +817,22 @@ export default function AimPage() {
       return
     }
     if (!selectedProjectId) {
-      toast.error("请先选择 IP 营销全案，避免内容和素材混到别的客户")
+      toast.error("你的 IP 营销全案还在配置中")
       return
     }
+    const controller = new AbortController()
+    requestAbortRef.current = controller
     setIsGenerating(true)
     setLoadingIndex(0)
     try {
       const response = await generateAimContent({
+        agentId: selectedAgentId,
         rawInput,
         targetFormats: agent.defaultFormats,
         projectId: selectedProjectId || undefined,
         polishInstruction: agent.defaultInstruction,
         taskType: "write_script",
-      })
+      }, controller.signal)
       setMessages((prev) => [
         ...prev,
         {
@@ -502,19 +846,25 @@ export default function AimPage() {
       refreshHistory({ force: true })
       toast.success(`${agent.primaryActionLabel}完毕`)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "生成失败，请稍后重试")
+      if (error instanceof ApiError && error.status === 499) toast.info("已停止")
+      else toast.error(error instanceof Error ? error.message : "生成失败，请稍后重试")
     } finally {
+      if (requestAbortRef.current === controller) requestAbortRef.current = null
       setIsGenerating(false)
     }
   }
 
+  function handleStop() {
+    requestAbortRef.current?.abort()
+  }
+
   const handleRepurpose = useCallback(
     (msgId: string) => async (fmt: ContentFormat) => {
-      setIsGenerating(true)
-      setLoadingIndex(0)
-      try {
-        if (!selectedProjectId) {
-          toast.error("请先选择 IP 营销全案")
+        setIsGenerating(true)
+        setLoadingIndex(0)
+        try {
+          if (!selectedProjectId) {
+          toast.error("你的 IP 营销全案还在配置中")
           return
         }
         const base = messages.find((m) => m.id === msgId)?.deliverables
@@ -591,11 +941,11 @@ export default function AimPage() {
       <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-card px-4 md:px-6">
         {/* 头部：当前智能体 + 关联全案 */}
         <header className="flex flex-wrap items-center justify-between gap-2 border-b p-3">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
             {/* 小屏智能体切换 */}
             <div className="md:hidden">
               <Select value={selectedAgentId} onValueChange={(v) => { if (v !== selectedAgentId) router.push(`/aim?agent=${v}`) }}>
-                <SelectTrigger className="h-9 w-[150px]">
+                <SelectTrigger className="h-9 w-[130px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -608,23 +958,43 @@ export default function AimPage() {
             <span className="hidden h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary md:flex">
               <agent.icon className="h-4 w-4" />
             </span>
-            <div className="min-w-0">
+            <div className="min-w-0 mr-1">
               <p className="truncate text-sm font-semibold text-foreground">{agent.title}</p>
               <p className="hidden truncate text-xs text-muted-foreground sm:block">{agent.description}</p>
             </div>
+
+            {/* 顶部模式切换 (仅在内容生产官下显示) */}
+            {selectedAgentId === "ip_video" && (
+              <Tabs
+                value={modeParam === "asset_pack" ? "asset_pack" : "single"}
+                onValueChange={(v) => {
+                  const nextParams = new URLSearchParams(searchParams.toString())
+                  if (v === "asset_pack") {
+                    nextParams.set("mode", "asset_pack")
+                  } else {
+                    nextParams.delete("mode")
+                  }
+                  router.push(`/aim?${nextParams.toString()}`)
+                }}
+                className="h-8 shrink-0"
+              >
+                <TabsList className="grid w-[180px] grid-cols-2 h-8 p-0.5">
+                  <TabsTrigger value="asset_pack" className="text-[11px] h-7 px-1.5">
+                    ✨ 资产包模式
+                  </TabsTrigger>
+                  <TabsTrigger value="single" className="text-[11px] h-7 px-1.5">
+                    单篇创作
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
           </div>
           <div className="flex items-center gap-2">
-            <Select value={selectedProjectId || "none"} onValueChange={(v) => setSelectedProjectId(v === "none" ? "" : (v || ""))}>
-              <SelectTrigger className="h-8 w-[170px] text-xs">
-                <SelectValue placeholder="选择全案" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">选择 IP 营销全案</SelectItem>
-                {projects.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {projects.length > 0 ? (
+              <Badge variant="secondary" className="hidden max-w-[220px] truncate sm:inline-flex">
+                {projects.find((p) => p.id === selectedProjectId)?.name ?? "我的 IP 营销全案"}
+              </Badge>
+            ) : null}
             <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => resetConversation()} title="新对话">
               <Plus className="h-4 w-4" />
             </Button>
@@ -640,7 +1010,7 @@ export default function AimPage() {
         )}
         {projects.length > 0 && !selectedProjectId && (
           <div className="border-b bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
-            请选择 IP 营销全案后再生成内容；飞书负责项目协作和评比，AIM 只负责当前全案的内容生产。
+            正在加载你的 IP 营销全案，请稍后再生成内容。
           </div>
         )}
 
@@ -670,36 +1040,53 @@ export default function AimPage() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto flex max-w-3xl flex-col gap-4">
+            <div className="mx-auto flex max-w-6xl w-full flex-col gap-4">
               {messages.map((m) => (
                 <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[88%] ${m.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
+                  <div className={`${m.deliverables ? "w-full max-w-full" : "max-w-[88%]"} ${m.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
                     <div
-                      className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                      className={`leading-relaxed ${
                         m.role === "user"
-                          ? "rounded-br-sm bg-primary text-primary-foreground"
-                          : "rounded-bl-sm bg-muted/60 text-foreground"
+                          ? "rounded-2xl rounded-tr-sm bg-muted px-4 py-2 text-sm text-foreground"
+                          : "bg-transparent p-0 text-sm sm:text-base text-foreground/90 font-medium"
                       }`}
                     >
                       <p className="whitespace-pre-wrap break-words">{m.content}</p>
                     </div>
 
+                    {m.role === "assistant" && extractChoiceGroups(m.content).length > 0 && (
+                      <ChoiceStepper
+                        groups={extractChoiceGroups(m.content)}
+                        busy={busy}
+                        onSubmit={(text) => void sendText(text)}
+                      />
+                    )}
+
                     {/* 交付物气泡 */}
                     {m.deliverables && (
-                      <div className="w-[min(680px,92vw)]">
+                      <div className="w-full mt-2">
                         <DeliverableBubble
                           deliverables={m.deliverables}
                           onRepurpose={handleRepurpose(m.id)}
                           onQuality={handleQuality(m.id)}
                           onMarkStatus={handleMarkStatus(m.id)}
                           isBusy={busy}
+                          onUpdateResults={(newResults) => {
+                            setMessages((prev) =>
+                              prev.map((msg) =>
+                                msg.id === m.id && msg.deliverables
+                                  ? { ...msg, deliverables: { ...msg.deliverables, results: newResults } }
+                                  : msg
+                              )
+                            )
+                          }}
                         />
                       </div>
                     )}
 
                     {/* 质检报告 */}
                     {m.qualityReport && (
-                      <div className="mt-2 w-[min(680px,92vw)] rounded-xl border border-primary/20 bg-card p-4">
+                      <div className="mt-2 w-full rounded-xl border border-primary/20 bg-card p-4">
                         <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
                           <ShieldCheck className="h-4 w-4 text-primary" />
                           质检报告
@@ -729,7 +1116,7 @@ export default function AimPage() {
               {/* 思考中占位 */}
               {isThinking && (
                 <div className="flex justify-start">
-                  <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-muted/60 px-4 py-2.5 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-1 bg-transparent p-0">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     思考中…
                   </div>
@@ -737,7 +1124,7 @@ export default function AimPage() {
               )}
               {isGenerating && (
                 <div className="flex justify-start">
-                  <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-muted/60 px-4 py-2.5 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-1 bg-transparent p-0">
                     <Sparkles className="h-4 w-4 animate-pulse text-primary" />
                     {LOADING_MESSAGES[loadingIndex]}
                   </div>
@@ -748,66 +1135,23 @@ export default function AimPage() {
         </div>
 
         {/* 输入区 */}
-        <footer className="border-t p-3">
-          <div className="mx-auto max-w-3xl">
-            {isTranscribing && (
-              <p className="mb-1.5 text-xs text-primary animate-pulse">语音转写中…</p>
-            )}
-            <div className="flex items-end gap-2 rounded-2xl border bg-background p-2 focus-within:ring-1 focus-within:ring-primary/30">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault()
-                    if (!busy && !isRecording) handleSend()
-                  }
-                }}
-                rows={1}
-                placeholder={agent.placeholder}
-                disabled={busy}
-                className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm leading-relaxed outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
-              />
-              <div className="flex shrink-0 items-center gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-9 px-2.5"
-                  onClick={isRecording ? stopRecording : startRecording}
-                  disabled={busy && !isRecording}
-                  title="语音输入"
-                >
-                  {isRecording ? <span className="text-xs text-red-500">停止</span> : <MessageCircle className="h-4 w-4" />}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-9 w-9 p-0"
-                  onClick={handleSend}
-                  disabled={busy || !input.trim() || isRecording}
-                  title="发送"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <p className="text-[11px] text-muted-foreground">
-                回车发送 · Shift+回车换行 · 对齐好素材后点右侧生成交付物
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleGenerate}
-                disabled={busy || !selectedProjectId || (messages.filter((m) => m.role === "user").length === 0 && !input.trim())}
-                className="h-9 gap-1.5 font-semibold shadow-xs"
-              >
-                {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-                {agent.primaryActionLabel}
-              </Button>
-            </div>
-          </div>
+        <footer className="border-t px-3 py-2 sm:px-5">
+          <AimPromptComposer
+            value={input}
+            placeholder={agent.placeholder}
+            busy={busy}
+            isRecording={isRecording}
+            isTranscribing={isTranscribing}
+            isGenerating={isGenerating}
+            canGenerate={Boolean(selectedProjectId) && (messages.some((m) => m.role === "user") || input.trim().length > 0)}
+            primaryActionLabel={agent.primaryActionLabel}
+            onChange={setInput}
+            onSend={handleSend}
+            onGenerate={handleGenerate}
+            onStop={handleStop}
+            onStartRecording={startRecording}
+            onStopRecording={stopRecording}
+          />
         </footer>
       </section>
     </div>

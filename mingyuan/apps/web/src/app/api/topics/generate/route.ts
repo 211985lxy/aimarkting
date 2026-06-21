@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withUserAuth } from "@/lib/user-auth"
 import { generateTopicCards } from "@/lib/topic-generation"
+import type { RecommendationMode } from "@/lib/topic-generation"
+import { getTodayAiHotBriefing } from "@/lib/aihot-briefing"
 import { VALID_ELEMENT_CODES } from "@/lib/topic-validation"
 import type { TopicCard } from "@/lib/topic-validation"
 import { hasConflict } from "@/lib/topic-element-logic"
@@ -9,11 +11,67 @@ import type { Prisma } from "@/generated/prisma/client"
 
 export const maxDuration = 60
 
+const RECOMMENDATION_MODES = new Set<RecommendationMode>(["normal", "daily", "weekly"])
+
+function parseRecommendationMode(value: unknown): RecommendationMode | null {
+  if (value == null) return "normal"
+  return typeof value === "string" && RECOMMENDATION_MODES.has(value as RecommendationMode)
+    ? (value as RecommendationMode)
+    : null
+}
+
+function buildProjectSource(project: {
+  name: string
+  industry: string | null
+  targetCustomer: string | null
+  offer: string | null
+  deliveryGoal: string | null
+} | null) {
+  if (!project) return null
+  const content = [
+    project.industry ? `行业：${project.industry}` : null,
+    project.targetCustomer ? `目标客户：${project.targetCustomer}` : null,
+    project.offer ? `产品/服务：${project.offer}` : null,
+    project.deliveryGoal ? `交付目标：${project.deliveryGoal}` : null,
+  ].filter(Boolean).join("\n")
+
+  if (!content) return null
+  return {
+    category: "client_project",
+    title: project.name,
+    content,
+  }
+}
+
+async function getHotTopicSources(recommendationMode: RecommendationMode) {
+  if (recommendationMode === "normal") return []
+
+  try {
+    const briefing = await getTodayAiHotBriefing()
+    return briefing.items.slice(0, 6).map((item) => ({
+      category: "industry_hot",
+      title: item.title,
+      content: `${item.categoryLabel}｜${item.summary}｜${item.url}`,
+    }))
+  } catch (error) {
+    console.warn("[topic-gen] AIHOT briefing unavailable:", error)
+    return []
+  }
+}
+
 export const POST = withUserAuth(async (request, { user }) => {
   const requestId = `topic-gen-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
   console.log(`[${requestId}] Topic generation initiated by user ${user.id}`)
 
   const body = await request.json()
+  const recommendationMode = parseRecommendationMode(body.recommendationMode)
+  if (!recommendationMode) {
+    return NextResponse.json(
+      { error: "recommendationMode 必须是 normal、daily 或 weekly" },
+      { status: 400 },
+    )
+  }
+
   const projectId = typeof body.projectId === "string" ? body.projectId : null
   const knowledgeEntryIds = Array.isArray(body.knowledgeEntryIds)
     ? body.knowledgeEntryIds.filter((value: unknown): value is string => typeof value === "string")
@@ -60,7 +118,14 @@ export const POST = withUserAuth(async (request, { user }) => {
     projectId
       ? prisma.clientProject.findFirst({
           where: { id: projectId, userId: user.id, status: "active" },
-          select: { id: true },
+          select: {
+            id: true,
+            name: true,
+            industry: true,
+            targetCustomer: true,
+            offer: true,
+            deliveryGoal: true,
+          },
         })
       : Promise.resolve(null),
     prisma.topicElement.findMany({
@@ -125,11 +190,19 @@ export const POST = withUserAuth(async (request, { user }) => {
     `[${requestId}] Loaded ${elements.length} elements, ${recentElementSets.length} recent sets, ${recentTitles.length} recent titles, refresh=${refreshCount}`,
   )
   const startTime = Date.now()
+  const projectSource = buildProjectSource(project)
+  const hotTopicSources = await getHotTopicSources(recommendationMode)
+  const topicSources = [
+    ...(projectSource ? [projectSource] : []),
+    ...selectedKnowledge,
+    ...hotTopicSources,
+  ]
 
   const result = await generateTopicCards({
     ipProfile: null,
     elements,
-    topicSources: selectedKnowledge,
+    topicSources,
+    recommendationMode,
     forcedElementCodes,
     recentElementSets,
     recentTitles,

@@ -8,8 +8,10 @@ import { ExternalLink, Loader2, Newspaper, RefreshCcw } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { AiResultPanel } from "@/components/workbench/ai-result-panel"
+import { WorkbenchHero } from "@/components/workbench/workbench-hero"
 import {
   getTodayAiHotBriefing,
   refreshTodayAiHotBriefing,
@@ -102,35 +104,33 @@ export default function AiHotBriefingPage() {
 
   return (
     <div className="space-y-6 pb-10">
-      <section className="flex flex-col gap-4 rounded-lg border bg-background p-5 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">AI HOT · 今日 9 点</h1>
-            <Badge variant="secondary">最近 24 小时精选</Badge>
-          </div>
-          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            每天 9 点整理 AI HOT 精选动态，按模型、产品、行业、论文和技巧观点归类，适合直接进入选题和内容判断。
-          </p>
+      <WorkbenchHero
+        title="AI HOT · 今日 9 点"
+        subtitle="每天 9 点整理 AI HOT 精选动态，按模型、产品、行业、论文和技巧观点归类，适合直接进入选题和内容判断。"
+        badge={<Badge variant="secondary">最近 24 小时精选</Badge>}
+        actions={
+          <>
           {briefing ? (
             <p className="text-xs text-muted-foreground">
               生成时间：{formatBeijingDateTime(briefing.generatedAt)} · 共 {briefing.items.length} 条
             </p>
           ) : null}
-        </div>
-        <Button
-          variant="outline"
-          className="w-full md:w-auto"
-          onClick={handleRefresh}
-          disabled={refreshing}
-        >
-          {refreshing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCcw className="h-4 w-4" />
-          )}
-          刷新简报
-        </Button>
-      </section>
+            <Button
+              variant="outline"
+              className="w-full md:w-auto"
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCcw className="h-4 w-4" />
+              )}
+              刷新简报
+            </Button>
+          </>
+        }
+      />
 
       {error ? (
         <Card className="border-destructive/30">
@@ -148,11 +148,14 @@ export default function AiHotBriefingPage() {
       ) : (
         <div className="space-y-4">
           {groupedItems.map((group) => (
-            <Card key={group.label}>
-              <CardHeader className="border-b pb-3">
-                <CardTitle className="text-base">{group.label}</CardTitle>
-              </CardHeader>
-              <CardContent className="divide-y p-0">
+            <AiResultPanel
+              key={group.label}
+              title={group.label}
+              icon={<Newspaper className="h-4 w-4 text-primary" />}
+              meta={<span>{group.items.length} 条精选</span>}
+              contentClassName="divide-y p-0"
+              flat
+            >
                 {group.items.map((item) => {
                   return (
                     <article key={item.id} className="space-y-2 p-4">
@@ -186,8 +189,7 @@ export default function AiHotBriefingPage() {
                     </article>
                   )
                 })}
-              </CardContent>
-            </Card>
+            </AiResultPanel>
           ))}
         </div>
       )}

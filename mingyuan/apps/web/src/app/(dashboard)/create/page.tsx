@@ -1447,7 +1447,7 @@ function PhaseTopic({
       <div>
         <h2 className="text-base sm:text-lg font-semibold flex items-center gap-2">
           <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-          脚本创作官 · 选题输入
+          内容生产官 · 选题输入
         </h2>
         <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">
           先确定这条口播要讲什么，后续文案、包装和素材都会围绕这个表达目标展开。
@@ -1762,7 +1762,7 @@ function PhaseCopywriting({
       <div>
         <h2 className="text-base sm:text-lg font-semibold flex items-center gap-2">
           <PenLine className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-          脚本创作官 · 生成与定稿
+          内容生产官 · 生成与定稿
         </h2>
         <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">
           这里是主流程核心：先选表达结构，再生成、质检、润色并锁定最终口播文案。
@@ -1792,12 +1792,12 @@ function PhaseCopywriting({
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium">自动套用爆款表达模型</p>
+              <p className="text-sm font-medium">自动整理脚本表达</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                系统会基于选题自动匹配开头、结构和结尾；你也可以展开手动微调。
+                系统会基于选题整理开头、正文和结尾；你也可以展开手动微调。
               </p>
             </div>
-            <Badge variant="outline" className="shrink-0">七大开头 · 八大结构</Badge>
+            <Badge variant="outline" className="shrink-0">可手动微调</Badge>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div className="rounded-md border bg-background/70 p-2">
@@ -2026,9 +2026,9 @@ function PhaseCopywriting({
         )}
         <Button size="lg" onClick={onGenerate} disabled={!canGenerate} className="cursor-pointer gap-2 px-8">
           {isGenerating ? (
-            <><Loader2 className="h-4 w-4 animate-spin" />脚本创作官创作中...</>
+            <><Loader2 className="h-4 w-4 animate-spin" />内容生产官创作中...</>
           ) : (
-            <><Sparkles className="h-4 w-4" />{hotTopicTitle ? "热点融合写文案" : "启动脚本创作官"}</>
+            <><Sparkles className="h-4 w-4" />{hotTopicTitle ? "热点融合写文案" : "启动内容生产官"}</>
           )}
         </Button>
       </div>
@@ -2492,7 +2492,7 @@ function PhasePackaging({
       <div>
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Package className="h-5 w-5 text-primary" />
-          脚本创作官 · 包装与证据
+          内容生产官 · 包装与证据
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
           这一阶段不重新创作文案，只为最终文案选择合适的画面节奏、模板能力和证据素材。
@@ -3358,7 +3358,7 @@ function PhaseGenerate({
       <div>
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Play className="h-5 w-5 text-primary" />
-          脚本创作官 · 成片确认
+          内容生产官 · 成片确认
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
           最后确认文案、包装模板、素材和背景音乐是否齐备，然后提交生成视频。

@@ -9,7 +9,7 @@ import {
   type BrandingConfig,
 } from "./branding-config"
 
-const BRANDING_CACHE_KEY = "system:branding:v2"
+const BRANDING_CACHE_KEY = "system:branding:v3"
 const BRANDING_CACHE_TTL_SECONDS = 60 * 60
 
 export async function getBrandingConfig(): Promise<BrandingConfig> {
@@ -50,7 +50,7 @@ export async function invalidateBrandingCache() {
 }
 
 function resolveActiveBrandName(value: string | undefined): string {
-  if (!value || value === "爱爆365") {
+  if (!value || value === "爱爆365" || value === "品牌授权测试") {
     return ACTIVE_BRANDING_SEED.name
   }
 

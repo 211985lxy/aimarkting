@@ -1,18 +1,18 @@
 "use client"
 
-import { useEffect, useState, startTransition } from "react"
+import { useEffect, useMemo, useState, startTransition } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Check,
-  Layers,
+  Clipboard,
+  ExternalLink,
   Pencil,
   Plus,
   Send,
   Sparkles,
   Target,
   Trash2,
-  TrendingUp,
-  Zap,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -21,23 +21,23 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { PageHeader } from "@/components/ui/page-header"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { AiResultPanel } from "@/components/workbench/ai-result-panel"
+import { WorkbenchHero } from "@/components/workbench/workbench-hero"
 import {
   createKnowledge,
   deleteKnowledge,
   generateTopics,
+  getTodayAiHotBriefing,
   listClientProjects,
-  listCopyStructures,
   listKnowledge,
-  listOpeningTypes,
   selectTopic,
   updateKnowledge,
   type ClientProject,
   type KnowledgeEntry,
 } from "@/lib/api/client"
-import type { ApiTopicCard } from "@/types/api"
+import { buildTopicDailyReport, type TopicDailyReport } from "@/lib/topic-daily-report"
+import type { ApiAiHotBriefingItem, ApiTopicCard, ApiTopicRecommendationMode } from "@/types/api"
 
 type TopicCategory = "daily_inspiration" | "benchmark_reference" | "user_insight"
 
@@ -57,9 +57,9 @@ const CATEGORY_META: Record<
     contentPlaceholder: "记录原话、场景或你想到的选题切口。",
   },
   benchmark_reference: {
-    label: "对标参考",
-    description: "人工粘贴对标账号链接、爆款标题、开头方式或结构拆解。",
-    titlePlaceholder: "例如：某对标账号爆款开头",
+    label: "参考素材",
+    description: "人工粘贴优质账号链接、爆款标题、开头方式或结构拆解。",
+    titlePlaceholder: "例如：某优质账号爆款开头",
     contentPlaceholder: "贴链接、标题、开头文案，或你观察到的结构节奏。",
   },
   user_insight: {
@@ -76,69 +76,26 @@ const CATEGORY_ORDER: TopicCategory[] = [
   "user_insight",
 ]
 
-const fourCards = [
-  {
-    title: "热度卡",
-    icon: TrendingUp,
-    color: "text-orange-500",
-    bgColor: "bg-orange-500/10",
-    borderColor: "border-orange-500/20",
-    desc: "看素材和当前市场之间有没有时机感。",
+const MODE_META: Record<ApiTopicRecommendationMode, { label: string; description: string }> = {
+  normal: {
+    label: "常规选题",
+    description: "基于已选素材生成可采用的选题卡。",
   },
-  {
-    title: "匹配卡",
-    icon: Target,
-    color: "text-primary",
-    bgColor: "bg-primary/10",
-    borderColor: "border-primary/20",
-    desc: "看这个方向和客户项目、业务目标是否真正匹配。",
+  daily: {
+    label: "选题日报",
+    description: "结合今日 AI HOT 和项目资料，生成当天可执行的选题日报。",
   },
-  {
-    title: "差异卡",
-    icon: Zap,
-    color: "text-amber-500",
-    bgColor: "bg-amber-500/10",
-    borderColor: "border-amber-500/20",
-    desc: "看对标已经讲到哪里，你还能从哪里切进去。",
+  weekly: {
+    label: "本周选题",
+    description: "生成一组更适合沉淀为本周内容池的选题。",
   },
-  {
-    title: "可行卡",
-    icon: Layers,
-    color: "text-emerald-500",
-    bgColor: "bg-emerald-500/10",
-    borderColor: "border-emerald-500/20",
-    desc: "看当下素材、案例、拍摄条件是否足够支撑成片。",
-  },
-]
-
-const twelveElements = [
-  "痛点共鸣",
-  "反常识冲击",
-  "数字背书",
-  "场景还原",
-  "对比冲突",
-  "权威借力",
-  "情感钩子",
-  "时效热点",
-  "案例故事",
-  "悬念设置",
-  "实用价值",
-  "社交货币",
-]
+}
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString("zh-CN", {
     month: "numeric",
     day: "numeric",
   })
-}
-
-function formatTopicCardLabel(
-  code: string,
-  mapping: Record<string, string>,
-  fallbackPrefix: string,
-) {
-  return mapping[code] ?? `${fallbackPrefix} · ${code}`
 }
 
 export default function TopicPlanningPage() {
@@ -151,12 +108,12 @@ export default function TopicPlanningPage() {
   const [loadingKnowledge, setLoadingKnowledge] = useState(false)
   const [savingCategory, setSavingCategory] = useState<TopicCategory | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [recommendationMode, setRecommendationMode] = useState<ApiTopicRecommendationMode>("normal")
   const [topicCards, setTopicCards] = useState<ApiTopicCard[]>([])
+  const [dailyBriefingItems, setDailyBriefingItems] = useState<ApiAiHotBriefingItem[]>([])
   const [topicSelectionId, setTopicSelectionId] = useState<string | null>(null)
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number | null>(null)
   const [topicRefreshCount, setTopicRefreshCount] = useState(0)
-  const [openingTypeMap, setOpeningTypeMap] = useState<Record<string, string>>({})
-  const [structureMap, setStructureMap] = useState<Record<string, string>>({})
   const [forms, setForms] = useState<Record<TopicCategory, { title: string; content: string }>>({
     daily_inspiration: { title: "", content: "" },
     benchmark_reference: { title: "", content: "" },
@@ -166,15 +123,10 @@ export default function TopicPlanningPage() {
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
 
   useEffect(() => {
-    Promise.all([listClientProjects(), listOpeningTypes(), listCopyStructures()])
-      .then(([projectData, openingTypes, copyStructures]) => {
+    listClientProjects()
+      .then((projectData) => {
         setProjects(projectData)
-        setOpeningTypeMap(
-          Object.fromEntries(openingTypes.map((item) => [item.code, item.name])),
-        )
-        setStructureMap(
-          Object.fromEntries(copyStructures.map((item) => [item.code, item.name])),
-        )
+        setSelectedProjectId(projectData[0]?.id || "")
       })
       .catch(() => {
         toast.error("选题工作台初始化失败，请刷新后重试")
@@ -188,6 +140,7 @@ export default function TopicPlanningPage() {
         setKnowledgeEntries([])
         setSelectedKnowledgeIds([])
         setTopicCards([])
+        setDailyBriefingItems([])
         setTopicSelectionId(null)
         setSelectedTopicIndex(null)
         setTopicRefreshCount(0)
@@ -201,6 +154,7 @@ export default function TopicPlanningPage() {
         setKnowledgeEntries(entries)
         setSelectedKnowledgeIds([])
         setTopicCards([])
+        setDailyBriefingItems([])
         setTopicSelectionId(null)
         setSelectedTopicIndex(null)
         setTopicRefreshCount(0)
@@ -315,12 +269,19 @@ export default function TopicPlanningPage() {
         projectId: selectedProjectId,
         knowledgeEntryIds: selectedKnowledgeIds,
         refreshCount: topicRefreshCount,
+        recommendationMode,
       })
       setTopicCards(result.cards)
+      if (recommendationMode === "daily") {
+        const briefing = await getTodayAiHotBriefing().catch(() => null)
+        setDailyBriefingItems(briefing?.items ?? [])
+      } else {
+        setDailyBriefingItems([])
+      }
       setTopicSelectionId(result.topicSelectionId)
       setSelectedTopicIndex(null)
       setTopicRefreshCount((current) => current + 1)
-      toast.success("已生成 4 个选题方向")
+      toast.success(`已生成 4 个${MODE_META[recommendationMode].label}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "选题生成失败")
     } finally {
@@ -345,6 +306,8 @@ export default function TopicPlanningPage() {
 
   function jumpToAim(card: ApiTopicCard) {
     const params = new URLSearchParams()
+    params.set("agent", "ip_video")
+    params.set("mode", "asset_pack")
     params.set("topicTitle", card.title)
     if (card.rationale) params.set("topicRationale", card.rationale)
     if (selectedProjectId) params.set("projectId", selectedProjectId)
@@ -355,37 +318,71 @@ export default function TopicPlanningPage() {
     category,
     items: knowledgeEntries.filter((entry) => entry.category === category),
   }))
+  const dailyReport = useMemo(
+    () => recommendationMode === "daily" && topicCards.length > 0
+      ? buildTopicDailyReport(topicCards, dailyBriefingItems, recommendationMode)
+      : null,
+    [dailyBriefingItems, recommendationMode, topicCards],
+  )
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-10">
-      <PageHeader
-        title="选题策划官"
-        subtitle="按客户项目沉淀灵感、对标和用户洞察，再把这些素材稳定变成可拍选题。"
+      <WorkbenchHero
+        title="选题中心"
+        subtitle="按客户项目沉淀灵感、优质账号参考和用户洞察，再把这些素材稳定变成可拍选题。"
+        badge={<Badge variant="secondary">{MODE_META[recommendationMode].label}</Badge>}
       />
 
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle>项目工作台</CardTitle>
-          <CardDescription>第一版先把前台入口跑通，后台知识库整理后续再接。</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div className="space-y-2">
-            <Label htmlFor="project-select">选择 IP 营销全案</Label>
-            <Select value={selectedProjectId} onValueChange={(value) => setSelectedProjectId(value ?? "")}>
-              <SelectTrigger id="project-select">
-                <SelectValue placeholder={loadingProjects ? "正在读取项目..." : "请选择一个客户项目"} />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <Link href="/hot-topics" className="block">
+          <Card className="h-full transition-colors hover:border-primary/40 hover:bg-muted/40">
+            <CardContent className="flex items-center justify-between gap-3 p-4">
+              <div>
+                <p className="font-semibold text-foreground">热点中心</p>
+                <p className="mt-1 text-sm text-muted-foreground">切换 AI HOT、抖音热榜和近30天热点，筛出选题切口。</p>
+              </div>
+              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/inspiration" className="block">
+          <Card className="h-full transition-colors hover:border-primary/40 hover:bg-muted/40">
+            <CardContent className="flex items-center justify-between gap-3 p-4">
+              <div>
+                <p className="font-semibold text-foreground">灵感收集</p>
+                <p className="mt-1 text-sm text-muted-foreground">把日常想法、客户问题和素材先收进来。</p>
+              </div>
+              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+
+      <AiResultPanel
+        title="我的选题工作台"
+        icon={<Target className="h-4 w-4 text-primary" />}
+        meta={<span>{MODE_META[recommendationMode].description}</span>}
+        contentClassName="flex flex-wrap items-center justify-between gap-3 p-4"
+        flat
+      >
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{selectedProject ? selectedProject.name : "未选择项目"}</Badge>
+            {Object.entries(MODE_META).map(([mode, meta]) => (
+              <Button
+                key={mode}
+                size="sm"
+                variant={recommendationMode === mode ? "default" : "outline"}
+                onClick={() => {
+                  setRecommendationMode(mode as ApiTopicRecommendationMode)
+                  setTopicCards([])
+                  setDailyBriefingItems([])
+                  setTopicSelectionId(null)
+                  setSelectedTopicIndex(null)
+                }}
+              >
+                {meta.label}
+              </Button>
+            ))}
+            <Badge variant="outline">{selectedProject ? selectedProject.name : loadingProjects ? "正在读取全案" : "全案配置中"}</Badge>
             <Badge variant="secondary">已选素材 {selectedKnowledgeIds.length} 条</Badge>
             <Button
               variant="outline"
@@ -393,11 +390,10 @@ export default function TopicPlanningPage() {
               disabled={!selectedProjectId || selectedKnowledgeIds.length === 0 || isGenerating}
             >
               <Sparkles className="mr-1 h-4 w-4" />
-              {isGenerating ? "生成中..." : topicCards.length > 0 ? "换一组选题" : "生成选题"}
+              {isGenerating ? "生成中..." : topicCards.length > 0 ? "重新生成" : `生成${MODE_META[recommendationMode].label}`}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+      </AiResultPanel>
 
       {!selectedProjectId ? (
         <Card className="border-dashed">
@@ -480,17 +476,21 @@ export default function TopicPlanningPage() {
             </div>
 
             <div className="space-y-6">
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle>当前选题批次</CardTitle>
-                  <CardDescription>
-                    基于你勾选的素材生成 4 张选题卡，确认后再进入 AIM 写文案。
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+              {dailyReport ? (
+                <TopicDailyReportPanel report={dailyReport} />
+              ) : recommendationMode === "daily" ? (
+                <TopicDailyReportEmptyState />
+              ) : null}
+
+              <AiResultPanel
+                title="推荐选题"
+                icon={<Sparkles className="h-4 w-4 text-primary" />}
+                meta={<span>选择一个方向，进入 AIM 写文案。</span>}
+                flat
+              >
                   <div className="flex flex-wrap gap-2">
                     {selectedKnowledgeIds.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">还没勾选素材。至少选 1 条再生成。</p>
+                      <p className="text-sm text-muted-foreground">先选择素材，再生成选题。</p>
                     ) : (
                       selectedKnowledgeIds.map((entryId) => {
                         const entry = knowledgeEntries.find((item) => item.id === entryId)
@@ -506,7 +506,7 @@ export default function TopicPlanningPage() {
 
                   {topicCards.length === 0 ? (
                     <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                      选题卡还没生成。先勾选素材，再点「生成选题」。
+                      暂无推荐选题。
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -515,13 +515,15 @@ export default function TopicPlanningPage() {
                         return (
                           <div
                             key={`${card.title}-${index}`}
-                            className="rounded-xl border bg-card p-4 shadow-xs"
+                            className="rounded-xl border border-primary/10 bg-card p-4 shadow-sm"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="space-y-2">
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <Badge variant="secondary">#{index + 1}</Badge>
                                   {isSelected && <Badge>已采用</Badge>}
+                                  {card.topicType && <Badge variant="outline">{card.topicType}</Badge>}
+                                  {card.sourceType && <Badge variant="outline">{card.sourceType}</Badge>}
                                 </div>
                                 <h3 className="text-base font-semibold">{card.title}</h3>
                                 {card.rationale ? (
@@ -546,67 +548,172 @@ export default function TopicPlanningPage() {
                                 )}
                               </div>
                             </div>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {card.elementCodes.map((code) => (
-                                <Badge key={code} variant="outline">
-                                  元素 · {code}
-                                </Badge>
-                              ))}
-                              <Badge variant="outline">
-                                开头 · {formatTopicCardLabel(card.openingTypeCode, openingTypeMap, "开头")}
-                              </Badge>
-                              <Badge variant="outline">
-                                结构 · {formatTopicCardLabel(card.structureCode, structureMap, "结构")}
-                              </Badge>
-                            </div>
                           </div>
                         )
                       })}
                     </div>
                   )}
-                </CardContent>
-              </Card>
+              </AiResultPanel>
 
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle>四卡片评估体系</CardTitle>
-                  <CardDescription>前台先把素材进来，判断仍然按这四个维度收束。</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                  {fourCards.map((card) => (
-                    <div key={card.title} className={`rounded-xl border p-4 ${card.borderColor}`}>
-                      <div className="flex items-center gap-3">
-                        <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${card.bgColor}`}>
-                          <card.icon className={`h-4 w-4 ${card.color}`} />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold">{card.title}</p>
-                          <p className="text-xs text-muted-foreground">{card.desc}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle>12 元素模型</CardTitle>
-                  <CardDescription>选题卡仍然复用现有 12 元素引擎，不另起一套规则。</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-2">
-                  {twelveElements.map((item, index) => (
-                    <Badge key={item} variant="outline">
-                      {index + 1}. {item}
-                    </Badge>
-                  ))}
-                </CardContent>
-              </Card>
             </div>
           </div>
         </>
       )}
     </div>
+  )
+}
+
+function TopicDailyReportEmptyState() {
+  return (
+    <Card className="border-dashed border-primary/30 bg-primary/[0.02]">
+      <CardHeader className="space-y-3 pb-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge>选题日报</Badge>
+          <Badge variant="outline">待生成</Badge>
+        </div>
+        <div>
+          <CardTitle className="text-xl leading-tight">今日选题日报还没生成</CardTitle>
+          <CardDescription className="mt-2 text-sm leading-6">
+            勾选素材后点击「生成选题日报」，系统会结合今日 AI HOT、项目资料和选题卡给出主推方向。
+          </CardDescription>
+        </div>
+      </CardHeader>
+    </Card>
+  )
+}
+
+function TopicDailyReportPanel({ report }: { report: TopicDailyReport }) {
+  async function copyAction() {
+    try {
+      await navigator.clipboard.writeText(report.copyText)
+      toast.success("今日行动已复制")
+    } catch {
+      toast.error("复制失败，请手动复制")
+    }
+  }
+
+  return (
+    <Card className="border-primary/30 bg-primary/[0.02]">
+      <CardHeader className="space-y-3 pb-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge>今日选题日报</Badge>
+        </div>
+        <div>
+          <CardTitle className="text-xl leading-tight">今日主编判断</CardTitle>
+          <CardDescription className="mt-2 text-sm leading-6">
+            {report.editorJudgment}
+          </CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="rounded-lg border bg-background p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-base font-semibold">今天只打这一枪</h3>
+            <Badge variant="secondary">{report.leadCard?.topicType ?? "主推"}</Badge>
+          </div>
+          <div className="space-y-3 text-sm leading-6">
+            <div>
+              <b className="text-muted-foreground">为什么值</b>
+              <p>{report.decision.why}</p>
+            </div>
+            <div>
+              <b className="text-muted-foreground">边界</b>
+              <p>{report.decision.boundary}</p>
+            </div>
+            <div>
+              <b className="text-muted-foreground">承接动作</b>
+              <p>{report.decision.action}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-base font-semibold">今日线索管线</h3>
+            <Badge variant="outline">{report.signals.length} 条</Badge>
+          </div>
+          <div className="grid gap-2">
+            {report.signals.map((signal, index) => (
+              <div key={`${signal.rank}-${signal.title}-${index}`} className="rounded-lg border bg-background p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={signal.rank === "S" ? "default" : "outline"}>
+                    {signal.rank} {signal.label}
+                  </Badge>
+                  {signal.source ? <span className="text-xs text-muted-foreground">{signal.source}</span> : null}
+                </div>
+                <p className="mt-2 text-sm font-semibold leading-5">{signal.title}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{signal.summary}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-base font-semibold">选题工坊</h3>
+          <div className="grid gap-2">
+            {report.workshop.map((topic) => (
+              <div key={`${topic.index}-${topic.title}`} className="rounded-lg border bg-background p-3">
+                <Badge variant="secondary">#{topic.index}</Badge>
+                <p className="mt-2 text-sm font-semibold leading-5">{topic.title}</p>
+                <div className="mt-2 space-y-2 text-xs leading-5 text-muted-foreground">
+                  <p><b>开头：</b>{topic.hook}</p>
+                  <p><b>角度：</b>{topic.angle}</p>
+                  <p><b>CTA：</b>{topic.cta}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-base font-semibold">平台打法</h3>
+          <div className="grid gap-2">
+            {report.platforms.map((platform) => (
+              <div key={platform.name} className="rounded-lg border bg-background p-3">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{platform.name}</Badge>
+                  <p className="text-sm font-semibold">{platform.title}</p>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">{platform.structure}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {report.evidence.length > 0 ? (
+          <div className="space-y-3">
+            <h3 className="text-base font-semibold">来源证据台</h3>
+            <div className="grid gap-2">
+              {report.evidence.map((item) => (
+                <div key={item.url} className="rounded-lg border bg-background p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">{item.status}</Badge>
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-w-0 items-center gap-1 text-sm font-semibold text-primary hover:underline"
+                    >
+                      <span className="truncate">{item.title}</span>
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    </a>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.source} · {item.suggestion}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="rounded-lg border bg-foreground p-4 text-background">
+          <p className="text-sm leading-6">{report.copyText}</p>
+          <Button className="mt-3" variant="secondary" onClick={copyAction}>
+            <Clipboard className="h-4 w-4" />
+            复制今日行动
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

@@ -6,6 +6,7 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  allowedDevOrigins: ["172.31.2.187"],
   turbopack: {
     root: path.join(__dirname, "../.."),
   },

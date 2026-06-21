@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { authenticateRequest, authErrorResponse } from "@/lib/user-auth"
+import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
 
 export async function GET(request: NextRequest) {
   try {
@@ -82,6 +83,9 @@ export async function POST(request: NextRequest) {
         sourceType: sourceType || "manual",
       },
     })
+
+    // Fire-and-forget: generate embedding for the new entry
+    ensureKnowledgeEmbedding(entry.id).catch(() => {})
 
     return NextResponse.json(entry, { status: 201 })
   } catch (error) {

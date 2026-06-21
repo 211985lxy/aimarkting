@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { LogOut, Link2, Video, CalendarDays } from "lucide-react"
+import { Bot, CalendarDays, Copy, KeyRound, Link2, LogOut, Video } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -16,9 +16,9 @@ import { PageHeader } from "@/components/ui/page-header"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { useAuthStore } from "@/lib/store"
-import { getCurrentUser } from "@/lib/api/client"
+import { getCurrentUser, listAgentApiKeys } from "@/lib/api/client"
 import { getSubscriptionStatus } from "@/lib/subscription"
-import type { ApiUser } from "@/types/api"
+import type { ApiAgentApiKeySummary, ApiUser } from "@/types/api"
 
 /* ── Page ────────────────────────────────────────────────── */
 
@@ -26,9 +26,11 @@ export default function AccountPage() {
   const router = useRouter()
   const { user, clearSession } = useAuthStore()
   const [currentUser, setCurrentUser] = useState<ApiUser | null>(null)
+  const [agentKeys, setAgentKeys] = useState<ApiAgentApiKeySummary[]>([])
 
   useEffect(() => {
     getCurrentUser().then(setCurrentUser)
+    listAgentApiKeys().then(setAgentKeys).catch(() => setAgentKeys([]))
   }, [])
 
   const displayEmail = user?.email ?? currentUser?.email ?? ""
@@ -63,6 +65,14 @@ export default function AccountPage() {
     if (expiresAt) return formatDate(expiresAt)
     return "—"
   }
+
+  function copyText(text: string) {
+    void navigator.clipboard.writeText(text)
+  }
+
+  const origin = typeof window === "undefined" ? "" : window.location.origin
+  const skillUrl = origin ? `${origin}/skill.md` : "/skill.md"
+  const activeAgentKeys = agentKeys.filter((key) => key.status === "active")
 
   return (
     <div className="space-y-8">
@@ -123,6 +133,69 @@ export default function AccountPage() {
             <p className="text-sm text-orange-500 font-medium">今日已用完</p>
           ) : (
             <p className="text-sm text-muted-foreground">每日零点自动刷新</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Section 3 — 外部 Agent */}
+      <Card>
+        <CardHeader>
+          <CardTitle>外部 Agent 绑定</CardTitle>
+          <CardDescription>给 Codex / Claude Code 等外部 Agent 调用 AIM 智能体生成草稿</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
+            <div className="flex min-w-0 gap-3">
+              <Bot className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Skill 地址</p>
+                <p className="mt-1 break-all text-sm text-muted-foreground">{skillUrl}</p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => copyText(skillUrl)}>
+              <Copy className="mr-1 h-3.5 w-3.5" />
+              复制
+            </Button>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">绑定状态</p>
+              <p className="mt-1 text-sm font-medium">{activeAgentKeys.length > 0 ? "已开通" : "未开通"}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">可用 Key</p>
+              <p className="mt-1 text-sm font-medium">{activeAgentKeys.length} 个</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">生成权限</p>
+              <p className="mt-1 text-sm font-medium">只生成草稿</p>
+            </div>
+          </div>
+
+          {agentKeys.length > 0 ? (
+            <div className="space-y-2">
+              {agentKeys.map((key) => (
+                <div key={key.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{key.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {key.keyPrefix}... · 项目 {key.allowedProjectCount} 个 · 每日 {key.dailyLimit} 次
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant={key.status === "active" ? "default" : "secondary"}>
+                    {key.status === "active" ? "启用" : "停用"}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              暂未绑定。请联系管理员生成低额度 API Key 后，再把 Skill 地址交给外部 Agent 使用。
+            </p>
           )}
         </CardContent>
       </Card>

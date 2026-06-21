@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { LLMClient } from "@/lib/llm/client"
+import { buildIpCopywritingMethodologyBlock } from "@/lib/ip-copywriting-methodology"
+import { buildBusinessDiagnosisMethodologyBlock } from "@/lib/business-diagnosis-methodology"
+import { retrieveRelevantKnowledge, ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
 
 export type ContentFormat =
   | "video_script"
@@ -17,6 +20,7 @@ export type AimTaskType =
 
 interface AimInput {
   userId: string
+  agentId?: string
   projectId?: string
   rawInput: string
   targetFormats: ContentFormat[]
@@ -48,8 +52,11 @@ const FORMAT_INSTRUCTIONS: Record<ContentFormat, string> = {
 - 开头3秒必须使用下方「爆款开头库」中的一种公式思路，不能平铺直叙
 - 正文必须使用下方「爆款文案结构库」中的一种结构节拍
 - 结尾必须使用下方「结尾类型库」中的一种方式
+- 必须使用 M 档格式（即双栏/分镜脚本格式）输出：每一行必须以 【画面】 或 【旁白】 作为前缀，交替出现。例如：
+  【画面】老板在办公室面露难色，指着电脑上的表格
+  【旁白】其实大部分创业公司，都是死在现金流断裂上
 - 用口语化表达，禁止书面语
-- 结尾有明确行动号召
+
 - 禁止使用以下词汇：赋能、闭环、抓手、颗粒度、对齐、拉通、打通、沉淀、复盘、迭代、链路、触达、心智、赛道`,
 
   wechat_article: `【公众号文章】
@@ -154,158 +161,34 @@ async function buildViralStructureBlock(): Promise<string> {
 
   let block = "\n\n=== 专业爆款结构库 ===\n"
 
-  if (openingTypes.length > 0) {
-    block += "\n【爆款开头库】\n"
-    for (const item of openingTypes) {
-      const formulas = asStringArray(item.formulas)
-      block += `- ${item.name}：${item.description}`
-      if (formulas.length > 0) block += `；公式：${formulas.join(" / ")}`
-      block += "\n"
-    }
-  }
-
-  if (copyStructures.length > 0) {
-    block += "\n【爆款文案结构库】\n"
-    for (const item of copyStructures) {
-      const beats = asBeatArray(item.beats)
-      block += `- ${item.name}：${item.description}`
-      if (beats.length > 0) {
-        block += `；节拍：${beats.map((beat) => `${beat.label}(${beat.instruction})`).join(" → ")}`
-      }
-      block += "\n"
-    }
-  }
-
-  if (endingTypes.length > 0) {
-    block += "\n【结尾类型库】\n"
-    for (const item of endingTypes) {
-      const patterns = asStringArray(item.patterns)
-      block += `- ${item.name}：${item.guidance}`
-      if (patterns.length > 0) block += `；模式：${patterns.join(" / ")}`
-      block += "\n"
-    }
-  }
-
-  return block
-}
-
-export function buildKnowledgeBlock(
-  entries: Array<{ category: string; title: string; content: string }>
-): string {
-  if (entries.length === 0) return ""
-
-  const grouped = new Map<string, typeof entries>()
-  for (const entry of entries) {
-    const list = grouped.get(entry.category) || []
-    list.push(entry)
-    grouped.set(entry.category, list)
-  }
-
-  let block = "\n\n=== 企业知识库 ===\n"
-  for (const [category, items] of grouped) {
-    block += `\n【${CATEGORY_LABELS[category] || category}】\n`
-    for (const item of items) {
-      block += `- ${item.title}：${item.content}\n`
-    }
-  }
-  return block
-}
-
-function parseMultiFormatResponse(
-  raw: string,
-  formats: ContentFormat[]
-): Record<ContentFormat, string | undefined> {
-  const result: Record<ContentFormat, string | undefined> = {
-    video_script: undefined,
-    wechat_article: undefined,
-    moments_post: undefined,
-    community_message: undefined,
-    shooting_brief: undefined,
-    raw_copy: undefined,
-  }
-
-  for (let i = 0; i < formats.length; i++) {
-    const format = formats[i]
-    const marker = `===FORMAT:${format}===`
-    const nextMarker = i + 1 < formats.length
-      ? `===FORMAT:${formats[i + 1]}===`
-      : null
-
-    const start = raw.indexOf(marker)
-    if (start === -1) continue
-
-    const contentStart = start + marker.length
-    const end = nextMarker ? raw.indexOf(nextMarker) : raw.length
-
-    result[format] = raw.substring(
-      contentStart,
-      end === -1 ? undefined : end
-    ).trim()
-  }
-
-  if (!Object.values(result).some(Boolean) && formats.length === 1) {
-    result[formats[0]] = raw.trim()
-  }
-
-  return result
-}
+  if (openingTypes.length >import { buildAimGeneration } from "./aim-agent-handlers"
 
 export async function generateAimContent(input: AimInput) {
-  const llm = LLMClient.shared()
-
   if (!input.projectId) {
     throw new Error("请选择 IP 营销全案后再生成内容")
   }
+  return buildAimGeneration(input.agentId || "content_producer", {
+    userId: input.userId,
+    projectId: input.projectId,
+    rawInput: input.rawInput,
+    targetFormats: input.targetFormats,
+    taskType: input.taskType,
+    topicTitle: input.topicTitle,
+    topicRationale: input.topicRationale,
+    hotTopic: input.hotTopic,
+    polishInstruction: input.polishInstruction,
+  })
+}��付模块。
+- 热点只能基于用户提供的热点、已有上下文或明确行业趋势自然融合，禁止硬蹭或编造。
+- 先保住人的位置、代价和手迹，再清理 AI 腔、宣传腔、整齐排比和万能结尾。
+- 不暴露外部参考来源细节。`
+  : `你是一个企业营销内容专家。根据用户提供的信息，结合企业知识库，生成高质量的营销内容。`
 
-  if (input.projectId) {
-    const project = await prisma.clientProject.findFirst({
-      where: {
-        id: input.projectId,
-        userId: input.userId,
-        status: "active",
-      },
-      select: { id: true },
-    })
-    if (!project) {
-      throw new Error("客户项目不存在或已归档")
-    }
-  }
-
-  const [knowledge, viralStructureBlock] = await Promise.all([
-    prisma.knowledgeEntry.findMany({
-      where: {
-        userId: input.userId,
-        status: "active",
-        projectId: input.projectId,
-      },
-      orderBy: { sortOrder: "asc" },
-      take: 200,
-    }),
-    buildViralStructureBlock(),
-  ])
-
-  const knowledgeBlock = buildKnowledgeBlock(knowledge)
-
-  const formatBlocks = input.targetFormats
-    .map((format) => FORMAT_INSTRUCTIONS[format])
-    .join("\n\n---\n\n")
-  const workflowContext = [
-    input.topicTitle
-      ? `选定爆款选题：${input.topicTitle}${input.topicRationale ? `\n选题依据：${input.topicRationale}` : ""}`
-      : null,
-    input.hotTopic
-      ? `需要结合的当前热点：${input.hotTopic}\n要求：只做自然融合，必须找到热点与客户需求、产品卖点或老板经验之间的真实关联，禁止硬蹭热点。`
-      : null,
-    input.polishInstruction
-      ? `文案审核与优化要求：${input.polishInstruction}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join("\n\n")
-
-const systemPrompt = `你是一个企业营销内容专家。根据用户提供的信息，结合企业知识库，生成高质量的营销内容。
+const systemPrompt = `${agentPrompt}
 
 ${knowledgeBlock}
+${methodologyBlock}
+${businessDiagnosisBlock}
 ${viralStructureBlock}
 
 内部工作流程：
@@ -322,6 +205,10 @@ ${viralStructureBlock}
 - 必须把专业结构融进最终文案里，但不要输出「使用了某某结构」这类解释。
 - 开头要具体、有信息量、有冲突或利益点，禁止「今天给大家分享」「很多人不知道」这类空泛起手。
 - 正文每一段都要推进信息，不要堆形容词，不要写营销黑话。
+- 先保住人的位置、代价和手迹，再清理 AI 腔、宣传腔、整齐排比和万能结尾。
+- 保留必要的口语、停顿、重复和语气词；不要为了显得高级主动加金句、宏大比喻或整齐三段式。
+- 文案生成必须直接交付成稿，不要反问用户、不要让用户补充资料、不要输出开放式问题。
+- 如果信息不足，基于企业知识库、用户输入和现有上下文做合理假设，并在文案里自然处理。
 
 请严格按照下方每种格式的要求，生成对应的内容。每种格式用 ===FORMAT:格式名=== 作为分隔标记。`
 
@@ -347,7 +234,7 @@ ${input.targetFormats.map((format) => `===FORMAT:${format}===\n（在这里输�
   })
 
   const parsed = parseMultiFormatResponse(completion.content, input.targetFormats)
-  const knowledgeUsed = knowledge.map((entry) => ({
+  const knowledgeUsed = retrieved.entries.map((entry) => ({
     id: entry.id,
     title: entry.title,
     category: entry.category,
@@ -375,6 +262,13 @@ ${input.targetFormats.map((format) => `===FORMAT:${format}===\n（在这里输�
       status: "completed",
     },
   })
+
+  // Fire-and-forget: generate embedding for newly used entries
+  if (retrieved.source === "raw") {
+    for (const entry of retrieved.entries) {
+      ensureKnowledgeEmbedding(entry.id).catch(() => {})
+    }
+  }
 
   return {
     id: record.id,

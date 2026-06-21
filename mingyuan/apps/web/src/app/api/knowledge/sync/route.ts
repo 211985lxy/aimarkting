@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
 
 const SYNC_TOKEN = process.env.OBSIDIAN_SYNC_TOKEN || "mingyuan-obsidian-sync-secret"
 
@@ -94,6 +95,11 @@ export async function POST(request: NextRequest) {
         },
       })
       results.push({ id: upserted.id, title: upserted.title })
+    }
+
+    // Fire-and-forget: generate embeddings for synced entries
+    for (const result of results) {
+      ensureKnowledgeEmbedding(result.id).catch(() => {})
     }
 
     return NextResponse.json({

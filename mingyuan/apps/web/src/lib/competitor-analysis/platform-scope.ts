@@ -14,6 +14,6 @@ export function getCompetitorPlatformGate(platform: Platform): CompetitorPlatfor
   return {
     supported: false,
     code: 'PLATFORM_NOT_OPEN',
-    message: '第一版对标账号调查暂时只支持抖音主页链接',
+    message: '第一版对标账号分析暂时只支持抖音主页链接',
   }
 }

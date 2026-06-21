@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { authenticateRequest, authErrorResponse } from "@/lib/user-auth"
 import { prisma } from "@/lib/prisma"
-import { importLarkBaseKnowledge } from "@/lib/lark-base-tool"
+import { importLarkBaseKnowledge, setEmbeddingHook } from "@/lib/lark-base-tool"
+import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
+
+// Register the embedding hook for lark imports that happen through the API
+setEmbeddingHook(ensureKnowledgeEmbedding)
 
 const TABLE_TYPES = new Set(["topic_review", "project_management", "data_archive"])
 

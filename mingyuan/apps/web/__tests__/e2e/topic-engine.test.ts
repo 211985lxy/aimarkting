@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { TOPIC_ELEMENTS, OPENING_TYPES, COPY_STRUCTURES, ENDING_TYPES } from "../../prisma/seed-topic-engine"
 import { VALID_ELEMENT_CODES, VALID_OPENING_CODES, VALID_STRUCTURE_CODES, TopicCardSchema, TopicCardsSchema } from "../../src/lib/topic-validation"
+import type { TopicCard } from "../../src/lib/topic-validation"
 import { COPY_TO_VIDEO_STRUCTURE_MAP, FALLBACK_VIDEO_STRUCTURE, mapCopyToVideoStructure } from "../../src/lib/copy-structure-mapping"
 import { CONFLICT_PAIRS, hasConflict, sampleElements } from "../../src/lib/topic-element-logic"
-import { buildTopicSystemPrompt, buildTopicUserPrompt } from "../../src/lib/topic-generation"
+import { buildTopicSystemPrompt, buildTopicUserPrompt, normalizeTopicCards } from "../../src/lib/topic-generation"
 import { VIDEO_STRUCTURES } from "../../prisma/seed-structures"
 
 // ─── Seed Data Integrity ───────────────────────────────
@@ -117,6 +118,25 @@ describe("TopicCard Zod Schema", () => {
       elementCodes: ["cost", "practical"],
       openingTypeCode: "curiosity_open",
       structureCode: "three_beat_ramp",
+    }
+    const result = TopicCardSchema.safeParse(card)
+    expect(result.success).toBe(true)
+  })
+
+  it("accepts optional recommendation fields", () => {
+    const card = {
+      title: "老板IP别乱发",
+      elementCodes: ["trust", "practical"],
+      openingTypeCode: "pain_open",
+      structureCode: "pain_solution",
+      rationale: "能把账号定位和内容执行直接连起来。",
+      topicType: "人设型",
+      sourceType: "行业热点",
+      score: 88,
+      scoreReason: "热点相关且有业务素材支撑。",
+      hook: "别急着追热点，先看它能不能帮你省掉重复工作。",
+      angle: "从素材整理、粗剪和复用三个流程展开。",
+      cta: "评论“流程”，领取内容生产检查表。",
     }
     const result = TopicCardSchema.safeParse(card)
     expect(result.success).toBe(true)
@@ -370,6 +390,24 @@ describe("Topic Generation Prompts", () => {
     expect(prompt).toContain("4")
   })
 
+  it("daily prompt includes scoring and 24-hour hot-topic guidance", () => {
+    const prompt = buildTopicSystemPrompt("fresh", [], "daily")
+    expect(prompt).toContain("今日推荐模式")
+    expect(prompt).toContain("最近 24 小时热点")
+    expect(prompt).toContain("账号适配度、转化价值、流量潜力、素材支撑、执行难度")
+    expect(prompt).toContain("topicType")
+    expect(prompt).toContain("scoreReason")
+    expect(prompt).toContain("hook（开头钩子）")
+    expect(prompt).toContain("angle（展开角度）")
+    expect(prompt).toContain("cta（结尾行动）")
+  })
+
+  it("weekly prompt treats hot topics as references", () => {
+    const prompt = buildTopicSystemPrompt("fresh", [], "weekly")
+    expect(prompt).toContain("本周选题模式")
+    expect(prompt).toContain("不要过度依赖单日新闻")
+  })
+
   it("user prompt includes IP profile fields", () => {
     const prompt = buildTopicUserPrompt(
       {
@@ -441,5 +479,72 @@ describe("Topic Generation Prompts", () => {
     expect(prompt).toContain("测试行业")
     expect(prompt).not.toContain("名称")
     expect(prompt).toContain("新奇刺激")
+  })
+
+  it("user prompt includes daily mode instruction and industry hot sources", () => {
+    const prompt = buildTopicUserPrompt(
+      {
+        ipProfile: null,
+        elements: TOPIC_ELEMENTS.map(e => ({
+          code: e.code,
+          name: e.name,
+          typeLabel: e.typeLabel,
+          description: e.description,
+        })),
+        recommendationMode: "daily",
+        topicSources: [
+          {
+            category: "industry_hot",
+            title: "AI 产品发布",
+            content: "某产品发布新功能，适合作为营销切口。",
+          },
+        ],
+      },
+      ["cost", "practical"],
+    )
+
+    expect(prompt).toContain("行业热点：AI 产品发布")
+    expect(prompt).toContain("这是今日推荐")
+  })
+
+  it("normalizes missing scoring fields without requiring hot topics", () => {
+    const cards: TopicCard[] = [
+      {
+        title: "选题一测试",
+        elementCodes: ["cost", "practical"],
+        openingTypeCode: "benefit_open",
+        structureCode: "pain_solution",
+      },
+      {
+        title: "选题二测试",
+        elementCodes: ["trust"],
+        openingTypeCode: "curiosity_open",
+        structureCode: "universal",
+      },
+      {
+        title: "选题三测试",
+        elementCodes: ["contrast"],
+        openingTypeCode: "contrast_open",
+        structureCode: "contrast_hook",
+      },
+      {
+        title: "选题四测试",
+        elementCodes: ["story"],
+        openingTypeCode: "curiosity_open",
+        structureCode: "pov_walkthrough",
+      },
+    ]
+
+    const normalized = normalizeTopicCards(cards, {
+      recommendationMode: "daily",
+      topicSources: [{ category: "user_insight", title: "客户问题", content: "交付周期不清晰。" }],
+    })
+
+    expect(normalized).toHaveLength(4)
+    expect(normalized[0].score).toBeGreaterThanOrEqual(0)
+    expect(normalized[0].score).toBeLessThanOrEqual(100)
+    expect(normalized[0].topicType).toBe("转化型")
+    expect(normalized[0].sourceType).toBe("客户资料")
+    expect(normalized[0].scoreReason).toContain("综合评分")
   })
 })

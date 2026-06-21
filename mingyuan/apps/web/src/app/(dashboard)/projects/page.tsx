@@ -6,17 +6,11 @@ import { ArrowRight, BriefcaseBusiness, Loader2, Plus } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { PageHeader } from "@/components/ui/page-header"
 import { Textarea } from "@/components/ui/textarea"
+import { AiResultPanel } from "@/components/workbench/ai-result-panel"
+import { WorkbenchHero } from "@/components/workbench/workbench-hero"
 import {
   createClientProject,
   listClientProjects,
@@ -81,23 +75,19 @@ export default function ProjectsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <PageHeader
+      <WorkbenchHero
         title="IP营销全案"
         subtitle="先建全案，再沉淀资料、改文案、生产短视频内容。"
+        badge={<Badge variant="secondary">{projects.length} 个全案</Badge>}
       />
 
       <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BriefcaseBusiness className="size-5" />
-              新建IP营销全案
-            </CardTitle>
-            <CardDescription>
-              第一版只保留成交交付必填信息。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <AiResultPanel
+          title="新建IP营销全案"
+          icon={<BriefcaseBusiness className="size-5 text-primary" />}
+          meta={<span>第一版只保留成交交付必填信息。</span>}
+          contentClassName="space-y-4 p-4"
+        >
             <div className="space-y-2">
               <Label htmlFor="project-name">全案名称</Label>
               <Input
@@ -194,17 +184,13 @@ export default function ProjectsPage() {
               )}
               创建IP营销全案
             </Button>
-          </CardContent>
-        </Card>
+        </AiResultPanel>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>进行中的全案</CardTitle>
-            <CardDescription>
-              选一个全案进入 AI内容总监，做改文案、脚本和拍摄交接单。
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <AiResultPanel
+          title="进行中的全案"
+          icon={<BriefcaseBusiness className="size-5 text-primary" />}
+          meta={<span>选一个全案进入 AI内容总监，做改文案、脚本和拍摄交接单。</span>}
+        >
             {loading ? (
               <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
                 <Loader2 className="mr-2 size-4 animate-spin" />
@@ -219,7 +205,7 @@ export default function ProjectsPage() {
                 {projects.map((project) => (
                   <div
                     key={project.id}
-                    className="rounded-lg border bg-background p-4"
+                    className="rounded-xl border border-primary/10 bg-background p-4 shadow-sm"
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 space-y-2">
@@ -253,8 +239,7 @@ export default function ProjectsPage() {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+        </AiResultPanel>
       </div>
     </div>
   )

@@ -1,11 +1,17 @@
 import { LLMClient } from "@/lib/llm"
-import { TopicCardsSchema } from "@/lib/topic-validation"
+import {
+  TopicCardsSchema,
+  VALID_TOPIC_SOURCE_TYPES,
+  VALID_TOPIC_TYPES,
+} from "@/lib/topic-validation"
 import type { TopicCard } from "@/lib/topic-validation"
 import { sampleElements, sampleWithHistory, pickStrategy } from "@/lib/topic-element-logic"
 import type { DerivationStrategy } from "@/lib/topic-element-logic"
 import type { TopicElement } from "@/generated/prisma/client"
 
 const TOPIC_MODEL = process.env.TOPIC_GENERATION_MODEL || "openai/gpt-5.4"
+
+export type RecommendationMode = "normal" | "daily" | "weekly"
 
 export interface TopicGenerationInput {
   ipProfile?: {
@@ -34,6 +40,7 @@ export interface TopicGenerationInput {
     title: string
     content: string
   }>
+  recommendationMode?: RecommendationMode
   forcedElementCodes?: string[]
   /** Recent element sets from previous generations (newest first) */
   recentElementSets?: string[][]
@@ -47,6 +54,13 @@ const TOPIC_SOURCE_LABELS: Record<string, string> = {
   daily_inspiration: "日常灵感",
   benchmark_reference: "对标参考",
   user_insight: "用户洞察",
+  boss_experience: "老板经验",
+  product_usp: "产品卖点",
+  customer_pain: "客户痛点",
+  project_case: "成交案例",
+  customer_qa: "客户问答",
+  client_project: "全案资料",
+  industry_hot: "行业热点",
 }
 
 function truncateTopicSourceContent(content: string): string {
@@ -85,12 +99,16 @@ export type TopicGenerationResult =
 export function buildTopicSystemPrompt(
   strategy: DerivationStrategy,
   recentTitles: string[],
+  recommendationMode: RecommendationMode = "normal",
 ): string {
   const basePrompt = `你是一位短视频选题策划专家，精通用户心理和内容运营。你的任务是根据 IP 档案和指定的营销元素，生成4个差异化的短视频选题。
 
 输出要求：
 - 严格返回 JSON 格式，结构为 {"topics": [card1, card2, card3, card4]}
-- 每张卡片包含：title (选题标题，2-20字), elementCodes (使用的元素代码数组), openingTypeCode (推荐开场类型代码), structureCode (推荐文案结构代码), rationale (一句话理由，20-60字)
+- 每张卡片包含：title (选题标题，2-20字), elementCodes (使用的元素代码数组), openingTypeCode (推荐开场类型代码), structureCode (推荐文案结构代码), rationale (一句话理由，20-60字), topicType, sourceType, score, scoreReason
+- topicType 必须从以下选择：${VALID_TOPIC_TYPES.join("、")}
+- sourceType 必须从以下选择：${VALID_TOPIC_SOURCE_TYPES.join("、")}
+- score 为 0-100 的整数，scoreReason 用一句话说明评分原因
 - 4个选题必须标题各不相同，角度各异
 - 每个选题使用指定的营销元素代码
 - openingTypeCode 必须从以下选择：curiosity_open, leverage_open, pain_open, extreme_open, fear_open, contrast_open, benefit_open
@@ -137,6 +155,12 @@ export function buildTopicSystemPrompt(
 
   let prompt = basePrompt + strategyInstructions[strategy]
 
+  if (recommendationMode === "daily") {
+    prompt += `\n\n【今日推荐模式】优先结合最近 24 小时热点、客户资料和执行可行性，推荐今天最适合拍摄或发布的选题。评分维度固定为：账号适配度、转化价值、流量潜力、素材支撑、执行难度。每张卡片优先补充 hook（开头钩子）、angle（展开角度）、cta（结尾行动）。`
+  } else if (recommendationMode === "weekly") {
+    prompt += `\n\n【本周选题模式】生成一组适合作为本周内容池的选题，热点只作为角度参考，不要过度依赖单日新闻。评分维度固定为：账号适配度、转化价值、流量潜力、素材支撑、执行难度。`
+  }
+
   // Anti-repetition: inject recent titles for dedup
   if (recentTitles.length > 0) {
     prompt += `\n\n【去重要求】以下选题用户已经看过了，请务必避免相同或高度相似的标题：\n${recentTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}\n生成的4个标题不能与上述标题语义重复。`
@@ -149,7 +173,7 @@ export function buildTopicUserPrompt(
   input: TopicGenerationInput,
   selectedCodes: string[],
 ): string {
-  const { ipProfile, topicSources } = input
+  const { ipProfile, topicSources, recommendationMode = "normal" } = input
   const selectedElements = input.elements.filter((e) =>
     selectedCodes.includes(e.code),
   )
@@ -187,8 +211,55 @@ export function buildTopicUserPrompt(
   ].join("\n")
 
   const sourceSection = buildTopicSourceSection(topicSources)
+  const modeInstruction =
+    recommendationMode === "daily"
+      ? "这是今日推荐，请优先考虑当天能发、能拍、能承接的选题。"
+      : recommendationMode === "weekly"
+        ? "这是本周选题池，请兼顾人设、转化和流量，不要只追逐短期热点。"
+        : ""
 
-  return `${profileSection ? profileSection + "\n\n" : ""}${sourceSection ? sourceSection + "\n\n" : ""}${elementSection}\n\n请基于以上${profileSection ? " IP 档案、" : ""}${sourceSection ? "选题素材和" : ""}营销元素，生成4个差异化的短视频选题卡片。每个选题都要巧妙融入指定的营销元素，并推荐最匹配的开场类型和文案结构。`
+  return `${profileSection ? profileSection + "\n\n" : ""}${sourceSection ? sourceSection + "\n\n" : ""}${elementSection}\n\n请基于以上${profileSection ? " IP 档案、" : ""}${sourceSection ? "选题素材和" : ""}营销元素，生成4个差异化的短视频选题卡片。每个选题都要巧妙融入指定的营销元素，并推荐最匹配的开场类型和文案结构。${modeInstruction}`
+}
+
+function inferTopicType(card: TopicCard, index: number): TopicCard["topicType"] {
+  if (card.topicType) return card.topicType
+  if (card.elementCodes.some((code) => ["authority", "trust", "identity", "story"].includes(code))) return "人设型"
+  if (card.elementCodes.some((code) => ["cost", "practical", "scarcity"].includes(code))) return "转化型"
+  return index % 3 === 0 ? "流量型" : index % 3 === 1 ? "转化型" : "人设型"
+}
+
+function inferSourceType(
+  card: TopicCard,
+  topicSources: TopicGenerationInput["topicSources"],
+  recommendationMode: RecommendationMode,
+): TopicCard["sourceType"] {
+  if (card.sourceType) return card.sourceType
+  const categories = new Set((topicSources ?? []).map((source) => source.category))
+  if ((recommendationMode === "daily" || recommendationMode === "weekly") && categories.has("industry_hot")) return "行业热点"
+  if (categories.has("benchmark_reference")) return "对标参考"
+  if (categories.has("daily_inspiration")) return "个人灵感"
+  if (categories.has("product_usp")) return "公司卖点"
+  return "客户资料"
+}
+
+export function normalizeTopicCards(
+  cards: TopicCard[],
+  input: Pick<TopicGenerationInput, "topicSources" | "recommendationMode">,
+): TopicCard[] {
+  const recommendationMode = input.recommendationMode ?? "normal"
+  return cards.map((card, index) => {
+    const score = typeof card.score === "number"
+      ? Math.max(0, Math.min(100, Math.round(card.score)))
+      : Math.max(72, 88 - index * 4)
+
+    return {
+      ...card,
+      topicType: inferTopicType(card, index),
+      sourceType: inferSourceType(card, input.topicSources, recommendationMode),
+      score,
+      scoreReason: card.scoreReason || "账号适配、内容价值和执行可行性综合评分。",
+    }
+  })
 }
 
 export async function generateTopicCards(
@@ -226,7 +297,7 @@ export async function generateTopicCards(
 
   console.log(`[topic-gen] Strategy: ${strategy}, elements: [${selectedCodes.join(",")}], refresh: ${refreshCount}`)
 
-  const systemPrompt = buildTopicSystemPrompt(strategy, recentTitles)
+  const systemPrompt = buildTopicSystemPrompt(strategy, recentTitles, input.recommendationMode)
   const userPrompt = buildTopicUserPrompt(input, selectedCodes)
   const fullPromptText = `[System]\n${systemPrompt}\n\n[User]\n${userPrompt}`
 
@@ -263,7 +334,7 @@ export async function generateTopicCards(
         continue
       }
 
-      const validated = TopicCardsSchema.safeParse(cards)
+      const validated = TopicCardsSchema.safeParse(normalizeTopicCards(cards, input))
 
       if (validated.success) {
         // Enforce card elementCodes ⊆ selectedCodes (LLM may hallucinate extra elements)

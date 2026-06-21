@@ -8,9 +8,8 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   FilePenLine,
-  MessageCircle,
+  RefreshCw,
   Sparkles,
-  Target,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -84,11 +83,11 @@ export default function DashboardPage() {
     <div className="space-y-6 pb-10">
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight">内容生产台</h1>
+          <h1 className="text-2xl font-bold tracking-tight">工作总览</h1>
           <Badge className="badge-gold border-none px-2 py-0.5 rounded-sm text-xs">内容生产版</Badge>
         </div>
         <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-          网站只负责选题、文案、定位、朋友圈和质检；飞书继续负责项目管理、协作评比和数据表格。
+          管理全案、沉淀素材、生成内容，并跟进每一条内容的生产进度。
         </p>
       </section>
 
@@ -122,38 +121,20 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="border-primary/20 bg-gradient-to-br from-primary/[0.05] to-amber-500/[0.02]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <BriefcaseBusiness className="h-4 w-4 text-primary" />
-              选择全案
+              商业诊断官
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              每次生成先绑定 IP 营销全案，避免不同客户的素材和文案混在一起。
+              先判断生意卡点：商业模式、流量转化、交付结构和核心矛盾。
             </p>
-            <Button className="w-full" nativeButton={false} render={<Link href="/projects" />}>
-              进入营销全案
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="border-primary/20 bg-gradient-to-br from-primary/[0.05] to-amber-500/[0.02]">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <FilePenLine className="h-4 w-4 text-primary" />
-              脚本创作官
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              把选题、原始想法或老板口述粘进去，生成短视频脚本、口播稿和拍摄交接单。
-            </p>
-            <Button className="w-full" nativeButton={false} render={<Link href="/aim?agent=ip_video" />}>
-              去写文案
+            <Button className="w-full" nativeButton={false} render={<Link href="/aim?agent=business_system_diagnosis" />}>
+              去做诊断
               <ArrowRight className="h-4 w-4" />
             </Button>
           </CardContent>
@@ -168,7 +149,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              输入客户资料、产品卖点和老板表达，生成 IP 定位、内容方向和成交路径。
+              明确 IP 怎么表达、吸引谁、建立什么信任，以及如何承接成交。
             </p>
             <Button className="w-full" nativeButton={false} render={<Link href="/aim?agent=business_diagnosis" />}>
               去做定位
@@ -176,56 +157,38 @@ export default function DashboardPage() {
             </Button>
           </CardContent>
         </Card>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/[0.05] to-amber-500/[0.02]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Target className="h-4 w-4 text-primary" />
-              选题策划官
+              <FilePenLine className="h-4 w-4 text-primary" />
+              内容生产官
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              输入灵感、对标内容和用户洞察，生成可采用的选题卡。
+              统一处理选题、脚本、朋友圈、长文和发布前质检。
             </p>
-            <Button className="w-full" variant="outline" nativeButton={false} render={<Link href="/topic-planning" />}>
-              去做选题
+            <Button className="w-full" nativeButton={false} render={<Link href="/aim?agent=ip_video" />}>
+              去生产内容
               <ArrowRight className="h-4 w-4" />
             </Button>
           </CardContent>
         </Card>
-        <Card>
+
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/[0.05] to-amber-500/[0.02]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <MessageCircle className="h-4 w-4 text-primary" />
-              私域转化官
+              <RefreshCw className="h-4 w-4 text-primary" />
+              内容复盘官
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              把主题、客户反馈或成交素材改成朋友圈文案和私域承接话术。
+              发布后复盘表现，提炼优化动作、复用资产和下一轮选题。
             </p>
-            <Button className="w-full" variant="outline" nativeButton={false} render={<Link href="/aim?agent=moments_conversion" />}>
-              去写朋友圈
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CheckCircle2 className="h-4 w-4 text-primary" />
-              内容质检官
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              检查 AI 味、开头吸引力、逻辑、表达和拍摄可行性。
-            </p>
-            <Button className="w-full" variant="outline" nativeButton={false} render={<Link href="/quality-check" />}>
-              去质检
+            <Button className="w-full" nativeButton={false} render={<Link href="/aim?agent=content_review" />}>
+              去做复盘
               <ArrowRight className="h-4 w-4" />
             </Button>
           </CardContent>
@@ -263,16 +226,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="border-b pb-3">
-            <CardTitle className="text-base">网站和飞书的分工</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 p-4 text-sm text-muted-foreground">
-            <p><span className="font-semibold text-foreground">1. 飞书：</span>项目管理、选题评比、协作和数据沉淀。</p>
-            <p><span className="font-semibold text-foreground">2. AIM：</span>选题、脚本、定位、私域内容和质检。</p>
-            <p><span className="font-semibold text-foreground">3. 全案：</span>只作为内容上下文，防止素材污染。</p>
-          </CardContent>
-        </Card>
       </div>
     </div>
   )

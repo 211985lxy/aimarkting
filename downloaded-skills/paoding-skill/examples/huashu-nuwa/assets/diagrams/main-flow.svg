@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1048 232">
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <path d="M0,0 L9,3.5 L0,7 Z" fill="#4a3f33"/>
+    </marker>
+    <marker id="arrow-accent" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <path d="M0,0 L9,3.5 L0,7 Z" fill="#8a1c0f"/>
+    </marker>
+  </defs>
+  <style>
+    .box { fill: #ede6d4; stroke: #4a3f33; stroke-width: 1.5; }
+    .gate { fill: #e3dac0; stroke: #94701f; stroke-width: 1.5; }
+    .label { font-family: system-ui, sans-serif; font-size: 13px; fill: #1a1410; text-anchor: middle; }
+    .id { font-family: system-ui, sans-serif; font-size: 10px; fill: #8a7a66; text-anchor: middle; }
+    .line { stroke: #4a3f33; stroke-width: 1.6; marker-end: url(#arrow); fill: none; }
+    .loop { stroke: #8a1c0f; stroke-width: 1.6; marker-end: url(#arrow-accent); fill: none; stroke-dasharray: 5 4; }
+    .io { font-family: system-ui, sans-serif; font-size: 11px; fill: #8a1c0f; text-anchor: middle; }
+    .looptxt { font-family: system-ui, sans-serif; font-size: 11px; fill: #8a1c0f; text-anchor: middle; }
+  </style>
+
+  <text class="io" x="76" y="26">人名 / 主题 / 模糊需求</text>
+  <text class="io" x="972" y="26">可运行的人物 SKILL.md</text>
+
+  <rect class="box" x="12" y="44" width="128" height="56"/>
+  <text class="label" x="76" y="69">入口分流</text>
+  <text class="id" x="76" y="88">stage-01</text>
+
+  <line class="line" x1="140" y1="72" x2="158" y2="72"/>
+  <rect class="box" x="160" y="44" width="120" height="56"/>
+  <text class="label" x="220" y="69">建自包含目录</text>
+  <text class="id" x="220" y="88">stage-02</text>
+
+  <line class="line" x1="280" y1="72" x2="298" y2="72"/>
+  <rect class="box" x="300" y="44" width="128" height="56"/>
+  <text class="label" x="364" y="69">六 Agent 采集</text>
+  <text class="id" x="364" y="88">stage-03</text>
+
+  <line class="line" x1="428" y1="72" x2="446" y2="72"/>
+  <rect class="gate" x="448" y="44" width="124" height="56"/>
+  <text class="label" x="510" y="69">Review 检查点</text>
+  <text class="id" x="510" y="88">stage-04</text>
+
+  <line class="line" x1="572" y1="72" x2="590" y2="72"/>
+  <rect class="box" x="592" y="44" width="120" height="56"/>
+  <text class="label" x="652" y="69">框架提炼</text>
+  <text class="id" x="652" y="88">stage-05</text>
+
+  <line class="line" x1="712" y1="72" x2="730" y2="72"/>
+  <rect class="box" x="732" y="44" width="120" height="56"/>
+  <text class="label" x="792" y="69">构建 Skill</text>
+  <text class="id" x="792" y="88">stage-06</text>
+
+  <line class="line" x1="852" y1="72" x2="870" y2="72"/>
+  <rect class="box" x="872" y="44" width="128" height="56"/>
+  <text class="label" x="936" y="69">验证 · 精炼</text>
+  <text class="id" x="936" y="88">stage-07</text>
+
+  <line class="line" x1="1000" y1="72" x2="1024" y2="72"/>
+
+  <path class="loop" d="M872,100 C792,180 720,180 652,104"/>
+  <text class="looptxt" x="762" y="196">不通过 → 回炉（≤2 次）</text>
+</svg>

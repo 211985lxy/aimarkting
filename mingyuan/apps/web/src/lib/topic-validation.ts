@@ -22,6 +22,16 @@ export const VALID_ENDING_CODES = [
   "interactive", "empathy", "slogan", "reversal",
 ] as const
 
+export const VALID_TOPIC_TYPES = ["人设型", "转化型", "流量型"] as const
+
+export const VALID_TOPIC_SOURCE_TYPES = [
+  "个人灵感",
+  "客户资料",
+  "公司卖点",
+  "行业热点",
+  "对标参考",
+] as const
+
 // ─── Zod schemas ────────────────────────────────────────
 
 export const TopicCardSchema = z.object({
@@ -33,6 +43,13 @@ export const TopicCardSchema = z.object({
   openingTypeCode: z.enum(VALID_OPENING_CODES),
   structureCode: z.enum(VALID_STRUCTURE_CODES),
   rationale: z.string().min(5).max(200).optional(),
+  topicType: z.enum(VALID_TOPIC_TYPES).optional(),
+  sourceType: z.enum(VALID_TOPIC_SOURCE_TYPES).optional(),
+  score: z.number().min(0).max(100).optional(),
+  scoreReason: z.string().min(5).max(200).optional(),
+  hook: z.string().min(2).max(200).optional(),
+  angle: z.string().min(2).max(300).optional(),
+  cta: z.string().min(2).max(200).optional(),
 })
 
 export const TopicCardsSchema = z

@@ -1,9 +1,14 @@
 import type { ComponentType } from "react"
-import { Video, ShieldCheck, FileText, MessageCircle } from "lucide-react"
+import { Activity, PenLine, RefreshCw, ShieldCheck, Video } from "lucide-react"
 import type { ContentFormat } from "@/lib/api/client"
 
 /** 内容智能体 id */
-export type AimAgentId = "ip_video" | "business_diagnosis" | "wechat_article" | "moments_conversion"
+export type AimAgentId =
+  | "ip_video"
+  | "business_diagnosis"
+  | "business_system_diagnosis"
+  | "deep_copywriter"
+  | "content_review"
 
 /** 智能体的共享元信息（侧边栏与工作台页面的单一事实源） */
 export interface AimAgentMeta {
@@ -18,11 +23,11 @@ export const DEFAULT_AIM_AGENT: AimAgentId = "ip_video"
 
 export const AIM_AGENT_OPTIONS: AimAgentMeta[] = [
   {
-    id: "ip_video",
-    title: "脚本创作官",
-    description: "短视频脚本、口播稿、拍摄交接单",
-    icon: Video,
-    defaultFormats: ["video_script", "shooting_brief"],
+    id: "business_system_diagnosis",
+    title: "商业诊断官",
+    description: "商业模式、流量转化、核心矛盾",
+    icon: Activity,
+    defaultFormats: ["raw_copy"],
   },
   {
     id: "business_diagnosis",
@@ -32,18 +37,25 @@ export const AIM_AGENT_OPTIONS: AimAgentMeta[] = [
     defaultFormats: ["raw_copy"],
   },
   {
-    id: "wechat_article",
-    title: "长文写作官",
-    description: "深度文章，把观点讲透",
-    icon: FileText,
-    defaultFormats: ["wechat_article"],
+    id: "ip_video",
+    title: "内容生产官",
+    description: "选题、脚本、朋友圈、长文、质检",
+    icon: Video,
+    defaultFormats: ["video_script", "shooting_brief", "moments_post", "community_message"],
   },
   {
-    id: "moments_conversion",
-    title: "私域转化官",
-    description: "朋友圈文案、私域承接话术",
-    icon: MessageCircle,
-    defaultFormats: ["moments_post", "community_message"],
+    id: "deep_copywriter",
+    title: "深度文案官",
+    description: "观点、结构、钩子、可拆分母稿",
+    icon: PenLine,
+    defaultFormats: ["raw_copy"],
+  },
+  {
+    id: "content_review",
+    title: "数据复盘官",
+    description: "发布后数据复盘、优化、复用",
+    icon: RefreshCw,
+    defaultFormats: ["raw_copy"],
   },
 ]
 

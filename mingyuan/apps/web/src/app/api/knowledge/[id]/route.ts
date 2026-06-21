@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { authenticateRequest, authErrorResponse } from "@/lib/user-auth"
+import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
 
 export async function PUT(
   request: NextRequest,
@@ -27,6 +28,11 @@ export async function PUT(
         ...(body.tags !== undefined ? { tags: Array.isArray(body.tags) ? body.tags : [] } : {}),
       },
     })
+
+    // Fire-and-forget: re-embed when content changes
+    if (body.content !== undefined) {
+      ensureKnowledgeEmbedding(id).catch(() => {})
+    }
 
     return NextResponse.json(updated)
   } catch (error) {

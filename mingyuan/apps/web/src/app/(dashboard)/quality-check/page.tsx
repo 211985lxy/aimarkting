@@ -142,7 +142,7 @@ export default function QualityCheckPage() {
       {/* 头部信息 */}
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-primary to-amber-600 bg-clip-text text-transparent">内容质量检控</h1>
+          <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-primary to-amber-600 bg-clip-text text-transparent">内容质检官</h1>
           <Badge className="badge-gold border-none px-2 py-0.5 rounded-sm text-xs">四维门控闭环</Badge>
         </div>
         <p className="text-sm text-muted-foreground">
@@ -295,7 +295,7 @@ export default function QualityCheckPage() {
               </div>
             ) : history.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border/80 p-8 text-center bg-muted/5">
-                <p className="text-xs text-muted-foreground">还没有生成过文案，建议先去 <Link href="/aim" className="text-primary font-semibold hover:underline">脚本创作官</Link> 创作您的专属文案。</p>
+                <p className="text-xs text-muted-foreground">还没有生成过文案，建议先去 <Link href="/aim" className="text-primary font-semibold hover:underline">内容生产官</Link> 创作您的专属文案。</p>
               </div>
             ) : (
               <div className="grid gap-3.5 sm:grid-cols-2">

@@ -37,7 +37,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 // ─── 类型定义 ──────────────────────────────────────────────
 
@@ -85,7 +84,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   project_case: "项目案例",
   customer_qa: "客户问答",
   daily_inspiration: "日常灵感",
-  benchmark_reference: "对标参考",
+  benchmark_reference: "竞品/对标参考",
   user_insight: "用户洞察",
   hot_topic: "热点素材",
   positioning_material: "定位素材",
@@ -100,6 +99,18 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
 }
 
 // ─── API 调用 ──────────────────────────────────────────────
+
+function getAdminToken(): string {
+  if (typeof window === "undefined") return ""
+  try {
+    const authStr = localStorage.getItem("mingyuan-admin-auth")
+    if (!authStr) return ""
+    const authObj = JSON.parse(authStr)
+    return authObj.state?.token || ""
+  } catch {
+    return ""
+  }
+}
 
 async function fetchKnowledge(params: {
   page?: number
@@ -116,14 +127,25 @@ async function fetchKnowledge(params: {
   if (params.category) qs.set("category", params.category)
   if (params.userId) qs.set("userId", params.userId)
   if (params.sourceType) qs.set("sourceType", params.sourceType)
-  const res = await fetch(`/api/admin/knowledge?${qs}`)
+  
+  const token = getAdminToken()
+  const res = await fetch(`/api/admin/knowledge?${qs}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
   return res.json() as Promise<{
     data: { results: KnowledgeEntry[]; total: number; page: number; pageSize: number }
   }>
 }
 
 async function fetchStats() {
-  const res = await fetch("/api/admin/knowledge/stats")
+  const token = getAdminToken()
+  const res = await fetch("/api/admin/knowledge/stats", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
   return res.json() as Promise<{ data: StatsData }>
 }
 
@@ -132,9 +154,13 @@ async function batchAction(
   action: string,
   value?: string
 ) {
+  const token = getAdminToken()
   const res = await fetch("/api/admin/knowledge", {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { 
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({ ids, action, value }),
   })
   if (!res.ok) throw new Error("操作失败")
@@ -142,17 +168,25 @@ async function batchAction(
 }
 
 async function deleteEntries(ids: string[]) {
+  const token = getAdminToken()
   const res = await fetch(`/api/admin/knowledge?ids=${ids.join(",")}`, {
     method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
   })
   if (!res.ok) throw new Error("删除失败")
   return res.json()
 }
 
 async function distillEntries(ids: string[]) {
+  const token = getAdminToken()
   const res = await fetch("/api/admin/knowledge/distill", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { 
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({ ids }),
   })
   if (!res.ok) throw new Error("蒸馏失败")
@@ -216,7 +250,7 @@ export default function AdminKnowledgePage() {
   }, [page, search, categoryFilter])
 
   React.useEffect(() => {
-    fetchData()
+    void Promise.resolve().then(fetchData)
   }, [fetchData])
 
   React.useEffect(() => {
@@ -282,9 +316,13 @@ export default function AdminKnowledgePage() {
     if (!editForm.title || !editForm.content) return
     setSaving(true)
     try {
-      const res = await fetch("/api/knowledge", {
+      const token = getAdminToken()
+      const res = await fetch("/api/admin/knowledge", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           title: editForm.title,
           content: editForm.content,
@@ -313,8 +351,12 @@ export default function AdminKnowledgePage() {
       formData.append("file", uploadFile)
       formData.append("category", uploadCategory)
 
+      const token = getAdminToken()
       const res = await fetch("/api/admin/knowledge/upload", {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
         body: formData,
       })
       if (!res.ok) throw new Error("上传失败")

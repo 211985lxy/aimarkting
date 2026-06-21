@@ -1,6 +1,19 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 
+// Embedding hook type — we import dynamically to avoid circular deps
+type EnsureEmbeddingFn = (entryId: string) => Promise<void>
+let _ensureEmbedding: EnsureEmbeddingFn | null = null
+
+/** Optional: register an embedding hook that runs after entry create/update */
+export function setEmbeddingHook(fn: EnsureEmbeddingFn): void {
+  _ensureEmbedding = fn
+}
+
+function fireEmbedding(entryId: string): void {
+  _ensureEmbedding?.(entryId).catch(() => {})
+}
+
 type LarkTableType = "topic_review" | "project_management" | "data_archive"
 type LarkResultType = "topic" | "script" | "positioning" | "moments_copy"
 type LarkCommand = "+table-get" | "+field-list" | "+record-list" | "+record-upsert"
@@ -21,8 +34,8 @@ type DbLike = {
   }
   knowledgeEntry: {
     findFirst(args: unknown): Promise<{ id: string } | null>
-    update(args: unknown): Promise<unknown>
-    create(args: unknown): Promise<unknown>
+    update(args: unknown): Promise<{ id: string } & Record<string, unknown>>
+    create(args: unknown): Promise<{ id: string } & Record<string, unknown>>
   }
   aimGeneration?: {
     findFirst(args: unknown): Promise<Record<string, unknown> | null>
@@ -230,13 +243,19 @@ export async function importLarkBaseKnowledge(input: {
       status: "active",
     }
 
+    let entryId: string
     if (existing) {
-      entries.push(await input.db.knowledgeEntry.update({ where: { id: existing.id }, data }))
+      const updatedEntry = await input.db.knowledgeEntry.update({ where: { id: existing.id }, data })
+      entryId = updatedEntry.id as string
+      entries.push(updatedEntry)
       updated++
     } else {
-      entries.push(await input.db.knowledgeEntry.create({ data }))
+      const createdEntry = await input.db.knowledgeEntry.create({ data })
+      entryId = createdEntry.id as string
+      entries.push(createdEntry)
       created++
     }
+    fireEmbedding(entryId)
   }
 
   return { created, updated, entries }

@@ -19,6 +19,18 @@ export interface ApiUser {
   videosCreatedToday?: number;
 }
 
+export interface ApiAgentApiKeySummary {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  status: string;
+  allowedProjectCount: number;
+  allowedAgents: string[];
+  dailyLimit: number;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
 export interface ApiIpProfile {
   id: string;
   userId: string;
@@ -298,14 +310,8 @@ export interface ApiAiHotBriefing {
 }
 
 export interface ApiVideoCopyAnalysis {
-  hook: string;
-  structure: string[];
-  emotionConflict: string;
-  expressionSkills: string[];
-  conversionAction: string;
-  reusableTemplate: string;
-  imitationSuggestions: string[];
-  riskNotes: string[];
+  /** 纯 Markdown 格式的四维拆解（结构拆解 + 心理拆解 + 商业拆解 + 迁移应用） */
+  markdown: string;
 }
 
 export interface ApiVideoCopyExtraction {
@@ -560,12 +566,21 @@ export interface VideoCreativeBrief {
 
 // ─── Topic Engine (v5.0) ────────────────────────────────
 
+export type ApiTopicRecommendationMode = "normal" | "daily" | "weekly";
+
 export interface ApiTopicCard {
   title: string;
   elementCodes: string[];
   openingTypeCode: string;
   structureCode: string;
   rationale?: string;
+  topicType?: "人设型" | "转化型" | "流量型";
+  sourceType?: "个人灵感" | "客户资料" | "公司卖点" | "行业热点" | "对标参考";
+  score?: number;
+  scoreReason?: string;
+  hook?: string;
+  angle?: string;
+  cta?: string;
 }
 
 export interface ApiTopicGenerateResponse {

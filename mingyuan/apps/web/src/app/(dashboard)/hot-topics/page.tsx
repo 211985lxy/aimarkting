@@ -11,8 +11,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Last30DaysPanel } from "@/components/market-insights/last30days-panel"
 import { listHotTopics } from "@/lib/api/client"
 import type { HotTopic } from "@/types/content-template"
+
+type HotSource = "douyin" | "aihot" | "last30days"
 
 function formatHotValue(value: number) {
   if (!value) return "-"
@@ -32,9 +35,10 @@ export default function HotTopicsPage() {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
-  const [source, setSource] = useState<"douyin" | "aihot">("douyin")
+  const [source, setSource] = useState<HotSource>("douyin")
 
-  async function loadTopics(currentSource: "douyin" | "aihot" = source) {
+  async function loadTopics(currentSource: HotSource = source) {
+    if (currentSource === "last30days") return
     setIsLoading(true)
     try {
       const data = await listHotTopics({ source: currentSource === "aihot" ? "aihot" : undefined })
@@ -50,9 +54,13 @@ export default function HotTopicsPage() {
 
   // Handle source switch
   const handleSourceChange = (value: string) => {
-    const nextSource = value as "douyin" | "aihot"
+    const nextSource = value as HotSource
     setSource(nextSource)
     setQuery("")
+    if (nextSource === "last30days") {
+      setIsLoading(false)
+      return
+    }
     loadTopics(nextSource).catch(() => setIsLoading(false))
   }
 
@@ -75,21 +83,23 @@ export default function HotTopicsPage() {
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">
-                热点追查
+                热点中心
               </h1>
               <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/15 transition-colors duration-200">
-                {source === "aihot" ? "AI HOT 深度精选" : "抖音实时热榜"}
+                {source === "last30days" ? "近30天讨论" : source === "aihot" ? "AI HOT 深度精选" : "抖音实时热榜"}
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground max-w-2xl">
-              {source === "aihot"
+              {source === "last30days"
+                ? "不用先想关键词，直接从推荐方向切入，检索近30天市场讨论和选题机会。"
+                : source === "aihot"
                 ? "集成卡兹克三年自媒体过滤策略清洗的 AI 垂直动态。打通五维评分与事件聚类，挑出最有价值的 AI 选题，一键导入智能体创作口播。"
                 : "追踪当下全网大盘实时热点，支持与企业知识库、IP 定位进行动态融合结合，智能改写出爆款脚本。"}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Tabs value={source} onValueChange={handleSourceChange} className="w-fit">
-              <TabsList className="grid grid-cols-2 h-9 p-0.5 rounded-lg bg-muted/60">
+              <TabsList className="grid grid-cols-3 h-9 p-0.5 rounded-lg bg-muted/60">
                 <TabsTrigger value="douyin" className="px-4 py-1.5 text-xs font-semibold">
                   <Flame className="mr-1.5 h-3.5 w-3.5" />
                   抖音热榜
@@ -98,28 +108,34 @@ export default function HotTopicsPage() {
                   <Cpu className="mr-1.5 h-3.5 w-3.5" />
                   AI HOT 精选
                 </TabsTrigger>
+                <TabsTrigger value="last30days" className="px-4 py-1.5 text-xs font-semibold">
+                  <Search className="mr-1.5 h-3.5 w-3.5" />
+                  近30天热点
+                </TabsTrigger>
               </TabsList>
             </Tabs>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 hover:bg-muted/80 active:scale-95 transition-all duration-200"
-              onClick={() => loadTopics()}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              ) : (
-                <RefreshCcw className="h-4 w-4 text-muted-foreground" />
-              )}
-              刷新
-            </Button>
+            {source !== "last30days" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 hover:bg-muted/80 active:scale-95 transition-all duration-200"
+                onClick={() => loadTopics()}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <RefreshCcw className="h-4 w-4 text-muted-foreground" />
+                )}
+                刷新
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
 
-      {/* Main List Card */}
-      <Card className="overflow-hidden border-muted/60 shadow-md transition-all duration-300 hover:shadow-lg">
+      {source === "last30days" ? <Last30DaysPanel /> : (
+        <Card className="overflow-hidden border-muted/60 shadow-md transition-all duration-300 hover:shadow-lg">
         <CardHeader className="border-b bg-muted/10 gap-4 sm:flex-row sm:items-center sm:justify-between py-4">
           <div className="space-y-1">
             <CardTitle className="flex items-center gap-2 text-base font-bold">
@@ -240,7 +256,8 @@ export default function HotTopicsPage() {
             </div>
           )}
         </CardContent>
-      </Card>
+        </Card>
+      )}
     </div>
   )
 }

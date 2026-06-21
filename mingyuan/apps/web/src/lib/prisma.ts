@@ -26,6 +26,8 @@ function hasRequiredDelegates(client: PrismaClient): boolean {
     aiHotBriefing?: { findUnique?: unknown; upsert?: unknown }
     watchAccount?: { findMany?: unknown; create?: unknown }
     videoCopyExtraction?: { findUnique?: unknown; create?: unknown; update?: unknown }
+    agentApiKey?: { findUnique?: unknown; update?: unknown }
+    agentApiCallLog?: { create?: unknown; count?: unknown }
   }
 
   return (
@@ -45,6 +47,10 @@ function hasRequiredDelegates(client: PrismaClient): boolean {
     && typeof prismaClient.videoCopyExtraction?.findUnique === "function"
     && typeof prismaClient.videoCopyExtraction?.create === "function"
     && typeof prismaClient.videoCopyExtraction?.update === "function"
+    && typeof prismaClient.agentApiKey?.findUnique === "function"
+    && typeof prismaClient.agentApiKey?.update === "function"
+    && typeof prismaClient.agentApiCallLog?.create === "function"
+    && typeof prismaClient.agentApiCallLog?.count === "function"
   )
 }
 

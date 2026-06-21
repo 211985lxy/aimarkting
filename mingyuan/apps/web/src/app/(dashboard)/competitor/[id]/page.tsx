@@ -72,7 +72,7 @@ const TABS = [
   { value: "growth_analysis", label: "增长分析" },
   { value: "engagement_analysis", label: "互动分析" },
   { value: "monetization_analysis", label: "变现分析" },
-  { value: "recommendations", label: "对标建议" },
+  { value: "recommendations", label: "分析建议" },
 ]
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -235,7 +235,7 @@ function ProgressView({ analysis }: { analysis: ApiCompetitorAnalysis }) {
   return (
     <div className="space-y-8">
       <PageHeader
-        title="对标账号调查中…"
+        title="优质账号分析中…"
         subtitle="请耐心等待，数据采集和 AI 分析通常需要 1-2 分钟"
         backHref="/competitor"
       />
@@ -316,7 +316,7 @@ function ReportView({ analysis }: { analysis: ApiCompetitorAnalysis }) {
   return (
     <div className="space-y-8">
       <PageHeader
-        title={`${analysis.accountName ?? "对标账号"} · 对标报告`}
+        title={`${analysis.accountName ?? "优质账号"} · 分析报告`}
         subtitle={`分析于 ${formatDate(analysis.completedAt ?? analysis.createdAt)}`}
         backHref="/competitor"
       />
@@ -521,7 +521,7 @@ function ReportView({ analysis }: { analysis: ApiCompetitorAnalysis }) {
             </Card>
           </TabsContent>
 
-          {/* 对标建议 */}
+          {/* 优化建议 */}
           <TabsContent value="recommendations">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {(sections?.recommendations?.reusable_strategies?.length ?? 0) > 0 && (

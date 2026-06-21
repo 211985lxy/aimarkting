@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   RefreshCw,
@@ -13,12 +14,16 @@ import {
   ExternalLink,
   Target,
   Loader2,
+  FileText,
+  Wand2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { AiResultPanel } from "@/components/workbench/ai-result-panel"
+import { WorkbenchHero } from "@/components/workbench/workbench-hero"
 import { toast } from "sonner"
 import { ApiError } from "@/lib/api/client"
 import {
@@ -26,14 +31,24 @@ import {
   addWatchAccount,
   deleteWatchAccount,
   refreshWatchAccounts,
+  extractWatchAccountVideo,
+  syncVideoCopyExtraction,
   startCompetitorAnalysis,
   type WatchAccount,
 } from "@/lib/api/client"
 import { extractPureUrl, checkUrlType } from "@/lib/tikhub/url-parser"
+import { shouldOpenDeepCopywriter } from "@/lib/video-copy-routing"
+import type { ApiVideoCopyExtraction } from "@/types/api"
 
 // ─── Helpers ────────────────────────────────────────────
 
 const SUPPORTED_DOMAINS = ["douyin.com", "iesdouyin.com", "v.douyin.com"]
+const ACTIVE_EXTRACTION_STATUSES = new Set(["queued", "extracting", "analyzing"])
+
+type WatchVideo = NonNullable<WatchAccount["latestVideos"]>[number] & {
+  account: WatchAccount
+  engagementScore?: number
+}
 
 function isSupportedUrl(url: string): boolean {
   return SUPPORTED_DOMAINS.some((domain) => url.includes(domain))
@@ -100,6 +115,19 @@ function formatRefreshError(error: string): string {
   return error.split("\n")[0] || "刷新失败，账号链接已保存。"
 }
 
+function videoPageUrl(video: WatchVideo): string {
+  return video.videoUrl || `https://www.douyin.com/video/${video.videoId}`
+}
+
+function extractionStatusText(record: ApiVideoCopyExtraction | undefined): string {
+  if (!record) return "爆款文案拆解"
+  if (record.status === "completed" && record.analysisResult) return "查看拆解"
+  if (record.status === "completed") return "文案已提取"
+  if (record.status === "failed") return "提取失败"
+  if (record.status === "analyzing") return "分析中"
+  return "提取中"
+}
+
 function refreshStatusBadge(account: WatchAccount) {
   if (account.refreshStatus === "refreshing")
     return <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-200 animate-pulse">刷新中</Badge>
@@ -114,7 +142,17 @@ function refreshStatusBadge(account: WatchAccount) {
 
 export default function CompetitorWatchPage() {
   const router = useRouter()
+
   const [analyzingUrl, setAnalyzingUrl] = useState<string | null>(null)
+  const [accounts, setAccounts] = useState<WatchAccount[]>([])
+  const [loading, setLoading] = useState(true)
+  const [addUrl, setAddUrl] = useState("")
+  const [adding, setAdding] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshingId, setRefreshingId] = useState<string | null>(null)
+  const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
+  const [extractingVideoId, setExtractingVideoId] = useState<string | null>(null)
+  const [videoExtractions, setVideoExtractions] = useState<Record<string, ApiVideoCopyExtraction>>({})
 
   async function handleAnalyze(url: string) {
     setAnalyzingUrl(url)
@@ -128,13 +166,6 @@ export default function CompetitorWatchPage() {
       setAnalyzingUrl(null)
     }
   }
-  const [accounts, setAccounts] = useState<WatchAccount[]>([])
-  const [loading, setLoading] = useState(true)
-  const [addUrl, setAddUrl] = useState("")
-  const [adding, setAdding] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
-  const [refreshingId, setRefreshingId] = useState<string | null>(null)
-  const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
 
   const loadAccounts = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true)
@@ -248,7 +279,6 @@ export default function CompetitorWatchPage() {
 
   async function handleRefreshOne(accountId: string) {
     setRefreshingId(accountId)
-    // 先标记本地为刷新中
     setAccounts((prev) =>
       prev.map((a) => (a.id === accountId ? { ...a, refreshStatus: "refreshing" } : a)),
     )
@@ -269,13 +299,52 @@ export default function CompetitorWatchPage() {
     }
   }
 
-  // 按刷新状态排序：刷新中 > 待刷新 > 失败 > 已刷新
+  async function handleExtractVideo(video: WatchVideo) {
+    const key = `${video.account.id}-${video.videoId}`
+    setExtractingVideoId(key)
+    try {
+      const record = await extractWatchAccountVideo({
+        watchAccountId: video.account.id,
+        videoUrl: videoPageUrl(video),
+        videoTitle: video.title,
+        coverUrl: video.coverUrl,
+      })
+      setVideoExtractions((prev) => ({ ...prev, [key]: record }))
+      if (record.status === "failed") {
+        toast.error(record.errorMessage || "文案提取失败")
+      } else {
+        toast.success("已创建文案拆解任务")
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "创建文案拆解任务失败")
+    } finally {
+      setExtractingVideoId(null)
+    }
+  }
+
+  useEffect(() => {
+    const active = Object.entries(videoExtractions).find(([, record]) =>
+      ACTIVE_EXTRACTION_STATUSES.has(record.status),
+    )
+    if (!active) return
+
+    const [key, record] = active
+    const timer = window.setTimeout(() => {
+      syncVideoCopyExtraction(record.id)
+        .then((next) => {
+          setVideoExtractions((prev) => ({ ...prev, [key]: next }))
+        })
+        .catch(() => {})
+    }, 2500)
+
+    return () => window.clearTimeout(timer)
+  }, [videoExtractions])
+
   const sortedAccounts = [...accounts].sort((a, b) => {
     const order: Record<string, number> = { refreshing: 0, idle: 1, failed: 2, success: 3 }
     return (order[a.refreshStatus] ?? 9) - (order[b.refreshStatus] ?? 9)
   })
 
-  // 获取当前选中的账号数据，没有选中时默认显示第一个
   const activeAccount = accounts.find((a) => a.id === activeAccountId) || accounts[0]
 
   const activeLatestVideos = activeAccount && activeAccount.latestVideos
@@ -294,17 +363,123 @@ export default function CompetitorWatchPage() {
 
   const hasRefreshingAccount = accounts.some((account) => account.refreshStatus === "refreshing")
 
+  function renderExtractionResult(record: ApiVideoCopyExtraction) {
+    const analysis = record.analysisResult as { markdown: string } | null
+    const rewriteHref = shouldOpenDeepCopywriter(record)
+      ? `/aim?agent=deep_copywriter&videoCopyExtractionId=${record.id}`
+      : `/aim?agent=ip_video&mode=asset_pack&videoCopyExtractionId=${record.id}`
+    if (record.status === "failed") {
+      return <p className="rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-600">{record.errorMessage || "文案提取失败"}</p>
+    }
+    if (!analysis) return null
+
+    return (
+      <AiResultPanel
+        title="文案拆解预览"
+        icon={<FileText className="h-3.5 w-3.5 text-primary" />}
+        meta={<span>{record.status === "completed" ? "已完成" : "处理中"}</span>}
+        contentClassName="p-2"
+        className="rounded-lg"
+        flat
+      >
+        <p className="mt-1 line-clamp-4 text-muted-foreground">{analysis.markdown.slice(0, 200)}...</p>
+        {record.transcript ? (
+          <p className="mt-2 line-clamp-2 text-muted-foreground">原文案：{record.transcript}</p>
+        ) : null}
+        <div className="mt-2 flex items-center justify-between border-t pt-2 gap-2">
+          <Link href="/video-copy" className="text-xs text-primary hover:underline">
+            查看完整记录
+          </Link>
+          <Link
+            href={rewriteHref}
+            className="inline-flex h-7 items-center gap-1 rounded bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <Wand2 className="h-3 w-3" />
+            {shouldOpenDeepCopywriter(record) ? "深度改写" : "生成内容资产包"}
+          </Link>
+        </div>
+      </AiResultPanel>
+    )
+  }
+
+  function renderVideoCard(video: WatchVideo, options: { viral?: boolean } = {}) {
+    const key = `${video.account.id}-${video.videoId}`
+    const record = videoExtractions[key]
+    const isBusy = extractingVideoId === key || (record && ACTIVE_EXTRACTION_STATUSES.has(record.status))
+
+    return (
+      <div key={`${options.viral ? "viral-" : ""}${key}`} className="space-y-2">
+        <a
+          href={videoPageUrl(video)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`group/video relative block aspect-[9/16] rounded-lg overflow-hidden bg-muted ${options.viral ? "ring-1 ring-orange-300/50" : ""}`}
+        >
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-linear-to-b from-muted/30 to-muted-foreground/10 p-4">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-background/50 backdrop-blur-xs text-muted-foreground/60 shadow-xs">
+              <Video className="h-5 w-5" />
+            </span>
+          </div>
+          <img
+            src={proxyCoverUrl(video.coverUrl)}
+            alt={video.title || (options.viral ? "爆款作品" : "作品")}
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover/video:scale-105"
+            onError={(e) => {
+              e.currentTarget.style.display = "none"
+            }}
+          />
+          <div className="absolute inset-0 bg-linear-to-t from-black/70 via-transparent to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 p-2">
+            <p className="text-xs text-white font-medium line-clamp-1">
+              {video.title || "无标题"}
+            </p>
+            <div className="flex items-center gap-2 text-[10px] text-white/70 mt-0.5">
+              <span>赞 {formatCount(video.likes)}</span>
+              <span>评 {formatCount(video.comments)}</span>
+              {options.viral && video.engagementScore != null ? (
+                <span className="text-orange-300">热 {formatCount(video.engagementScore)}</span>
+              ) : null}
+            </div>
+          </div>
+          <div className="absolute top-1.5 left-1.5 right-1.5 flex justify-between">
+            <span className="text-[10px] px-1 py-0.5 rounded bg-black/50 text-white/80 truncate max-w-20 block">
+              {video.account.nickname || ""}
+            </span>
+            {options.viral ? (
+              <span className="text-[10px] px-1 py-0.5 rounded bg-orange-500/80 text-white font-bold">
+                爆款
+              </span>
+            ) : (
+              <ExternalLink className="h-3 w-3 text-white/50 opacity-0 group-hover/video:opacity-100 transition-opacity" />
+            )}
+          </div>
+        </a>
+        <Button
+          size="sm"
+          variant={record?.status === "failed" ? "outline" : "secondary"}
+          className="h-8 w-full text-xs"
+          onClick={() => handleExtractVideo(video)}
+          disabled={Boolean(isBusy)}
+        >
+          {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+          {extractionStatusText(record)}
+        </Button>
+        {record ? renderExtractionResult(record) : null}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">对标账号监控</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            监控 5-10 个抖音对标账号，手动刷新查看最新作品与爆款参考
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <WorkbenchHero
+        title="市场洞察"
+        subtitle="监控核心对标账号，刷新作品池和爆款作品。"
+        badge={
+          <Badge variant="secondary">
+            {sortedAccounts.length}/10 个监控账号
+          </Badge>
+        }
+        actions={
           <Button
             variant="outline"
             size="sm"
@@ -314,301 +489,243 @@ export default function CompetitorWatchPage() {
             <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "刷新中..." : "刷新全部"}
           </Button>
-        </div>
-      </div>
+        }
+      />
 
-      {/* Add Account Card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Plus className="h-4 w-4" />
-            添加监控账号
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-3">
-            <Input
-              placeholder="https://www.douyin.com/user/..."
-              value={addUrl}
-              onChange={(e) => setAddUrl(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-              disabled={adding || accounts.length >= 10}
-              className="flex-1"
-            />
-            <Button
-              onClick={handleAdd}
-              disabled={adding || !addUrl.trim() || accounts.length >= 10}
-            >
-              {adding ? "添加中..." : `添加 (${accounts.length}/10)`}
-            </Button>
-          </div>
-          {accounts.length >= 10 && (
-            <p className="text-xs text-amber-600 mt-2">已达到 10 个账号上限</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Account Cards */}
-      {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i}>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-10 w-10 rounded-full" />
-                  <div className="flex-1">
-                    <Skeleton className="h-4 w-28" />
-                    <Skeleton className="h-3 w-20 mt-1" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : sortedAccounts.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center py-16 text-center">
-            <User className="h-12 w-12 text-muted-foreground mb-4" />
-            <h2 className="text-lg font-semibold">还没有监控账号</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              在上方输入抖音对标账号主页链接开始监控
-            </p>
+      <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
+        <Card className="border-primary/40 bg-primary/[0.03] ring-1 ring-primary/20">
+          <CardContent className="flex items-center justify-between gap-3 p-4">
+            <div>
+              <p className="font-semibold text-foreground">优质账号分析</p>
+              <p className="mt-1 text-xs text-muted-foreground">监控优质账号，刷新作品池和爆款作品。</p>
+            </div>
+            <Badge>当前</Badge>
           </CardContent>
         </Card>
-      ) : (
-        <>
-          {/* Account Pool Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sortedAccounts.map((account) => (
-              <Card
-                key={account.id}
-                className={`group relative overflow-hidden cursor-pointer transition-all border ${
-                  (activeAccountId || (accounts[0] && accounts[0].id)) === account.id
-                    ? "ring-2 ring-primary/60 border-primary bg-primary/[0.01] shadow-xs"
-                    : "hover:border-primary/50"
-                }`}
-                onClick={() => setActiveAccountId(account.id)}
+
+        <Link href="/video-copy" className="block">
+          <Card className="h-full transition-colors hover:border-primary/40 hover:bg-muted/40">
+            <CardContent className="flex items-center justify-between gap-3 p-4">
+              <div>
+                <p className="font-semibold text-foreground">爆款文案拆解</p>
+                <p className="mt-1 text-xs text-muted-foreground">粘贴视频链接，提取文案并做结构化分析。</p>
+              </div>
+              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+
+          {/* Add Account Card */}
+          <AiResultPanel
+            title="添加监控账号"
+            icon={<Plus className="h-4 w-4 text-primary" />}
+            meta={<span>粘贴优质账号主页链接，添加后可刷新作品池</span>}
+            flat
+          >
+            <div className="flex gap-3">
+              <Input
+                placeholder="https://www.douyin.com/user/..."
+                value={addUrl}
+                onChange={(e) => setAddUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+                disabled={adding || accounts.length >= 10}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleAdd}
+                disabled={adding || !addUrl.trim() || accounts.length >= 10}
               >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {account.avatar ? (
-                        <img
-                          src={proxyAvatarUrl(account.avatar)}
-                          alt=""
-                          className="h-10 w-10 rounded-full object-cover shrink-0"
-                        />
-                      ) : (
-                        <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
-                          <User className="h-5 w-5 text-muted-foreground" />
+                {adding ? "添加中..." : `添加 (${accounts.length}/10)`}
+              </Button>
+            </div>
+            {accounts.length >= 10 && (
+              <p className="text-xs text-amber-600 mt-2">已达到 10 个账号上限</p>
+            )}
+          </AiResultPanel>
+
+          {/* Account Cards */}
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Card key={i}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-10 w-10 rounded-full" />
+                      <div className="flex-1">
+                        <Skeleton className="h-4 w-28" />
+                        <Skeleton className="h-3 w-20 mt-1" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : sortedAccounts.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center py-16 text-center">
+                <User className="h-12 w-12 text-muted-foreground mb-4" />
+                <h2 className="text-lg font-semibold">还没有监控账号</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  在上方输入抖音优质账号主页链接开始监控
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Account Pool Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {sortedAccounts.map((account) => (
+                  <Card
+                    key={account.id}
+                    className={`group relative overflow-hidden cursor-pointer transition-all border shadow-sm ${
+                      (activeAccountId || (accounts[0] && accounts[0].id)) === account.id
+                        ? "ring-2 ring-primary/60 border-primary bg-primary/[0.01] shadow-xs"
+                        : "hover:border-primary/50 hover:shadow-md"
+                    }`}
+                    onClick={() => setActiveAccountId(account.id)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {account.avatar ? (
+                            <img
+                              src={proxyAvatarUrl(account.avatar)}
+                              alt=""
+                              className="h-10 w-10 rounded-full object-cover shrink-0"
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
+                              <User className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm truncate">
+                              {formatAccountName(account)}
+                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs text-muted-foreground">
+                                {account.followerCount != null
+                                  ? `${formatCount(account.followerCount)} 粉丝`
+                                  : "抖音"}
+                              </span>
+                              {refreshStatusBadge(account)}
+                            </div>
+                          </div>
                         </div>
+                      </div>
+
+                      <a
+                        href={account.targetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 flex min-w-0 items-center gap-1.5 rounded-md bg-muted px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                        title={account.targetUrl}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{compactAccountUrl(account.targetUrl)}</span>
+                      </a>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full mt-2.5 text-xs font-semibold border-primary/20 hover:bg-primary/5 hover:text-primary transition-all flex items-center justify-center gap-1.5"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleAnalyze(account.targetUrl)
+                        }}
+                        disabled={analyzingUrl === account.targetUrl}
+                      >
+                        {analyzingUrl === account.targetUrl ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Target className="h-3.5 w-3.5 text-primary" />
+                        )}
+                        {analyzingUrl === account.targetUrl ? "启动分析中..." : "AI 深度调查"}
+                      </Button>
+
+                      <div className="flex items-center justify-between mt-3 pt-3 border-t text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {formatRelativeTime(account.lastRefreshedAt)}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleRefreshOne(account.id)
+                            }}
+                            disabled={refreshingId === account.id || account.refreshStatus === "refreshing"}
+                            title="刷新该账号"
+                          >
+                            <RefreshCw className={`h-3.5 w-3.5 ${refreshingId === account.id ? "animate-spin" : ""}`} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDelete(account.id)
+                            }}
+                            title="移除监控"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {account.refreshStatus === "failed" && account.refreshError && (
+                        <p className="mt-2 rounded-md bg-red-50 px-2.5 py-2 text-xs leading-5 text-red-600">
+                          {formatRefreshError(account.refreshError)}
+                        </p>
                       )}
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm truncate">
-                          {formatAccountName(account)}
-                        </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-muted-foreground">
-                            {account.followerCount != null
-                              ? `${formatCount(account.followerCount)} 粉丝`
-                              : "抖音"}
-                          </span>
-                          {refreshStatusBadge(account)}
-                        </div>
-                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Latest Videos Section */}
+              {activeLatestVideos.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Video className="h-4 w-4" />
+                      最新作品
+                      <Badge variant="secondary" className="text-xs ml-1">{activeLatestVideos.length}</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      {activeLatestVideos.map((video) => renderVideoCard(video))}
                     </div>
-                  </div>
+                  </CardContent>
+                </Card>
+              )}
 
-                  <a
-                    href={account.targetUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 flex min-w-0 items-center gap-1.5 rounded-md bg-muted px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                    title={account.targetUrl}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{compactAccountUrl(account.targetUrl)}</span>
-                  </a>
-
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full mt-2.5 text-xs font-semibold border-primary/20 hover:bg-primary/5 hover:text-primary transition-all flex items-center justify-center gap-1.5"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleAnalyze(account.targetUrl)
-                    }}
-                    disabled={analyzingUrl === account.targetUrl}
-                  >
-                    {analyzingUrl === account.targetUrl ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Target className="h-3.5 w-3.5 text-primary" />
-                    )}
-                    {analyzingUrl === account.targetUrl ? "启动分析中..." : "AI 深度调查"}
-                  </Button>
-
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {formatRelativeTime(account.lastRefreshedAt)}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleRefreshOne(account.id)
-                        }}
-                        disabled={refreshingId === account.id || account.refreshStatus === "refreshing"}
-                        title="刷新该账号"
-                      >
-                        <RefreshCw className={`h-3.5 w-3.5 ${refreshingId === account.id ? "animate-spin" : ""}`} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDelete(account.id)
-                        }}
-                        title="移除监控"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+              {/* Viral Videos Section */}
+              {activeViralVideos.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Flame className="h-4 w-4 text-orange-500" />
+                      爆款作品
+                      <Badge variant="secondary" className="text-xs ml-1">{activeViralVideos.length}</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      {activeViralVideos.map((video) => renderVideoCard(video, { viral: true }))}
                     </div>
-                  </div>
-
-                  {account.refreshStatus === "failed" && account.refreshError && (
-                    <p className="mt-2 rounded-md bg-red-50 px-2.5 py-2 text-xs leading-5 text-red-600">
-                      {formatRefreshError(account.refreshError)}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Latest Videos Section */}
-          {activeLatestVideos.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Video className="h-4 w-4" />
-                  最新作品
-                  <Badge variant="secondary" className="text-xs ml-1">{activeLatestVideos.length}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                  {activeLatestVideos.map((video) => (
-                    <a
-                      key={`${video.account.id}-${video.videoId}`}
-                      href={`https://www.douyin.com/video/${video.videoId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group/video relative aspect-[9/16] rounded-lg overflow-hidden bg-muted"
-                    >
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-linear-to-b from-muted/30 to-muted-foreground/10 p-4">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-background/50 backdrop-blur-xs text-muted-foreground/60 shadow-xs">
-                          <Video className="h-5 w-5" />
-                        </span>
-                      </div>
-                      <img
-                        src={proxyCoverUrl(video.coverUrl)}
-                        alt={video.title || "作品"}
-                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover/video:scale-105"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-linear-to-t from-black/70 via-transparent to-transparent" />
-                      <div className="absolute bottom-0 left-0 right-0 p-2">
-                        <p className="text-xs text-white font-medium line-clamp-1">
-                          {video.title || "无标题"}
-                        </p>
-                        <div className="flex items-center gap-2 text-[10px] text-white/70 mt-0.5">
-                          <span>❤️ {formatCount(video.likes)}</span>
-                          <span>💬 {formatCount(video.comments)}</span>
-                        </div>
-                      </div>
-                      <div className="absolute top-1.5 left-1.5">
-                        <span className="text-[10px] px-1 py-0.5 rounded bg-black/50 text-white/80 truncate max-w-20 block">
-                          {video.account.nickname || ""}
-                        </span>
-                      </div>
-                      <ExternalLink className="absolute top-1.5 right-1.5 h-3 w-3 text-white/50 opacity-0 group-hover/video:opacity-100 transition-opacity" />
-                    </a>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
-
-          {/* Viral Videos Section */}
-          {activeViralVideos.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Flame className="h-4 w-4 text-orange-500" />
-                  爆款作品
-                  <Badge variant="secondary" className="text-xs ml-1">{activeViralVideos.length}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                  {activeViralVideos.map((video) => (
-                    <a
-                      key={`viral-${video.account.id}-${video.videoId}`}
-                      href={`https://www.douyin.com/video/${video.videoId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group/video relative aspect-[9/16] rounded-lg overflow-hidden bg-muted ring-1 ring-orange-300/50"
-                    >
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-linear-to-b from-muted/30 to-muted-foreground/10 p-4">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-background/50 backdrop-blur-xs text-muted-foreground/60 shadow-xs">
-                          <Video className="h-5 w-5" />
-                        </span>
-                      </div>
-                      <img
-                        src={proxyCoverUrl(video.coverUrl)}
-                        alt={video.title || "爆款作品"}
-                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover/video:scale-105"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-linear-to-t from-black/70 via-transparent to-transparent" />
-                      <div className="absolute bottom-0 left-0 right-0 p-2">
-                        <p className="text-xs text-white font-medium line-clamp-1">
-                          {video.title || "无标题"}
-                        </p>
-                        <div className="flex items-center gap-2 text-[10px] text-white/70 mt-0.5">
-                          <span>❤️ {formatCount(video.likes)}</span>
-                          <span>💬 {formatCount(video.comments)}</span>
-                          <span className="text-orange-300">🔥 {formatCount(video.engagementScore)}</span>
-                        </div>
-                      </div>
-                      <div className="absolute top-0 left-0 right-0 p-1 flex justify-between">
-                        <span className="text-[10px] px-1 py-0.5 rounded bg-black/50 text-white/80 truncate max-w-20">
-                          {video.account.nickname || ""}
-                        </span>
-                        <span className="text-[10px] px-1 py-0.5 rounded bg-orange-500/80 text-white font-bold">
-                          爆款
-                        </span>
-                      </div>
-                    </a>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </>
-      )}
     </div>
   )
 }

@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     const user = await authenticateRequest(request)
     const body = await request.json()
     const rawInput = typeof body.rawInput === "string" ? body.rawInput.trim() : ""
+    const agentId = typeof body.agentId === "string" ? body.agentId : undefined
 
     // 解析 taskType
     const taskType: AimTaskType | undefined =
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       projectId: body.projectId.trim(),
       rawInput,
+      agentId,
       targetFormats,
       taskType,
       topicTitle: typeof body.topicTitle === "string" ? body.topicTitle : undefined,

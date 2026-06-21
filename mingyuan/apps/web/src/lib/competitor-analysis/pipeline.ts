@@ -24,7 +24,7 @@ export async function runCompetitorAnalysisPipeline(analysisId: string): Promise
     })
 
     if (analysis.platform !== 'douyin') {
-      throw new Error('第一版对标账号调查暂时只支持抖音主页链接')
+      throw new Error('第一版对标账号分析暂时只支持抖音主页链接')
     }
 
     // ── Step 1: SCRAPE ────────────────────────────────────────

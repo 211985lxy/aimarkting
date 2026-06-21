@@ -1,5 +1,6 @@
 import { LLMClient } from "@/lib/llm/client"
 import { prisma } from "@/lib/prisma"
+import { buildIpCopywritingMethodologyBlock } from "@/lib/ip-copywriting-methodology"
 
 /**
  * 改文案 Agent
@@ -12,17 +13,22 @@ export async function polishCopy(input: {
   rawInput: string
   instruction?: string
 }): Promise<{ content: string; wordCount: number }> {
-  const knowledge = await loadProjectKnowledge(input.userId, input.projectId)
+  const [knowledge, methodologyBlock] = await Promise.all([
+    loadProjectKnowledge(input.userId, input.projectId),
+    buildIpCopywritingMethodologyBlock(),
+  ])
 
   const systemPrompt = `你是一个企业营销文案专家。你的任务是对用户提供的文案进行精修和优化。
 
 ${knowledge}
+${methodologyBlock}
 
 优化原则：
 - 保持原意，提升表达力和信息密度
 - 去除空话、套话、营销黑话
 - 开头必须有钩子（冲突/反差/痛点/利益/好奇）
 - 结尾必须有明确行动号召
+- 直接输出改好的文案，不要追问用户，不要让用户补充资料
 - 禁止使用：赋能、闭环、抓手、颗粒度、对齐、拉通、打通、沉淀、复盘、迭代、链路、触达、心智、赛道
 - 输出纯文本，不要加格式标记或解释`
 
@@ -57,12 +63,16 @@ export async function writeScript(input: {
   rawInput: string
   instruction?: string
 }): Promise<{ content: string; wordCount: number }> {
-  const knowledge = await loadProjectKnowledge(input.userId, input.projectId)
-  const viralBlock = await buildViralStructureBlock()
+  const [knowledge, viralBlock, methodologyBlock] = await Promise.all([
+    loadProjectKnowledge(input.userId, input.projectId),
+    buildViralStructureBlock(),
+    buildIpCopywritingMethodologyBlock(),
+  ])
 
   const systemPrompt = `你是一个企业短视频脚本专家。根据用户提供的信息，生成高质量的口播脚本。
 
 ${knowledge}
+${methodologyBlock}
 ${viralBlock}
 
 脚本要求：
@@ -73,6 +83,7 @@ ${viralBlock}
 - 用口语化表达，禁止书面语
 - 结尾有明确行动号召
 - 必须结合企业知识库中的产品卖点、客户痛点、老板经验
+- 直接输出脚本成稿，不要追问用户，不要让用户补充资料
 - 禁止使用：赋能、闭环、抓手、颗粒度、对齐、拉通、打通、沉淀、复盘、迭代、链路、触达、心智、赛道
 - 输出纯脚本文本，不要加格式标记或解释`
 

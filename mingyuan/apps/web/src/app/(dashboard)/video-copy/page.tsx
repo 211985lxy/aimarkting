@@ -1,6 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import {
+  useEffect,
+  useState,
+} from "react"
 import Link from "next/link"
 import {
   CheckCircle2,
@@ -11,19 +14,24 @@ import {
   RefreshCw,
   Send,
   Video,
+  Wand2,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
+import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import { AiResultPanel } from "@/components/workbench/ai-result-panel"
+import { WorkbenchHero } from "@/components/workbench/workbench-hero"
 import {
   createVideoCopyExtraction,
   listVideoCopyExtractions,
   syncVideoCopyExtraction,
 } from "@/lib/api/client"
-import type { ApiVideoCopyAnalysis, ApiVideoCopyExtraction } from "@/types/api"
+import { shouldOpenDeepCopywriter } from "@/lib/video-copy-routing"
+import type { ApiVideoCopyExtraction } from "@/types/api"
 
 const ACTIVE_STATUSES = new Set(["queued", "extracting", "analyzing"])
 
@@ -61,10 +69,15 @@ export default function VideoCopyPage() {
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [coverFailed, setCoverFailed] = useState(false)
+  const rewriteHref = record && shouldOpenDeepCopywriter(record)
+    ? `/aim?agent=deep_copywriter&videoCopyExtractionId=${record.id}`
+    : record
+      ? `/aim?agent=ip_video&mode=asset_pack&videoCopyExtractionId=${record.id}`
+      : "/aim"
   const [history, setHistory] = useState<ApiVideoCopyExtraction[]>([])
 
   const isActive = record ? ACTIVE_STATUSES.has(record.status) : false
-  const analysis = record?.analysisResult as ApiVideoCopyAnalysis | null | undefined
+  const analysis = record?.analysisResult as { markdown: string } | null | undefined
   const activeRecordId = record?.id
   const activeRecordStatus = record?.status
   const activeRecordUpdatedAt = record?.updatedAt
@@ -134,37 +147,13 @@ export default function VideoCopyPage() {
     return () => window.clearTimeout(timer)
   }, [activeRecordId, activeRecordStatus, activeRecordUpdatedAt, syncing])
 
-  const templateText = useMemo(() => {
-    if (!analysis) return ""
-    return [
-      "开头钩子：",
-      analysis.hook,
-      "",
-      "内容结构：",
-      ...analysis.structure.map((item, index) => `${index + 1}. ${item}`),
-      "",
-      "可复用模板：",
-      analysis.reusableTemplate,
-      "",
-      "模仿建议：",
-      ...analysis.imitationSuggestions.map((item, index) => `${index + 1}. ${item}`),
-    ].join("\n")
-  }, [analysis])
-
   return (
     <div className="space-y-6 pb-10">
-      <section className="rounded-lg border bg-background p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight">视频文案提取分析</h1>
-              <Badge variant="secondary">{statusLabel(record)}</Badge>
-            </div>
-            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              粘贴视频链接，提取原文案并拆解开头、结构、表达技巧和可复用模板。
-            </p>
-          </div>
-          {record ? (
+      <WorkbenchHero
+        title="爆款文案拆解"
+        subtitle="粘贴对标视频链接，提取原文案并拆解结构、心理、商业和可迁移打法，沉淀到选题中心作为参考。"
+        badge={<Badge variant="secondary">{statusLabel(record)}</Badge>}
+        actions={record ? (
             <Button
               variant="outline"
               onClick={() => void sync(record.id)}
@@ -175,8 +164,14 @@ export default function VideoCopyPage() {
               刷新状态
             </Button>
           ) : null}
-        </div>
+      />
 
+      <AiResultPanel
+        title="视频链接"
+        icon={<Send className="h-4 w-4 text-primary" />}
+        meta={<span>支持抖音、B站或其他可识别的视频链接</span>}
+        flat
+      >
         <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto]">
           <Textarea
             value={url}
@@ -193,7 +188,7 @@ export default function VideoCopyPage() {
             开始提取
           </Button>
         </div>
-      </section>
+      </AiResultPanel>
 
       {error ? (
         <Card className="border-destructive/30">
@@ -279,12 +274,12 @@ export default function VideoCopyPage() {
       ) : null}
 
       {record?.transcript ? (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-3 border-b pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <FileText className="h-4 w-4" />
-              原始文案
-            </CardTitle>
+        <AiResultPanel
+          title="原始文案"
+          icon={<FileText className="h-4 w-4 text-primary" />}
+          meta={<span>{record.transcript.length} 字</span>}
+          flat
+          actions={
             <Button
               variant="outline"
               size="sm"
@@ -293,71 +288,60 @@ export default function VideoCopyPage() {
               <Clipboard className="h-4 w-4" />
               复制
             </Button>
-          </CardHeader>
-          <CardContent className="p-4">
-            <p className="whitespace-pre-wrap text-sm leading-7 text-foreground">{record.transcript}</p>
-          </CardContent>
-        </Card>
+          }
+        >
+          <p className="whitespace-pre-wrap text-sm leading-7 text-foreground">{record.transcript}</p>
+        </AiResultPanel>
       ) : null}
 
       {analysis ? (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-3 border-b pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CheckCircle2 className="h-4 w-4" />
-              结构化拆解
-            </CardTitle>
+        <AiResultPanel
+          title="爆款内容商业拆解"
+          icon={<CheckCircle2 className="h-4 w-4 text-primary" />}
+          meta={<span>结构化分析报告</span>}
+          flat
+          actions={
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void copyText(templateText, "模板已复制")}
+              onClick={() => void copyText(analysis.markdown, "分析报告已复制")}
             >
               <Clipboard className="h-4 w-4" />
-              复制模板
+              复制分析报告
             </Button>
-          </CardHeader>
-          <CardContent className="grid gap-4 p-4 md:grid-cols-2">
-            <AnalysisBlock title="开头钩子" content={analysis.hook} />
-            <AnalysisBlock title="情绪/冲突" content={analysis.emotionConflict} />
-            <AnalysisList title="内容结构" items={analysis.structure} />
-            <AnalysisList title="表达技巧" items={analysis.expressionSkills} />
-            <AnalysisBlock title="转化动作" content={analysis.conversionAction} />
-            <AnalysisBlock title="可复用模板" content={analysis.reusableTemplate} />
-            <AnalysisList title="模仿建议" items={analysis.imitationSuggestions} />
-            <AnalysisList title="风险提醒" items={analysis.riskNotes} />
-          </CardContent>
-        </Card>
+          }
+        >
+          <MarkdownRenderer content={analysis.markdown} />
+        </AiResultPanel>
       ) : record?.analysisError ? (
         <Card className="border-amber-200">
           <CardContent className="p-4 text-sm text-amber-700">{record.analysisError}</CardContent>
         </Card>
       ) : null}
+
+      {record?.status === "completed" && record.transcript ? (
+        <AiResultPanel
+          title="改写成我的文案"
+          icon={<Wand2 className="h-4 w-4 text-primary" />}
+          meta={<span>带入原文案、拆解结果和保留结构原则</span>}
+          flat
+          actions={
+            <Link
+              href={rewriteHref}
+              className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              <Wand2 className="h-4 w-4" />
+              {shouldOpenDeepCopywriter(record) ? "进入深度文案创作" : "改写成内容资产包"}
+            </Link>
+          }
+        >
+          <p className="text-sm leading-6 text-muted-foreground">
+            {shouldOpenDeepCopywriter(record)
+              ? "长文案会进入深度文案官，先沉淀观点和结构，再改写成可拆分复用的深度母稿。"
+              : "改写会在内容生产官里进行，基于本参考文案、拆解结果和改写原则，为您一键生成全套内容资产包。"}
+          </p>
+        </AiResultPanel>
+      ) : null}
     </div>
-  )
-}
-
-function AnalysisBlock({ title, content }: { title: string; content: string }) {
-  return (
-    <section className="space-y-2 rounded-md border p-3">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      <p className="text-sm leading-6 text-muted-foreground">{content || "暂无"}</p>
-    </section>
-  )
-}
-
-function AnalysisList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <section className="space-y-2 rounded-md border p-3">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      {items.length > 0 ? (
-        <ol className="space-y-1 text-sm leading-6 text-muted-foreground">
-          {items.map((item, index) => (
-            <li key={`${title}-${index}`}>{index + 1}. {item}</li>
-          ))}
-        </ol>
-      ) : (
-        <p className="text-sm text-muted-foreground">暂无</p>
-      )}
-    </section>
   )
 }

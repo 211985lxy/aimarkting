@@ -39,6 +39,39 @@ export const GET = withAdminAuth(async (request) => {
   })
 })
 
+// POST — 管理员手动录入知识条目
+export const POST = withAdminAuth(async (request, { admin }) => {
+  const body = await request.json()
+  const { category, title, content, tags, sourceType } = body
+
+  if (!category || !title || !content) {
+    return NextResponse.json({ error: "category, title, content 必填" }, { status: 400 })
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: admin.email },
+    select: { id: true },
+  })
+
+  if (!user) {
+    return NextResponse.json({ error: "未找到同邮箱前台用户，无法绑定知识条目" }, { status: 400 })
+  }
+
+  const entry = await prisma.knowledgeEntry.create({
+    data: {
+      userId: user.id,
+      category,
+      title,
+      content,
+      tags: Array.isArray(tags) ? tags : [],
+      sourceType: sourceType || "manual",
+      status: "active",
+    },
+  })
+
+  return NextResponse.json({ data: entry }, { status: 201 })
+})
+
 // PUT — 管理员强制批量更新（批量变更状态或分类）
 export const PUT = withAdminAuth(async (request) => {
   const body = await request.json()

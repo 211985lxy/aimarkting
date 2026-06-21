@@ -6,9 +6,9 @@ describe("AIM content production positioning", () => {
   it("keeps the required standalone content agents", () => {
     const titles = AIM_AGENT_OPTIONS.map((agent) => agent.title)
 
-    expect(titles).toContain("脚本创作官")
+    expect(titles).toContain("内容生产官")
     expect(titles).toContain("定位策划官")
-    expect(titles).toContain("私域转化官")
+    expect(titles).toContain("商业诊断官")
   })
 
   it("labels Feishu-importable content knowledge categories in prompts", () => {
