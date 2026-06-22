@@ -169,7 +169,7 @@ ${params.methodologyBlock}
 你的对话原则：
 1. 文案类智能体不追问客户，不让客户补充资料，不输出追问式开场。
 2. 如果信息不足，基于已有上下文做合理假设，直接给出一个可用版本。
-3. 可以说明“我会先按某个方向处理”，但后面必须跟成稿、结构方案或可复制文案。
+3. 可以说明"我会先按某个方向处理"，但后面必须跟成稿、结构方案或可复制文案。
 4. 绝对不要说 AI 味的官腔、客套话（如"很高兴能与您碰撞"、"这是一个非常好的切入点"等）。
 5. 先保住人的位置、代价和手迹，再清理 AI 腔、宣传腔、整齐排比和万能结尾。
 6. 如果用户确实需要先做定位或诊断，只给一句简短建议引导去定位策划官或商业诊断官，不在内容生产官里追问。
@@ -211,6 +211,9 @@ ${params.methodologyBlock}
 class DeepCopywriterHandler implements AimAgentHandler {
   agentId = "deep_copywriter" as const
 
+  /** 深度文案官在 generate 模式下只允许产出全文类格式 */
+  private static readonly ALLOWED_GENERATE_FORMATS = new Set<ContentFormat>(["raw_copy", "wechat_article"])
+
   async chat(params: AimChatParams): Promise<AimChatResponse> {
     const systemPrompt = `你是一个深度文案官，负责把想法、视频原文、老板口述或对标文案，打磨成一篇高质量、可拆分复用的深度母稿。
 
@@ -227,7 +230,7 @@ ${params.methodologyBlock}
 A. 选项内容
 B. 选项内容
 C. 选项内容
-4. 不要只抛开放式问题；如果需要用户补充，把“也可以补一句真实想法”放在选项之后。
+4. 不要只抛开放式问题；如果需要用户补充，把"也可以补一句真实想法"放在选项之后。
 5. 用户回答后，再输出观点确认、大纲、第一句话/前3秒钩子和深度母稿。
 6. 如果用户一开始已经提供足够强的观点和经历，可以少问，但仍至少做一次观点确认。
 7. 热点只能基于用户提供的热点、已有上下文或明确行业趋势自然融合，禁止硬蹭或编造。
@@ -240,11 +243,24 @@ C. 选项内容
   }
 
   async generate(context: AimGenerateContext): Promise<AimGenerateResponse> {
+    // ── 输出边界：强制只允许全文类格式 ──
+    const allowed = context.targetFormats.filter((f) =>
+      DeepCopywriterHandler.ALLOWED_GENERATE_FORMATS.has(f)
+    )
+    // 如果所有请求格式都不在允许范围内，默认产出 raw_copy
+    const safeTargets = allowed.length > 0 ? allowed : ["raw_copy" as ContentFormat]
+
     const agentPrompt = `你是一个深度文案官，专门把想法、视频原文、老板口述或对标文案打磨成高质量深度长文正文。
 
-生成规则：
-- 直接输出一篇完整深度长文正文。
-- 不输出观点确认卡、热点判断、内容大纲、开头钩子、备选版本、后续拆分方向或平台分发建议。
+【核心输出规则 — 严格遵循】
+- 你只能输出一篇完整深度长文正文，禁止输出以下任何内容：
+  ✗ 观点确认卡
+  ✗ 热点判断
+  ✗ 内容大纲
+  ✗ 开头钩子或前 3 秒设计
+  ✗ 备选版本
+  ✗ 后续拆分方向（如"可以拆成朋友圈/短视频"）
+  ✗ 朋友圈、短视频、公众号、私域话术等平台分发内容
 - 正文可以口播化，但必须是一篇连续长文，不要拆成多个交付模块。
 - 热点只能基于用户提供的热点、已有上下文或明确行业趋势自然融合，禁止硬蹭或编造。
 - 先保住人的位置、代价和手迹，再清理 AI 腔、宣传腔、整齐排比和万能结尾。
@@ -258,7 +274,7 @@ ${context.methodologyBlock}
 内部工作流程：
 1. 围绕选题主张或输入素材，展开成文。
 2. 保持真实口语感、情绪共鸣与深刻洞察，杜绝公文宣传腔和万金油排比句。
-3. 不管用户要求何种格式，一律直接输出完整深度长文正文。
+3. 不管用户要求何种格式，一律只输出一篇完整深度长文正文，不加任何附加结构标记。
 
 请严格按照格式输出。不要添加任何附加的大纲、钩子栏目或标题标记。`
 
@@ -266,26 +282,27 @@ ${context.methodologyBlock}
     const userPrompt = `用户输入的原始内容：
 "${context.rawInput}"
 
-${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
+${workflowContext ? `工作流上下文：
+${workflowContext}
 
-请生成这篇深度长文正文。`
+` : ""}
+
+请生成这篇深度长文正文。直接输出正文，不要包含任何解释性文字。`
 
     const completion = await executeGenerateLLM(systemPrompt, userPrompt)
-    
-    // 强制深度文案官产出的所有请求格式皆填充为这篇深度长文正文
+
     const rawText = completion.content.trim()
-    
+
     const parsed: Record<ContentFormat, string | undefined> = {
       video_script: undefined,
       wechat_article: undefined,
       moments_post: undefined,
       community_message: undefined,
       shooting_brief: undefined,
-      raw_copy: rawText, // 只填充为 raw_copy 
+      raw_copy: safeTargets.includes("raw_copy") ? rawText : undefined,
     }
-    
-    // 如果用户确实请求了 wechat_article，将该文填到 wechatArticle 字段
-    if (context.targetFormats.includes("wechat_article")) {
+
+    if (safeTargets.includes("wechat_article")) {
       parsed.wechat_article = rawText
     }
 
@@ -293,7 +310,7 @@ ${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
 
     return {
       id: record.id,
-      results: context.targetFormats.map((format) => ({
+      results: safeTargets.map((format) => ({
         format,
         content: rawText,
         wordCount: rawText.length,
@@ -307,6 +324,9 @@ ${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
 
 class BusinessSystemDiagnosisHandler implements AimAgentHandler {
   agentId = "business_system_diagnosis" as const
+
+  /** 商业诊断官仅产出诊断报告 */
+  private static readonly ALLOWED_GENERATE_FORMATS = new Set<ContentFormat>(["raw_copy"])
 
   async chat(params: AimChatParams): Promise<AimChatResponse> {
     const systemPrompt = `你是一个企业商业诊断官，正在帮助用户做一次生意系统体检。
@@ -322,7 +342,7 @@ ${params.businessDiagnosisBlock}
 2. 重点围绕业务类型、现状数据、真实目标、约束条件、验收标准追问。
 3. 统一呈现为生意系统体检，不解释内部方法来源。
 4. 如果信息已经足够，提醒用户可以点击【一键生成】生成完整诊断报告。
-5. 不要让用户做开放式填空题；如果必须开放补充，把它放在选项之后，作为“也可以补充具体情况”。
+5. 不要让用户做开放式填空题；如果必须开放补充，把它放在选项之后，作为"也可以补充具体情况"。
 
 请直接根据上文与用户的历史对话，产出你下一轮的建议或追问。`
 
@@ -330,6 +350,12 @@ ${params.businessDiagnosisBlock}
   }
 
   async generate(context: AimGenerateContext): Promise<AimGenerateResponse> {
+    // ── 输出边界：只产出 raw_copy 诊断报告 ──
+    const safeTargets = context.targetFormats.filter((f) =>
+      BusinessSystemDiagnosisHandler.ALLOWED_GENERATE_FORMATS.has(f)
+    )
+    const effectiveFormats = safeTargets.length > 0 ? safeTargets : ["raw_copy" as ContentFormat]
+
     const systemPrompt = `你是一个企业商业诊断官，负责根据与用户的沟通事实，结合企业知识库，生成专业的生意系统体检报告。
 
 商业诊断方法论（体检评判准则）：
@@ -344,15 +370,19 @@ ${context.knowledgeBlock}
 3. 关键业务痛点（结合企业已有痛点背景）
 4. 落地改造优化路径及具体改造动作（至少给出 3 个切实可行的战术动作）
 
+【禁止输出】短视频脚本、朋友圈文案、社群文案、拍摄交接单、公众号文章等任何营销分发内容。
 请严格以专业、敏锐、逻辑严密的视角完成报告，不要说任何AI官腔。直接输出报告，不输出无关的大纲、钩子或朋友圈文案分发内容。`
 
     const workflowContext = buildWorkflowContext(context)
     const userPrompt = `用户输入的原始信息与对话记录：
 "${context.rawInput}"
 
-${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
+${workflowContext ? `工作流上下文：
+${workflowContext}
 
-请生成这份详细的“生意系统体检报告”。`
+` : ""}
+
+请生成这份详细的"生意系统体检报告"。`
 
     const completion = await executeGenerateLLM(systemPrompt, userPrompt)
     const rawText = completion.content.trim()
@@ -370,7 +400,7 @@ ${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
 
     return {
       id: record.id,
-      results: context.targetFormats.map((format) => ({
+      results: effectiveFormats.map((format) => ({
         format,
         content: rawText,
         wordCount: rawText.length,
@@ -385,6 +415,9 @@ ${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
 class BusinessDiagnosisHandler implements AimAgentHandler {
   agentId = "business_diagnosis" as const
 
+  /** 定位策划官仅产出定位方案 */
+  private static readonly ALLOWED_GENERATE_FORMATS = new Set<ContentFormat>(["raw_copy"])
+
   async chat(params: AimChatParams): Promise<AimChatResponse> {
     const systemPrompt = `你是一个定位策划官，负责帮助用户明确 IP 定位、人设定位、内容定位和初始成交路径。
 
@@ -394,7 +427,7 @@ ${params.knowledgeBlock}
 你的对话原则：
 1. 只处理 IP 本身：这个人如何站出来、被谁信任、讲什么内容、承接什么产品。
 2. 信息不足时，每次只追问一个最关键问题，并给出 2-4 个可选答案让用户选择。
-3. 不要让用户做开放式填空题；选项必须具体，例如“专家型 / 老板实战型 / 陪伴型 / 行业观察型”。
+3. 不要让用户做开放式填空题；选项必须具体，例如"专家型 / 老板实战型 / 陪伴型 / 行业观察型"。
 4. 如果信息已经足够，提醒用户可以点击【一键生成】生成定位方案。
 
 请直接根据上文与用户的历史对话，产出你下一轮的建议或追问。`
@@ -403,6 +436,12 @@ ${params.knowledgeBlock}
   }
 
   async generate(context: AimGenerateContext): Promise<AimGenerateResponse> {
+    // ── 输出边界：只产出 raw_copy 定位方案 ──
+    const safeTargets = context.targetFormats.filter((f) =>
+      BusinessDiagnosisHandler.ALLOWED_GENERATE_FORMATS.has(f)
+    )
+    const effectiveFormats = safeTargets.length > 0 ? safeTargets : ["raw_copy" as ContentFormat]
+
     const systemPrompt = `你是一个定位策划官，负责为企业老板明确 IP 营销的全局定位与成交路径方案。
 
 企业已有核心知识库（参考背景）：
@@ -414,15 +453,19 @@ ${context.knowledgeBlock}
 3. 核心内容体系规划：梳理 3 大核心内容方向/选题专栏，并设计爆款选题示范。
 4. 初始成交路径设计：用户从刷到短视频、进粉丝群，到最终加私域成交的完整路线指引。
 
+【禁止输出】短视频脚本、朋友圈文案、社群文案、拍摄交接单、公众号文章等任何营销分发内容。
 请直接交付一份落地方案，语气干练、坚定、去AI味，不用加任何多余的开头废话，直接输出正文。`
 
     const workflowContext = buildWorkflowContext(context)
     const userPrompt = `用户输入的原始信息与背景：
 "${context.rawInput}"
 
-${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
+${workflowContext ? `工作流上下文：
+${workflowContext}
 
-请生成这份详细的“IP营销策划定位方案”。`
+` : ""}
+
+请生成这份详细的"IP营销策划定位方案"。`
 
     const completion = await executeGenerateLLM(systemPrompt, userPrompt)
     const rawText = completion.content.trim()
@@ -440,7 +483,7 @@ ${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
 
     return {
       id: record.id,
-      results: context.targetFormats.map((format) => ({
+      results: effectiveFormats.map((format) => ({
         format,
         content: rawText,
         wordCount: rawText.length,
@@ -454,6 +497,9 @@ ${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
 
 class ContentReviewHandler implements AimAgentHandler {
   agentId = "content_review" as const
+
+  /** 数据复盘官仅产出复盘报告 */
+  private static readonly ALLOWED_GENERATE_FORMATS = new Set<ContentFormat>(["raw_copy"])
 
   async chat(params: AimChatParams): Promise<AimChatResponse> {
     const systemPrompt = `你是一个内容复盘官，负责根据已发布内容、播放互动数据、评论反馈和转化情况，判断内容表现，并给出下一轮优化和复用方向。
@@ -474,6 +520,12 @@ ${params.knowledgeBlock}
   }
 
   async generate(context: AimGenerateContext): Promise<AimGenerateResponse> {
+    // ── 输出边界：只产出 raw_copy 复盘报告 ──
+    const safeTargets = context.targetFormats.filter((f) =>
+      ContentReviewHandler.ALLOWED_GENERATE_FORMATS.has(f)
+    )
+    const effectiveFormats = safeTargets.length > 0 ? safeTargets : ["raw_copy" as ContentFormat]
+
     const systemPrompt = `你是一个内容数据复盘官，负责结合已发布视频/文章的实际播放表现、互动指标或用户反馈，进行深度剖析，输出调优建议。
 
 企业已有核心知识库（参考背景）：
@@ -485,15 +537,19 @@ ${context.knowledgeBlock}
 3. 爆款选题/内容资产的二次复用与延展建议。
 4. 下一轮迭代调优的具体行动单：包括怎么改开头、保留什么表达，如何调整私域转化动作。
 
+【禁止输出】短视频脚本、朋友圈文案、社群文案、拍摄交接单、公众号文章等任何新的营销分发内容。
 请直接输出复盘建议，不写套话、黑话和前言，直接输出复盘报告。`
 
     const workflowContext = buildWorkflowContext(context)
     const userPrompt = `用户输入的内容表现与相关数据反馈：
 "${context.rawInput}"
 
-${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
+${workflowContext ? `工作流上下文：
+${workflowContext}
 
-请生成这份详细的“内容数据复盘报告”。`
+` : ""}
+
+请生成这份详细的"内容数据复盘报告"。`
 
     const completion = await executeGenerateLLM(systemPrompt, userPrompt)
     const rawText = completion.content.trim()
@@ -511,7 +567,7 @@ ${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
 
     return {
       id: record.id,
-      results: context.targetFormats.map((format) => ({
+      results: effectiveFormats.map((format) => ({
         format,
         content: rawText,
         wordCount: rawText.length,
@@ -539,9 +595,23 @@ const VALID_AGENT_IDS = new Set<string>([
   "content_review",
 ])
 
+/** 前端/外部 API 使用的别名 → 内部 handler ID 映射 */
+const AGENT_ID_ALIASES: Record<string, AimAgentId> = {
+  ip_video: "content_producer",
+}
+
 export function getAgentHandler(agentId: string): AimAgentHandler {
-  const normalizedId = VALID_AGENT_IDS.has(agentId) ? (agentId as AimAgentId) : "content_producer"
-  return HANDLERS[normalizedId]
+  // 1. 直接命中
+  if (VALID_AGENT_IDS.has(agentId)) {
+    return HANDLERS[agentId as AimAgentId]
+  }
+  // 2. 尝试别名映射
+  const aliased = AGENT_ID_ALIASES[agentId]
+  if (aliased && VALID_AGENT_IDS.has(aliased)) {
+    return HANDLERS[aliased]
+  }
+  // 3. 回退到默认 handler
+  return HANDLERS.content_producer
 }
 
 /**
