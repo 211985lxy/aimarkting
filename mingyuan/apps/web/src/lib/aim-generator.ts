@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma"
 import { LLMClient } from "@/lib/llm/client"
 import { buildIpCopywritingMethodologyBlock } from "@/lib/ip-copywriting-methodology"
 import { buildBusinessDiagnosisMethodologyBlock } from "@/lib/business-diagnosis-methodology"
-import { retrieveRelevantKnowledge, ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
 import { buildAimGeneration } from "./aim-agent-handlers"
 
 export type ContentFormat =
@@ -30,20 +29,6 @@ interface AimInput {
   topicRationale?: string
   hotTopic?: string
   polishInstruction?: string
-}
-
-const CATEGORY_LABELS: Record<string, string> = {
-  boss_experience: "老板经验",
-  product_usp: "产品卖点",
-  customer_pain: "客户痛点",
-  project_case: "项目案例",
-  customer_qa: "客户问答",
-  daily_inspiration: "日常灵感",
-  benchmark_reference: "对标参考",
-  user_insight: "用户洞察",
-  hot_topic: "热点素材",
-  positioning_material: "定位素材",
-  private_domain_material: "私域素材",
 }
 
 function asStringArray(value: unknown): string[] {
@@ -120,28 +105,6 @@ export async function buildViralStructureBlock(): Promise<string> {
     }
   }
 
-  return block
-}
-
-export function buildKnowledgeBlock(
-  entries: Array<{ category: string; title: string; content: string }>
-): string {
-  if (entries.length === 0) return ""
-
-  const grouped = new Map<string, typeof entries>()
-  for (const entry of entries) {
-    const list = grouped.get(entry.category) || []
-    list.push(entry)
-    grouped.set(entry.category, list)
-  }
-
-  let block = "\n\n=== 企业知识库 ===\n"
-  for (const [category, items] of grouped) {
-    block += `\n【${CATEGORY_LABELS[category] || category}】\n`
-    for (const item of items) {
-      block += `- ${item.title}：${item.content}\n`
-    }
-  }
   return block
 }
 

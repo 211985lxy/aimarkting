@@ -4,11 +4,11 @@ import type { ChatMessage } from "@/lib/llm/types"
 import { buildIpCopywritingMethodologyBlock } from "@/lib/ip-copywriting-methodology"
 import { buildBusinessDiagnosisMethodologyBlock } from "@/lib/business-diagnosis-methodology"
 import { retrieveRelevantKnowledge, ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
+import { buildAimKnowledgeContext, fireKnowledgeEmbedding } from "@/lib/aim-knowledge-context"
 import {
   ContentFormat,
   AimTaskType,
   buildViralStructureBlock,
-  buildKnowledgeBlock,
   parseMultiFormatResponse,
 } from "./aim-generator"
 
@@ -653,40 +653,40 @@ export async function buildAimGeneration(agentId: string, params: Omit<AimGenera
     }
   }
 
-  // 2. 并行读取通用背景资产
-  const [retrieved, viralStructureBlock, methodologyBlock, businessDiagnosisBlock] = await Promise.all([
-    retrieveRelevantKnowledge({
-      userId: params.userId,
-      projectId: params.projectId,
-      query: params.rawInput,
-      topicTitle: params.topicTitle,
-      topicRationale: params.topicRationale,
-      topK: 12,
-    }),
+  // 2. 并行读取通用背景资产（统一知识上下文）
+  const [knowledgeCtx, viralStructureBlock, methodologyBlock, businessDiagnosisBlock] = await Promise.all([
+    params.projectId
+      ? buildAimKnowledgeContext({
+          userId: params.userId,
+          projectId: params.projectId,
+          agentId,
+          query: params.rawInput,
+          topicTitle: params.topicTitle,
+          topicRationale: params.topicRationale,
+        })
+      : Promise.resolve({
+          knowledgeBlock: "",
+          entries: [],
+          source: "raw" as const,
+        }),
     buildViralStructureBlock(),
     buildIpCopywritingMethodologyBlock(),
     agentId === "business_system_diagnosis" ? buildBusinessDiagnosisMethodologyBlock() : Promise.resolve(""),
   ])
 
-  const knowledgeBlock = buildKnowledgeBlock(retrieved.entries)
-
   // 3. 调用具体的智能体 Handler
   const response = await handler.generate({
     ...params,
-    knowledgeBlock,
+    knowledgeBlock: knowledgeCtx.knowledgeBlock,
     methodologyBlock,
     businessDiagnosisBlock,
     viralStructureBlock,
-    retrievedEntries: retrieved.entries,
-    retrievedSource: retrieved.source,
+    retrievedEntries: knowledgeCtx.entries,
+    retrievedSource: knowledgeCtx.source,
   })
 
   // 4. 后续处理 (Fire-and-forget 向量写入)
-  if (retrieved.source === "raw") {
-    for (const entry of retrieved.entries) {
-      ensureKnowledgeEmbedding(entry.id).catch(() => {})
-    }
-  }
+  fireKnowledgeEmbedding(knowledgeCtx.entries, knowledgeCtx.source)
 
   return response
 }

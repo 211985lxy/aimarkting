@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { authenticateRequest, authErrorResponse } from "@/lib/user-auth"
-import { prisma } from "@/lib/prisma"
 import { buildAimChatResponse } from "@/lib/aim-agent-handlers"
-import { handleLarkToolAction, buildKnowledgeBlock } from "@/lib/aim-tool-actions"
+import { handleLarkToolAction } from "@/lib/aim-tool-actions"
+import { buildAimKnowledgeContext } from "@/lib/aim-knowledge-context"
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,18 +27,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result)
     }
 
-    // ── 普通聊天 ──
-    const knowledge = await prisma.knowledgeEntry.findMany({
-      where: {
-        userId: user.id,
-        status: "active",
-        ...(projectId ? { projectId } : {}),
-      },
-      orderBy: { sortOrder: "asc" },
-      take: 50,
-    })
+    // ── 普通聊天：使用统一知识上下文 ──
+    const lastMessage = messages[messages.length - 1]
+    const query = typeof lastMessage?.content === "string" ? lastMessage.content.slice(0, 500) : ""
 
-    const knowledgeBlock = buildKnowledgeBlock(knowledge)
+    const { knowledgeBlock } = await buildAimKnowledgeContext({
+      userId: user.id,
+      projectId: projectId || "<no-project>",
+      agentId,
+      query,
+    }).catch(() => ({ knowledgeBlock: "", entries: [], source: "raw" as const }))
 
     const chatResponse = await buildAimChatResponse(agentId, {
       userId: user.id,
