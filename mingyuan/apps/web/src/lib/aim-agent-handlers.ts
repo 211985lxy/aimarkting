@@ -5,6 +5,7 @@ import { buildIpCopywritingMethodologyBlock } from "@/lib/ip-copywriting-methodo
 import { buildBusinessDiagnosisMethodologyBlock } from "@/lib/business-diagnosis-methodology"
 import { retrieveRelevantKnowledge, ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
 import { buildAimKnowledgeContext, fireKnowledgeEmbedding } from "@/lib/aim-knowledge-context"
+import { compressAimMessages } from "@/lib/aim-context-compressor"
 import {
   ContentFormat,
   AimTaskType,
@@ -619,7 +620,13 @@ export function getAgentHandler(agentId: string): AimAgentHandler {
  */
 export async function buildAimChatResponse(agentId: string, params: Omit<AimChatParams, "methodologyBlock" | "businessDiagnosisBlock">): Promise<AimChatResponse> {
   const handler = getAgentHandler(agentId)
-  
+
+  // 上下文压缩（对长对话保留最近轮次，早轮压缩成摘要）
+  const compressed = compressAimMessages(agentId, params.messages)
+  const enrichedKnowledgeBlock = compressed.didCompress
+    ? `【对话摘要】\n${compressed.summary}\n\n${params.knowledgeBlock}`
+    : params.knowledgeBlock
+
   const [methodologyBlock, businessDiagnosisBlock] = await Promise.all([
     buildIpCopywritingMethodologyBlock(),
     agentId === "business_system_diagnosis" ? buildBusinessDiagnosisMethodologyBlock() : Promise.resolve(""),
@@ -627,6 +634,7 @@ export async function buildAimChatResponse(agentId: string, params: Omit<AimChat
 
   return handler.chat({
     ...params,
+    knowledgeBlock: enrichedKnowledgeBlock,
     methodologyBlock,
     businessDiagnosisBlock,
   })
@@ -675,9 +683,16 @@ export async function buildAimGeneration(agentId: string, params: Omit<AimGenera
   ])
 
   // 3. 调用具体的智能体 Handler
+  //    加入压缩摘要（如有必要，将用户原始输入视为消息列表）
+  const generateMessages = [{ role: "user" as const, content: params.rawInput }]
+  const compressed = compressAimMessages(agentId, generateMessages)
+  const knowledgeWithContext = compressed.didCompress
+    ? `【对话摘要】\n${compressed.summary}\n\n${knowledgeCtx.knowledgeBlock}`
+    : knowledgeCtx.knowledgeBlock
+
   const response = await handler.generate({
     ...params,
-    knowledgeBlock: knowledgeCtx.knowledgeBlock,
+    knowledgeBlock: knowledgeWithContext,
     methodologyBlock,
     businessDiagnosisBlock,
     viralStructureBlock,
