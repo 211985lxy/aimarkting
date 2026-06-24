@@ -633,7 +633,7 @@ export type CompetitorAnalysisStatus =
   | "completed"
   | "failed"
 
-export type CompetitorCollectionSource = "external_api" | "local_browser" | "tikhub_api";
+export type CompetitorCollectionSource = "external_api" | "redfox_api" | "local_browser" | "tikhub_api";
 
 export interface ApiCompetitorAnalysis {
   id: string;

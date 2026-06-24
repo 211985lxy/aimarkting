@@ -29,7 +29,7 @@ export async function runCompetitorAnalysisPipeline(analysisId: string): Promise
 
     // ── Step 1: SCRAPE ────────────────────────────────────────
     await updateStatus(analysisId, 'scraping')
-    log.info('Step 1: Collecting account data with local browser first')
+    log.info('Step 1: Collecting account data')
 
     const collected = await collectDouyinCompetitorData({
       targetUrl: analysis.targetUrl,

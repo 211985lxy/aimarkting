@@ -93,6 +93,7 @@ function platformLabel(platform: string) {
 
 function collectionSourceLabel(source: ApiCompetitorAnalysis["collectionSource"]) {
   if (source === "external_api") return "云端 API 采集"
+  if (source === "redfox_api") return "RedFox 采集"
   if (source === "local_browser") return "本地浏览器采集"
   if (source === "tikhub_api") return "API 兜底采集"
   return null

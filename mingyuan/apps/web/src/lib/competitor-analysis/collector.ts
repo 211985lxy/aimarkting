@@ -3,6 +3,10 @@ import {
   fetchFromExternalDouyinApi,
   hasExternalDouyinApi,
 } from './external-douyin-api'
+import {
+  fetchFromRedFoxDouyinApi,
+  hasRedFoxDouyinApi,
+} from './redfox-douyin-api'
 import { fetchFromLocalCrawler } from './local-crawler'
 import type {
   NormalizedAccount,
@@ -12,7 +16,7 @@ import type {
   VideoStats,
 } from '@/lib/tikhub/types'
 
-export type CompetitorCollectionSource = 'external_api' | 'local_browser' | 'tikhub_api'
+export type CompetitorCollectionSource = 'external_api' | 'redfox_api' | 'local_browser' | 'tikhub_api'
 
 export interface CompetitorCollectionResult {
   platformUserId: string
@@ -33,8 +37,10 @@ interface CollectDouyinInput {
 interface CollectDouyinDeps {
   fetchFromLocalCrawler?: typeof fetchFromLocalCrawler
   fetchFromExternalApi?: typeof fetchFromExternalDouyinApi
+  fetchFromRedFoxApi?: typeof fetchFromRedFoxDouyinApi
   apiAdapter?: PlatformAdapter
   hasExternalApi?: () => boolean
+  hasRedFoxApi?: () => boolean
   hasTikHubApiKey?: () => boolean
   hasLocalCrawler?: () => boolean
 }
@@ -45,7 +51,9 @@ export async function collectDouyinCompetitorData(
 ): Promise<CompetitorCollectionResult> {
   const count = input.count ?? 50
   const externalApi = deps.fetchFromExternalApi ?? fetchFromExternalDouyinApi
+  const redfoxApi = deps.fetchFromRedFoxApi ?? fetchFromRedFoxDouyinApi
   const canUseExternalApi = deps.hasExternalApi ?? hasExternalDouyinApi
+  const canUseRedFoxApi = deps.hasRedFoxApi ?? hasRedFoxDouyinApi
   const localCrawler = deps.fetchFromLocalCrawler ?? fetchFromLocalCrawler
   const apiAdapter = deps.apiAdapter ?? new DouyinAdapter({ localFallback: false })
   const hasTikHubApiKey = deps.hasTikHubApiKey ?? (() => Boolean(process.env.TIKHUB_API_KEY))
@@ -68,8 +76,21 @@ export async function collectDouyinCompetitorData(
     }
   }
 
-  if (hasTikHubApiKey()) {
-    return collectFromApiAdapter(apiAdapter, input, count, false, null)
+  if (canUseRedFoxApi()) {
+    const redfox = await redfoxApi({
+      targetUrl: input.targetUrl,
+      platformUserId: input.platformUserId,
+      count,
+    })
+    return {
+      platformUserId: redfox.platformUserId,
+      account: redfox.account,
+      videos: redfox.videos.slice(0, count),
+      comments: redfox.comments,
+      collectionSource: 'redfox_api',
+      fallbackUsed: false,
+      fallbackReason: null,
+    }
   }
 
   if (hasLocalCrawler()) {
@@ -95,7 +116,11 @@ export async function collectDouyinCompetitorData(
     }
   }
 
-  throw new Error('未配置真实对标账号抓取服务：请配置 COMPETITOR_DOUYIN_API_URL 或 TIKHUB_API_KEY。本地浏览器爬虫仅用于调试，可设置 LOCAL_CRAWLER_ENABLED=true。')
+  if (hasTikHubApiKey()) {
+    return collectFromApiAdapter(apiAdapter, input, count, false, null)
+  }
+
+  throw new Error('未配置真实对标账号抓取服务：请配置 COMPETITOR_DOUYIN_API_URL、REDFOX_API_KEY 或 TIKHUB_API_KEY。本地浏览器爬虫仅用于调试，可设置 LOCAL_CRAWLER_ENABLED=true。')
 }
 
 async function collectFromApiAdapter(

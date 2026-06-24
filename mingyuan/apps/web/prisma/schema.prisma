@@ -845,7 +845,7 @@ model CompetitorAnalysis {
   rawCommentData    Json?    // Comment samples
 
   // Collection source
-  collectionSource  String?  @db.VarChar(40) // local_browser | tikhub_api
+  collectionSource  String?  @db.VarChar(40) // external_api | redfox_api | local_browser | tikhub_api
   fallbackUsed      Boolean  @default(false)
   fallbackReason    String?  @db.Text
 
