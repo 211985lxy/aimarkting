@@ -94,12 +94,10 @@ async function fetchWorkList(
   let offset = 0
 
   while (raw.length < count) {
-    const data = await redfoxPost<RedFoxWorkList>('/story/api/dyData/queryWorkList', {
-      authorUrl: input.targetUrl,
-      secUserId: input.platformUserId || extractUserPathId(input.targetUrl),
-      offset,
-      sortType: '_2',
-    })
+    const data = await redfoxPost<RedFoxWorkList>(
+      '/story/api/dyData/queryWorkList',
+      buildWorkListBody(input, offset),
+    )
 
     const list = Array.isArray(data.list) ? data.list : []
     raw.push(...list)
@@ -111,6 +109,29 @@ async function fetchWorkList(
     raw: raw.slice(0, count),
     items: raw.slice(0, count).map(normalizeVideo).filter((v): v is NormalizedVideo => Boolean(v)),
   }
+}
+
+function buildWorkListBody(
+  input: { targetUrl: string; platformUserId: string | null },
+  offset: number,
+): Record<string, unknown> {
+  const userPathId = extractUserPathId(input.targetUrl)
+  const userId = input.platformUserId || userPathId
+  const body: Record<string, unknown> = {
+    authorUrl: input.targetUrl,
+    offset,
+    sortType: '_2',
+  }
+
+  if (userId) {
+    if (isSecUserId(userId)) {
+      body.secUserId = userId
+    } else {
+      body.accountId = userId
+    }
+  }
+
+  return body
 }
 
 async function fetchUser(accountId: string | null): Promise<RedFoxUser | null> {
@@ -185,6 +206,10 @@ function extractUserPathId(url: string): string | null {
   } catch {
     return null
   }
+}
+
+function isSecUserId(value: string): boolean {
+  return value.startsWith('MS4w')
 }
 
 function firstLine(value: string | undefined): string {

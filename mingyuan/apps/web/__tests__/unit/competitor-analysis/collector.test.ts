@@ -322,5 +322,52 @@ describe('fetchFromRedFoxDouyinApi', () => {
     })
     expect(result.comments).toEqual([])
     expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      authorUrl: 'https://www.douyin.com/user/MS4wLjABAAAAtest',
+      secUserId: 'MS4wLjABAAAAtest',
+      offset: 0,
+      sortType: '_2',
+    })
+  })
+
+  it('sends a RedFox accountId instead of secUserId when the profile path is a Douyin account name', async () => {
+    vi.stubEnv('REDFOX_API_KEY', 'rk_test_123')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/story/api/dyData/queryWorkList')) {
+        return Response.json({
+          code: 2000,
+          msg: '成功',
+          data: {
+            hasMore: false,
+            list: [{
+              workId: '7388888888888888888',
+              title: '账号作品',
+              workUrl: 'https://www.douyin.com/video/7388888888888888888',
+              authorId: 'nxpt260212',
+              accountName: 'RedFox 用户',
+            }],
+          },
+        })
+      }
+      return Response.json({
+        code: 2000,
+        msg: '成功',
+        data: {
+          nickname: 'RedFox 用户',
+          uid: 'nxpt260212',
+        },
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchFromRedFoxDouyinApi({
+      targetUrl: 'https://www.douyin.com/user/nxpt260212',
+      platformUserId: null,
+      count: 30,
+    })
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))
+    expect(body.accountId).toBe('nxpt260212')
+    expect(body.secUserId).toBeUndefined()
   })
 })

@@ -91,14 +91,6 @@ function platformLabel(platform: string) {
   return PLATFORM_LABELS[platform] ?? platform
 }
 
-function collectionSourceLabel(source: ApiCompetitorAnalysis["collectionSource"]) {
-  if (source === "external_api") return "云端 API 采集"
-  if (source === "redfox_api") return "RedFox 采集"
-  if (source === "local_browser") return "本地浏览器采集"
-  if (source === "tikhub_api") return "API 兜底采集"
-  return null
-}
-
 function formatDate(dateStr: string) {
   const date = new Date(dateStr)
   return date.toLocaleDateString("zh-CN", {
@@ -253,7 +245,6 @@ function ProgressView({ analysis }: { analysis: ApiCompetitorAnalysis }) {
             <p className="font-medium">{analysis.accountName}</p>
             <p className="text-sm text-muted-foreground">
               {platformLabel(analysis.platform)}
-              {collectionSourceLabel(analysis.collectionSource) ? ` · ${collectionSourceLabel(analysis.collectionSource)}` : ""}
             </p>
           </div>
         </div>
@@ -346,11 +337,6 @@ function ReportView({ analysis }: { analysis: ApiCompetitorAnalysis }) {
               <div className="flex items-center gap-2 mb-1">
                 <p className="text-lg font-semibold truncate">{analysis.accountName ?? analysis.targetUrl}</p>
                 <Badge variant="outline" className="text-xs shrink-0">{platformLabel(analysis.platform)}</Badge>
-                {collectionSourceLabel(analysis.collectionSource) && (
-                  <Badge variant="outline" className="text-xs shrink-0">
-                    {collectionSourceLabel(analysis.collectionSource)}
-                  </Badge>
-                )}
                 {analysis.accountIsVerified && (
                   <Badge variant="secondary" className="text-xs shrink-0">已认证</Badge>
                 )}
@@ -629,9 +615,9 @@ function ReportView({ analysis }: { analysis: ApiCompetitorAnalysis }) {
                     <TableCell className="text-sm">{formatCount(video.likes)}</TableCell>
                     <TableCell className="text-sm">{video.engagement_rate.toFixed(1)}%</TableCell>
                     <TableCell>
-                      {video.url && (
+                      {analysis.targetUrl && (
                         <a
-                          href={video.url}
+                          href={analysis.targetUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}

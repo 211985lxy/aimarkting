@@ -34,11 +34,12 @@ import {
   extractWatchAccountVideo,
   syncVideoCopyExtraction,
   startCompetitorAnalysis,
+  listCompetitorReports,
   type WatchAccount,
 } from "@/lib/api/client"
 import { extractPureUrl, checkUrlType } from "@/lib/tikhub/url-parser"
 import { shouldOpenDeepCopywriter } from "@/lib/video-copy-routing"
-import type { ApiVideoCopyExtraction } from "@/types/api"
+import type { ApiCompetitorReport, ApiVideoCopyExtraction } from "@/types/api"
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -75,9 +76,24 @@ function formatRelativeTime(iso: string | null): string {
   return new Date(iso).toLocaleDateString("zh-CN")
 }
 
+function formatDate(iso: string | null): string {
+  if (!iso) return "未完成"
+  return new Date(iso).toLocaleDateString("zh-CN")
+}
+
 function formatCount(n: number): string {
   if (n >= 10000) return `${(n / 10000).toFixed(1)}w`
   return n.toLocaleString("zh-CN")
+}
+
+function reportTitle(report: ApiCompetitorReport): string {
+  return `${report.accountName || "优质账号"} · 分析报告`
+}
+
+function reportStatusLabel(status: ApiCompetitorReport["status"]): string {
+  if (status === "completed") return "已完成"
+  if (status === "failed") return "失败"
+  return "分析中"
 }
 
 function formatAccountName(account: WatchAccount): string {
@@ -119,6 +135,10 @@ function videoPageUrl(video: WatchVideo): string {
   return video.videoUrl || `https://www.douyin.com/video/${video.videoId}`
 }
 
+function accountPageUrl(video: WatchVideo): string {
+  return video.account.targetUrl || videoPageUrl(video)
+}
+
 function extractionStatusText(record: ApiVideoCopyExtraction | undefined): string {
   if (!record) return "爆款文案拆解"
   if (record.status === "completed" && record.analysisResult) return "查看拆解"
@@ -153,11 +173,14 @@ export default function CompetitorWatchPage() {
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
   const [extractingVideoId, setExtractingVideoId] = useState<string | null>(null)
   const [videoExtractions, setVideoExtractions] = useState<Record<string, ApiVideoCopyExtraction>>({})
+  const [reports, setReports] = useState<ApiCompetitorReport[]>([])
+  const [reportsLoading, setReportsLoading] = useState(true)
 
   async function handleAnalyze(url: string) {
     setAnalyzingUrl(url)
     try {
       const result = await startCompetitorAnalysis(url)
+      void loadReports(false)
       toast.success("已成功创建分析任务，正在为您跳转...")
       router.push(`/competitor/${result.id}`)
     } catch (err) {
@@ -166,6 +189,18 @@ export default function CompetitorWatchPage() {
       setAnalyzingUrl(null)
     }
   }
+
+  const loadReports = useCallback(async (showLoading = true) => {
+    if (showLoading) setReportsLoading(true)
+    try {
+      const data = await listCompetitorReports(1, 10)
+      setReports(data.items)
+    } catch {
+      toast.error("加载分析历史失败")
+    } finally {
+      if (showLoading) setReportsLoading(false)
+    }
+  }, [])
 
   const loadAccounts = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true)
@@ -191,6 +226,7 @@ export default function CompetitorWatchPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAccounts()
+    void loadReports()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -410,7 +446,7 @@ export default function CompetitorWatchPage() {
     return (
       <div key={`${options.viral ? "viral-" : ""}${key}`} className="space-y-2">
         <a
-          href={videoPageUrl(video)}
+          href={accountPageUrl(video)}
           target="_blank"
           rel="noopener noreferrer"
           className={`group/video relative block aspect-[9/16] rounded-lg overflow-hidden bg-muted ${options.viral ? "ring-1 ring-orange-300/50" : ""}`}
@@ -515,6 +551,54 @@ export default function CompetitorWatchPage() {
           </Card>
         </Link>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FileText className="h-4 w-4" />
+            最近分析报告
+            <Badge variant="secondary" className="text-xs ml-1">{reports.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {reportsLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 rounded-lg" />
+              ))}
+            </div>
+          ) : reports.length === 0 ? (
+            <p className="rounded-lg bg-muted/40 px-3 py-4 text-sm text-muted-foreground">
+              还没有分析报告。完成一次 AI 深度调查后会出现在这里。
+            </p>
+          ) : (
+            <div className="divide-y rounded-lg border">
+              {reports.map((report) => (
+                <Link
+                  key={report.id}
+                  href={`/competitor/${report.id}`}
+                  className="flex items-center justify-between gap-3 p-3 transition-colors hover:bg-muted/50"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{reportTitle(report)}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      分析于 {formatDate(report.completedAt ?? report.createdAt)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {report.overallScore != null ? (
+                      <span className="text-sm font-semibold">{Math.round(report.overallScore)}分</span>
+                    ) : null}
+                    <Badge variant={report.status === "failed" ? "destructive" : "secondary"}>
+                      {reportStatusLabel(report.status)}
+                    </Badge>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
           {/* Add Account Card */}
           <AiResultPanel

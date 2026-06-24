@@ -55,7 +55,8 @@ export async function collectDouyinCompetitorData(
   const canUseExternalApi = deps.hasExternalApi ?? hasExternalDouyinApi
   const canUseRedFoxApi = deps.hasRedFoxApi ?? hasRedFoxDouyinApi
   const localCrawler = deps.fetchFromLocalCrawler ?? fetchFromLocalCrawler
-  const apiAdapter = deps.apiAdapter ?? new DouyinAdapter({ localFallback: false })
+  // 放开 adapter 兜底：TikHub 失败时允许降级（sec_user_id 走 HTTP+正则，博主/视频走本地爬虫）
+  const apiAdapter = deps.apiAdapter ?? new DouyinAdapter()
   const hasTikHubApiKey = deps.hasTikHubApiKey ?? (() => Boolean(process.env.TIKHUB_API_KEY))
   const hasLocalCrawler = deps.hasLocalCrawler ?? (() => process.env.LOCAL_CRAWLER_ENABLED === 'true')
 
@@ -77,19 +78,29 @@ export async function collectDouyinCompetitorData(
   }
 
   if (canUseRedFoxApi()) {
-    const redfox = await redfoxApi({
-      targetUrl: input.targetUrl,
-      platformUserId: input.platformUserId,
-      count,
-    })
-    return {
-      platformUserId: redfox.platformUserId,
-      account: redfox.account,
-      videos: redfox.videos.slice(0, count),
-      comments: redfox.comments,
-      collectionSource: 'redfox_api',
-      fallbackUsed: false,
-      fallbackReason: null,
+    try {
+      const redfox = await redfoxApi({
+        targetUrl: input.targetUrl,
+        platformUserId: input.platformUserId,
+        count,
+      })
+      return {
+        platformUserId: redfox.platformUserId,
+        account: redfox.account,
+        videos: redfox.videos.slice(0, count),
+        comments: redfox.comments,
+        collectionSource: 'redfox_api',
+        fallbackUsed: false,
+        fallbackReason: null,
+      }
+    } catch (err) {
+      const fallbackReason = errorMessage(err)
+      if (hasTikHubApiKey()) {
+        return collectFromApiAdapter(apiAdapter, input, count, true, fallbackReason)
+      }
+      if (!hasLocalCrawler()) {
+        throw err
+      }
     }
   }
 
