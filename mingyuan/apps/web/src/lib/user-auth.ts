@@ -4,8 +4,22 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "./prisma"
 import { getSubscriptionStatus } from "@/lib/subscription"
 
-const JWT_SECRET =
-  process.env.JWT_SECRET || "user-secret-change-me"
+const JWT_SECRET = process.env.JWT_SECRET
+
+/**
+ * 强制要求 JWT_SECRET 已配置且足够强。
+ * 删除硬编码 fallback:生产漏配会导致任意 token 可被伪造,必须 fail-fast。
+ * 在 try-catch 之外调用,缺失时让异常穿透到 route 的错误处理(返回 500 + 日志),
+ * 而不是被 verify 的 catch 吞成静默 401。
+ */
+function requireJwtSecret(): string {
+  if (!JWT_SECRET || JWT_SECRET.length < 32) {
+    throw new Error(
+      "JWT_SECRET 未配置或长度不足(需 ≥32 字符)。请在 .env.local / 生产环境变量中配置强随机串。"
+    )
+  }
+  return JWT_SECRET
+}
 
 interface UserPayload {
   id: string
@@ -24,12 +38,13 @@ export async function verifyPassword(
 }
 
 export function signUserToken(payload: UserPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" })
+  return jwt.sign(payload, requireJwtSecret(), { expiresIn: "7d" })
 }
 
 export function verifyUserToken(token: string): UserPayload | null {
+  const secret = requireJwtSecret()
   try {
-    return jwt.verify(token, JWT_SECRET) as UserPayload
+    return jwt.verify(token, secret) as UserPayload
   } catch {
     return null
   }

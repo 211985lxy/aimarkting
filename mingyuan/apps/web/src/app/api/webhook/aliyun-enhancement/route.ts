@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import {
@@ -20,7 +21,31 @@ type WebhookPayload = {
   errorMessage?: string;
 };
 
+/**
+ * 共享密钥签名校验:阿里云增强回调必须带 X-Webhook-Secret 头,
+ * 值等于 ALIYUN_ENHANCEMENT_WEBHOOK_SECRET。未配置时返回 503(fail-closed)。
+ */
+function authorizeAliyunWebhook(request: NextRequest): boolean {
+  const secret = process.env.ALIYUN_ENHANCEMENT_WEBHOOK_SECRET;
+  if (!secret) return false;
+  const provided = request.headers.get("x-webhook-secret");
+  if (!provided) return false;
+  const a = Buffer.from(secret);
+  const b = Buffer.from(provided);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
 export async function POST(request: NextRequest) {
+  if (!authorizeAliyunWebhook(request)) {
+    if (!process.env.ALIYUN_ENHANCEMENT_WEBHOOK_SECRET) {
+      console.error("[webhook:aliyun-enhancement] ALIYUN_ENHANCEMENT_WEBHOOK_SECRET 未配置,拒绝回调");
+      return NextResponse.json({ error: "Webhook secret not configured" }, { status: 503 });
+    }
+    console.warn("[webhook:aliyun-enhancement] Webhook 鉴权失败");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let payload: WebhookPayload;
   try {
     payload = (await request.json()) as WebhookPayload;

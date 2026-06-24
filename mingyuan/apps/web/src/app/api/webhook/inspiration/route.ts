@@ -5,10 +5,8 @@ import { prisma } from "@/lib/prisma"
  * Webhook 入口：接收来自飞书/微信等外部服务的灵感推送
  *
  * 认证方式：Header x-inspiration-token
- * 配置：INSPIRATION_WEBHOOK_TOKEN 环境变量（默认开发用）
+ * 配置：INSPIRATION_WEBHOOK_TOKEN 环境变量（必填，不再有默认 fallback）
  */
-
-const WEBHOOK_TOKEN = process.env.INSPIRATION_WEBHOOK_TOKEN || "mingyuan-inspiration-dev"
 
 interface WebhookPayload {
   content: string
@@ -20,13 +18,18 @@ export const runtime = "nodejs"
 export const maxDuration = 30
 
 export async function POST(request: NextRequest) {
+  const webhookToken = process.env.INSPIRATION_WEBHOOK_TOKEN
+  if (!webhookToken) {
+    // 未配置时拒绝服务并明确报错,而不是用公开默认值放行
+    console.error("[webhook/inspiration] INSPIRATION_WEBHOOK_TOKEN 未配置,拒绝请求")
+    return NextResponse.json(
+      { error: "Webhook 未配置鉴权令牌" },
+      { status: 503 }
+    )
+  }
   const authHeader = request.headers.get("x-inspiration-token")
-  if (!authHeader || authHeader !== WEBHOOK_TOKEN) {
-    if (WEBHOOK_TOKEN === "mingyuan-inspiration-dev") {
-      console.warn("[webhook/inspiration] Using default dev token — set INSPIRATION_WEBHOOK_TOKEN in production")
-    } else {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+  if (!authHeader || authHeader !== webhookToken) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
@@ -66,7 +69,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // 异步触发 AI 分析
+    // 异步触发 AI 分析(带超时,防止 hang 住 fetch 连接)
     fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/inspiration/${inspiration.id}/process`, {
       method: "POST",
       headers: {
@@ -75,6 +78,7 @@ export async function POST(request: NextRequest) {
           ? { Authorization: request.headers.get("authorization")! }
           : {}),
       },
+      signal: AbortSignal.timeout(10_000),
     }).catch(() => {
       // 异步触发失败不影响 webhook 响应
       console.warn(`[webhook/inspiration] Failed to trigger AI process for ${inspiration.id}`)

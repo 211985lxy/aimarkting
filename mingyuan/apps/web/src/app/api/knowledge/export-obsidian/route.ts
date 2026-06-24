@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import fs from "fs"
 import path from "path"
+import { withUserAuth } from "@/lib/user-auth"
 
-export async function POST(request: NextRequest) {
+export const POST = withUserAuth(async (request: NextRequest) => {
   try {
     const body = await request.json()
     const { title, content, format = "script" } = body as {
@@ -135,4 +136,4 @@ ${content}
       { status: 500 }
     )
   }
-}
+})

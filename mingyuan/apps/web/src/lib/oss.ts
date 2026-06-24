@@ -3,6 +3,48 @@ import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import OSS from "ali-oss";
 
+/**
+ * SSRF 防护:阻止服务端去 fetch 内网/回环地址。
+ * sourceUrl 在多个 webhook 回调里来自外部(山见/阿里云返回值,理论上是 CDN),
+ * 但攻击者可伪造回调把这些字段改成内网元数据服务地址,必须拦截。
+ * 仅做 IP 字面量与已知内网域名校验,不做 DNS 解析(留待后续加固)。
+ */
+function assertPublicSourceUrl(sourceUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(sourceUrl);
+  } catch {
+    throw new Error(`transferFromUrl: invalid url`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`transferFromUrl: disallowed protocol ${parsed.protocol}`);
+  }
+  const host = parsed.hostname.toLowerCase();
+  const blocked = [
+    "localhost",
+    "0.0.0.0",
+    "::1",
+    "::ffff:127.0.0.1",
+  ];
+  if (blocked.includes(host)) {
+    throw new Error(`transferFromUrl: blocked host ${host}`);
+  }
+  // IPv4 字面量内网段
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    const isLoopback = a === 127;
+    const isPrivate10 = a === 10;
+    const isPrivate172 = a === 172 && b >= 16 && b <= 31;
+    const isPrivate192 = a === 192 && b === 168;
+    const isLinkLocal = a === 169 && b === 254;
+    const isCarrierGradeNat = a === 100 && b >= 64 && b <= 127;
+    if (isLoopback || isPrivate10 || isPrivate172 || isPrivate192 || isLinkLocal || isCarrierGradeNat) {
+      throw new Error(`transferFromUrl: blocked internal ip ${host}`);
+    }
+  }
+}
+
 const OSS_REGION = process.env.OSS_REGION;
 const OSS_ACCESS_KEY_ID = process.env.OSS_ACCESS_KEY_ID;
 const OSS_ACCESS_KEY_SECRET = process.env.OSS_ACCESS_KEY_SECRET;
@@ -240,6 +282,9 @@ export async function transferFromUrlDetailed(
   sourceUrl: string,
   destKey: string,
 ): Promise<TransferFromUrlResult> {
+  // SSRF 防护:在 fetch 之前校验 sourceUrl 不是内网地址
+  assertPublicSourceUrl(sourceUrl);
+
   if (!isConfigured()) {
     console.warn(
       "[oss] OSS not configured, returning original URL (24h expiry risk)",

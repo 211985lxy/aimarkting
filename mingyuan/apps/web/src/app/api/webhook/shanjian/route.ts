@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { transferFromUrl } from "@/lib/oss";
@@ -21,10 +22,36 @@ export const maxDuration = 60;
 
 const log = logger.child({ component: "webhook-shanjian" });
 
+/**
+ * 共享密钥签名校验:山见回调必须带 X-Webhook-Secret 头,
+ * 值等于 SHANJIAN_WEBHOOK_SECRET。未配置 secret 时返回 503(fail-closed)。
+ * 使用 timingSafeEqual 防时序攻击。
+ */
+function authorizeShanjianWebhook(request: NextRequest): boolean {
+  const secret = process.env.SHANJIAN_WEBHOOK_SECRET;
+  if (!secret) return false;
+  const provided = request.headers.get("x-webhook-secret");
+  if (!provided) return false;
+  const a = Buffer.from(secret);
+  const b = Buffer.from(provided);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
 // ─── POST /api/webhook/shanjian ─────────────────────────
 
 export async function POST(request: NextRequest) {
   const requestId = generateRequestId();
+
+  if (!authorizeShanjianWebhook(request)) {
+    if (!process.env.SHANJIAN_WEBHOOK_SECRET) {
+      log.error({ requestId }, "SHANJIAN_WEBHOOK_SECRET 未配置,拒绝回调。上线前必须在山见回调配置加上 X-Webhook-Secret 头并配置本环境变量。");
+      return NextResponse.json({ error: "Webhook secret not configured" }, { status: 503 });
+    }
+    log.warn({ requestId }, "Webhook 鉴权失败");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let payload: WebhookPayload;
   try {
     payload = (await request.json()) as WebhookPayload;

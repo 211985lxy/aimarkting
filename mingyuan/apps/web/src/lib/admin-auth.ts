@@ -4,8 +4,18 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "./prisma"
 import type { AdminRole } from "@/types/content-template"
 
-const ADMIN_JWT_SECRET =
-  process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || "admin-secret-change-me"
+// 删除硬编码 fallback。允许回退到 JWT_SECRET(安全等价,只要 JWT_SECRET 强即可),
+// 但两者都缺失时必须 fail-fast,而不是用公开字符串验签。
+const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET
+
+function requireAdminJwtSecret(): string {
+  if (!ADMIN_JWT_SECRET || ADMIN_JWT_SECRET.length < 32) {
+    throw new Error(
+      "ADMIN_JWT_SECRET(或回退的 JWT_SECRET)未配置或长度不足(需 ≥32 字符)。请在环境变量中配置。"
+    )
+  }
+  return ADMIN_JWT_SECRET
+}
 
 interface AdminPayload {
   id: string
@@ -25,12 +35,13 @@ export async function verifyPassword(
 }
 
 export function signAdminToken(payload: AdminPayload): string {
-  return jwt.sign(payload, ADMIN_JWT_SECRET, { expiresIn: "24h" })
+  return jwt.sign(payload, requireAdminJwtSecret(), { expiresIn: "24h" })
 }
 
 export function verifyAdminToken(token: string): AdminPayload | null {
+  const secret = requireAdminJwtSecret()
   try {
-    return jwt.verify(token, ADMIN_JWT_SECRET) as AdminPayload
+    return jwt.verify(token, secret) as AdminPayload
   } catch {
     return null
   }
