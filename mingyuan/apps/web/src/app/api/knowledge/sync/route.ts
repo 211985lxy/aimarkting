@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
 
-const SYNC_TOKEN = process.env.OBSIDIAN_SYNC_TOKEN || "mingyuan-obsidian-sync-secret"
-
 interface ObsidianSyncEntry {
   id: string // 由 CLI 根据文件相对路径或者内容哈希生成的唯一 ID，如 obsidian_xxxx
   title: string
@@ -13,20 +11,27 @@ interface ObsidianSyncEntry {
 }
 
 export async function POST(request: NextRequest) {
+  const syncToken = process.env.OBSIDIAN_SYNC_TOKEN
+  if (!syncToken) {
+    console.error("[knowledge/sync] OBSIDIAN_SYNC_TOKEN 未配置,拒绝请求")
+    return NextResponse.json(
+      { error: "同步接口未配置鉴权令牌" },
+      { status: 503 }
+    )
+  }
   const authHeader = request.headers.get("x-obsidian-token")
 
-  if (!authHeader || authHeader !== SYNC_TOKEN) {
-    if (SYNC_TOKEN === "mingyuan-obsidian-sync-secret") {
-      console.warn(
-        "Obsidian Sync API warning: Using default insecure SYNC_TOKEN. Please set OBSIDIAN_SYNC_TOKEN in environment variables."
-      )
-    }
+  if (!authHeader || authHeader !== syncToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
     const body = await request.json()
-    const { entries, userId } = body as { entries: ObsidianSyncEntry[]; userId?: string }
+    const { entries, userId, projectId } = body as {
+      entries: ObsidianSyncEntry[]
+      userId?: string
+      projectId?: string
+    }
 
     if (!Array.isArray(entries)) {
       return NextResponse.json({ error: "Invalid payload: entries must be an array" }, { status: 400 })
@@ -51,6 +56,18 @@ export async function POST(request: NextRequest) {
       if (!userExists) {
         return NextResponse.json({ error: `User with ID ${targetUserId} does not exist` }, { status: 404 })
       }
+    }
+
+    let targetProjectId: string | null = null
+    if (projectId) {
+      const project = await prisma.clientProject.findFirst({
+        where: { id: projectId, userId: targetUserId },
+        select: { id: true },
+      })
+      if (!project) {
+        return NextResponse.json({ error: "Project does not exist for target user" }, { status: 404 })
+      }
+      targetProjectId = project.id
     }
 
     const results = []
@@ -81,11 +98,13 @@ export async function POST(request: NextRequest) {
           tags: entry.tags,
           sourceType: "obsidian",
           status: "active",
+          ...(targetProjectId ? { projectId: targetProjectId } : {}),
           updatedAt: new Date(),
         },
         create: {
           id: entry.id,
           userId: targetUserId,
+          projectId: targetProjectId,
           title: entry.title,
           content: entry.content,
           category: finalCategory,

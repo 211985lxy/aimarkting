@@ -8,15 +8,32 @@ export const POST = withAdminAuth(async (request, { admin }) => {
   const formData = await request.formData()
   const file = formData.get("file") as File | null
   const category = (formData.get("category") as string) || "product_usp"
+  const projectIdValue = formData.get("projectId")
+  const projectId = typeof projectIdValue === "string" && projectIdValue.trim()
+    ? projectIdValue.trim()
+    : null
 
   if (!file) {
     return NextResponse.json({ error: "请上传文件" }, { status: 400 })
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email: admin.email },
-    select: { id: true },
-  })
+  const project = projectId
+    ? await prisma.clientProject.findUnique({
+        where: { id: projectId },
+        select: { id: true, userId: true },
+      })
+    : null
+
+  if (projectId && !project) {
+    return NextResponse.json({ error: "归属项目不存在" }, { status: 404 })
+  }
+
+  const user = project
+    ? { id: project.userId }
+    : await prisma.user.findUnique({
+        where: { email: admin.email },
+        select: { id: true },
+      })
 
   if (!user) {
     return NextResponse.json({ error: "未找到同邮箱前台用户，无法绑定知识条目" }, { status: 400 })
@@ -31,6 +48,7 @@ export const POST = withAdminAuth(async (request, { admin }) => {
     const entry = await prisma.knowledgeEntry.create({
       data: {
         userId: user.id,
+        projectId: project?.id ?? null,
         category,
         title,
         content: content.slice(0, 50000),

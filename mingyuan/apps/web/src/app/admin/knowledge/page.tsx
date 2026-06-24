@@ -43,6 +43,7 @@ import {
 interface KnowledgeEntry {
   id: string
   userId: string
+  projectId?: string | null
   category: string
   title: string
   content: string
@@ -53,6 +54,17 @@ interface KnowledgeEntry {
   createdAt: string
   updatedAt: string
   user?: { id: string; name: string; email: string }
+  project?: { id: string; name: string; companyName: string | null; industry: string | null; status: string } | null
+  embedding?: { status: string; updatedAt: string; errorMessage: string | null } | null
+}
+
+interface AdminProject {
+  id: string
+  name: string
+  companyName: string | null
+  industry: string | null
+  status: string
+  user: { id: string; name: string | null; email: string }
 }
 
 interface StatsData {
@@ -119,6 +131,7 @@ async function fetchKnowledge(params: {
   category?: string
   userId?: string
   sourceType?: string
+  projectId?: string
 }) {
   const qs = new URLSearchParams()
   if (params.page) qs.set("page", String(params.page))
@@ -127,6 +140,7 @@ async function fetchKnowledge(params: {
   if (params.category) qs.set("category", params.category)
   if (params.userId) qs.set("userId", params.userId)
   if (params.sourceType) qs.set("sourceType", params.sourceType)
+  if (params.projectId) qs.set("projectId", params.projectId)
   
   const token = getAdminToken()
   const res = await fetch(`/api/admin/knowledge?${qs}`, {
@@ -137,6 +151,26 @@ async function fetchKnowledge(params: {
   return res.json() as Promise<{
     data: { results: KnowledgeEntry[]; total: number; page: number; pageSize: number }
   }>
+}
+
+async function fetchProjects() {
+  const token = getAdminToken()
+  const res = await fetch("/api/admin/projects", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+  return res.json() as Promise<{ data: AdminProject[] }>
+}
+
+function projectLabel(project: AdminProject) {
+  return `${project.name}${project.companyName ? ` · ${project.companyName}` : ""}`
+}
+
+function embeddingLabel(entry: KnowledgeEntry) {
+  if (entry.embedding?.status === "completed") return "已向量化"
+  if (entry.embedding?.status === "failed") return "失败"
+  return "未生成"
 }
 
 async function fetchStats() {
@@ -202,8 +236,12 @@ export default function AdminKnowledgePage() {
   const [page, setPage] = React.useState(1)
   const [search, setSearch] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("")
+  const [projectFilter, setProjectFilter] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const pageSize = 20
+
+  // 项目
+  const [projects, setProjects] = React.useState<AdminProject[]>([])
 
   // 统计
   const [stats, setStats] = React.useState<StatsData | null>(null)
@@ -224,6 +262,7 @@ export default function AdminKnowledgePage() {
     category: "product_usp",
     tags: "",
     sourceType: "manual" as string,
+    projectId: "none",
   })
   const [saving, setSaving] = React.useState(false)
 
@@ -231,6 +270,7 @@ export default function AdminKnowledgePage() {
   const [uploadDialogOpen, setUploadDialogOpen] = React.useState(false)
   const [uploadFile, setUploadFile] = React.useState<File | null>(null)
   const [uploadCategory, setUploadCategory] = React.useState("product_usp")
+  const [uploadProjectId, setUploadProjectId] = React.useState("none")
   const [uploading, setUploading] = React.useState(false)
 
   const fetchData = React.useCallback(async () => {
@@ -241,13 +281,14 @@ export default function AdminKnowledgePage() {
         pageSize,
         search,
         category: categoryFilter,
+        projectId: projectFilter,
       })
       setEntries(res.data.results)
       setTotal(res.data.total)
     } finally {
       setLoading(false)
     }
-  }, [page, search, categoryFilter])
+  }, [page, search, categoryFilter, projectFilter])
 
   React.useEffect(() => {
     void Promise.resolve().then(fetchData)
@@ -255,6 +296,7 @@ export default function AdminKnowledgePage() {
 
   React.useEffect(() => {
     fetchStats().then((res) => setStats(res.data))
+    fetchProjects().then((res) => setProjects(res.data)).catch(() => {})
   }, [])
 
   const totalPages = Math.ceil(total / pageSize)
@@ -329,11 +371,12 @@ export default function AdminKnowledgePage() {
           category: editForm.category,
           tags: editForm.tags ? editForm.tags.split(/[,，、]/).map((t: string) => t.trim()).filter(Boolean) : [],
           sourceType: editForm.sourceType,
+          ...(editForm.projectId !== "none" ? { projectId: editForm.projectId } : {}),
         }),
       })
       if (!res.ok) throw new Error("创建失败")
       setAddDialogOpen(false)
-      setEditForm({ title: "", content: "", category: "product_usp", tags: "", sourceType: "manual" })
+      setEditForm({ title: "", content: "", category: "product_usp", tags: "", sourceType: "manual", projectId: "none" })
       fetchData()
       fetchStats()
     } catch {
@@ -350,6 +393,7 @@ export default function AdminKnowledgePage() {
       const formData = new FormData()
       formData.append("file", uploadFile)
       formData.append("category", uploadCategory)
+      if (uploadProjectId !== "none") formData.append("projectId", uploadProjectId)
 
       const token = getAdminToken()
       const res = await fetch("/api/admin/knowledge/upload", {
@@ -362,6 +406,7 @@ export default function AdminKnowledgePage() {
       if (!res.ok) throw new Error("上传失败")
       setUploadDialogOpen(false)
       setUploadFile(null)
+      setUploadProjectId("none")
       fetchData()
       fetchStats()
     } catch {
@@ -453,7 +498,7 @@ export default function AdminKnowledgePage() {
             上传文件
           </Button>
           <Select
-            value={categoryFilter}
+            value={categoryFilter || "all"}
             onValueChange={(v) => {
               setCategoryFilter(v === "all" ? "" : (v ?? ""))
               setPage(1)
@@ -466,6 +511,26 @@ export default function AdminKnowledgePage() {
               <SelectItem value="all">全部分类</SelectItem>
               {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
                 <SelectItem key={key} value={key}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={projectFilter || "all"}
+            onValueChange={(v) => {
+              setProjectFilter(v === "all" ? "" : (v ?? ""))
+              setPage(1)
+            }}
+          >
+            <SelectTrigger className="w-full sm:w-[220px]">
+              <SelectValue placeholder="全部项目" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部项目</SelectItem>
+              <SelectItem value="unbound">未绑定项目</SelectItem>
+              {projects.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {projectLabel(project)}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -525,10 +590,12 @@ export default function AdminKnowledgePage() {
                     />
                   </th>
                   <th className="text-left p-3 font-medium">标题</th>
+                  <th className="text-left p-3 font-medium hidden xl:table-cell">项目</th>
                   <th className="text-left p-3 font-medium hidden md:table-cell">用户</th>
                   <th className="text-left p-3 font-medium">分类</th>
                   <th className="text-left p-3 font-medium hidden sm:table-cell">来源</th>
                   <th className="text-left p-3 font-medium">状态</th>
+                  <th className="text-left p-3 font-medium hidden lg:table-cell">向量</th>
                   <th className="text-left p-3 font-medium hidden lg:table-cell">更新</th>
                 </tr>
               </thead>
@@ -536,14 +603,14 @@ export default function AdminKnowledgePage() {
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="border-b">
-                      <td className="p-3" colSpan={7}>
+                      <td className="p-3" colSpan={9}>
                         <Skeleton className="h-4 w-full" />
                       </td>
                     </tr>
                   ))
                 ) : entries.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={9} className="p-8 text-center text-muted-foreground">
                       暂无知识库条目
                     </td>
                   </tr>
@@ -569,6 +636,18 @@ export default function AdminKnowledgePage() {
                           {entry.content.slice(0, 80)}...
                         </p>
                       </td>
+                      <td className="p-3 hidden xl:table-cell text-muted-foreground text-xs">
+                        {entry.project ? (
+                          <>
+                            <p className="max-w-[180px] truncate text-foreground">{entry.project.name}</p>
+                            <p className="max-w-[180px] truncate">
+                              {entry.project.companyName || entry.project.industry || "项目知识"}
+                            </p>
+                          </>
+                        ) : (
+                          "全局/未绑定"
+                        )}
+                      </td>
                       <td className="p-3 hidden md:table-cell text-muted-foreground text-xs">
                         {entry.user?.name ?? entry.user?.email ?? "未知"}
                       </td>
@@ -586,6 +665,14 @@ export default function AdminKnowledgePage() {
                           className="text-xs"
                         >
                           {entry.status === "active" ? "生效" : "已归档"}
+                        </Badge>
+                      </td>
+                      <td className="p-3 hidden lg:table-cell">
+                        <Badge
+                          variant={entry.embedding?.status === "completed" ? "default" : entry.embedding?.status === "failed" ? "destructive" : "secondary"}
+                          className="text-xs"
+                        >
+                          {embeddingLabel(entry)}
                         </Badge>
                       </td>
                       <td className="p-3 hidden lg:table-cell text-muted-foreground text-xs">
@@ -735,6 +822,22 @@ export default function AdminKnowledgePage() {
               </Select>
             </div>
             <div>
+              <Label>归属项目</Label>
+              <Select value={editForm.projectId} onValueChange={(v) => setEditForm((f) => ({ ...f, projectId: v ?? "none" }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">全局方法论 / 不绑定项目</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {projectLabel(project)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <Label>标题</Label>
               <Input
                 value={editForm.title}
@@ -789,6 +892,22 @@ export default function AdminKnowledgePage() {
                 <SelectContent>
                   {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
                     <SelectItem key={key} value={key}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>归属项目</Label>
+              <Select value={uploadProjectId} onValueChange={(v) => setUploadProjectId(v ?? "none")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">全局方法论 / 不绑定项目</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {projectLabel(project)}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
