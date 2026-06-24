@@ -7,6 +7,11 @@ import { Toaster } from "sonner"
 import { getBrandingConfig } from "@/lib/branding"
 import "./globals.css"
 
+// 所有页面都依赖 DB(getBrandingConfig)与请求上下文(getMessages),
+// 不做静态预渲染。否则 next build 在 prerender 阶段会因
+// workUnitAsyncStorage InvariantError 退出码 1,导致 docker build 失败。
+export const dynamic = "force-dynamic"
+
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getBrandingConfig()
 
