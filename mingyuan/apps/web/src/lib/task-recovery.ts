@@ -882,7 +882,14 @@ async function acquireTaskRecoveryLock(lockKey: string): Promise<boolean> {
       "NX",
     );
     return !!set;
-  } catch {
-    return true;
+  } catch (error) {
+    // fail-closed:Redis 故障时不再"默认拿到锁",否则多副本并发会触发
+    // 重复的山见计费、重复 OSS 转存、重复数字人 demo 生成。
+    // 本轮跳过,等下一轮重试。
+    console.error(
+      "[task-recovery] acquireTaskRecoveryLock 失败,本轮跳过(避免重复处理):",
+      error instanceof Error ? error.message : error,
+    );
+    return false;
   }
 }

@@ -99,6 +99,7 @@ async function pexelsRequest<T>(
 
   const res = await fetch(url.toString(), {
     headers: { Authorization: apiKey.key },
+    signal: AbortSignal.timeout(15_000),
   });
 
   // Track rate limit headers

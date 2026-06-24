@@ -12,11 +12,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await runEnhancementRecoveryPass({ trigger: "cron" });
+  try {
+    const result = await runEnhancementRecoveryPass({ trigger: "cron" });
 
-  return NextResponse.json({
-    data: {
-      polled: result,
-    },
-  });
+    return NextResponse.json({
+      data: {
+        polled: result,
+      },
+    });
+  } catch (error) {
+    console.error("[cron/poll-enhancements] failed:", error);
+    return NextResponse.json({ error: "增强任务恢复轮询失败" }, { status: 502 });
+  }
 }

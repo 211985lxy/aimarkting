@@ -10,23 +10,28 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
 
-  const [hotItems, snapshots] = await Promise.all([
-    prisma.douyinHotItem.deleteMany({
-      where: { fetchedAt: { lt: thirtyDaysAgo } },
-    }),
-    prisma.douyinHotSnapshot.deleteMany({
-      where: { fetchedAt: { lt: ninetyDaysAgo } },
-    }),
-  ])
+    const [hotItems, snapshots] = await Promise.all([
+      prisma.douyinHotItem.deleteMany({
+        where: { fetchedAt: { lt: thirtyDaysAgo } },
+      }),
+      prisma.douyinHotSnapshot.deleteMany({
+        where: { fetchedAt: { lt: ninetyDaysAgo } },
+      }),
+    ])
 
-  return NextResponse.json({
-    ok: true,
-    deleted: {
-      hotItems: hotItems.count,
-      snapshots: snapshots.count,
-    },
-  })
+    return NextResponse.json({
+      ok: true,
+      deleted: {
+        hotItems: hotItems.count,
+        snapshots: snapshots.count,
+      },
+    })
+  } catch (error) {
+    console.error("[cron/cleanup] failed:", error)
+    return NextResponse.json({ error: "清理任务失败" }, { status: 502 })
+  }
 }

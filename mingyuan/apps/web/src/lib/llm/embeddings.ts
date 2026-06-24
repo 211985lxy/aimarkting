@@ -218,7 +218,8 @@ export async function retrieveRelevantKnowledge(input: {
   if (config.enabled) {
     const queryVector = await generateEmbedding(queryText)
     if (queryVector) {
-      // Fetch all active embeddings for this project
+      // Fetch top active embeddings for this project
+      // 加 take 上限,防止知识库膨胀后全量加载到内存算余弦导致 OOM/事件循环阻塞
       const rows = await prisma.knowledgeEmbedding.findMany({
         where: {
           status: "completed",
@@ -234,6 +235,7 @@ export async function retrieveRelevantKnowledge(input: {
             select: { id: true, title: true, content: true, category: true },
           },
         },
+        take: 200,
       })
 
       if (rows.length > 0) {

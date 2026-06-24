@@ -12,9 +12,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const summary = await runDeliveryBackfill();
+  try {
+    const summary = await runDeliveryBackfill();
 
-  return NextResponse.json({
-    data: { summary },
-  });
+    return NextResponse.json({
+      data: { summary },
+    });
+  } catch (error) {
+    console.error("[cron/backfill-delivery] failed:", error);
+    return NextResponse.json({ error: "交付回填失败" }, { status: 502 });
+  }
 }

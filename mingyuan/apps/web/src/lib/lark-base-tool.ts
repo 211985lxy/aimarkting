@@ -54,7 +54,14 @@ const ALLOWED_COMMANDS = new Set<LarkCommand>([
   "+record-upsert",
 ])
 
-const DEFAULT_CLI_PATH = "/Users/xiangyu/.npm-global/bin/lark-cli"
+// 不再硬编码开发者本机绝对路径(生产会 ENOENT)。LARK_CLI_PATH 必须由环境变量提供。
+function requireLarkCliPath(env: EnvLike = process.env): string {
+  const p = env.LARK_CLI_PATH?.trim()
+  if (!p) {
+    throw new Error("缺少 LARK_CLI_PATH:请在环境变量中配置 lark-cli 可执行文件的绝对路径")
+  }
+  return p
+}
 
 const TABLE_ENV_KEYS: Record<LarkTableType, string> = {
   topic_review: "LARK_TOPIC_TABLE_ID",
@@ -73,7 +80,7 @@ export function readLarkBaseConfig(env: EnvLike, tableType: LarkTableType): Lark
   if (!tableId) throw new Error(`缺少 ${tableKey}`)
 
   return {
-    cliPath: env.LARK_CLI_PATH?.trim() || DEFAULT_CLI_PATH,
+    cliPath: requireLarkCliPath(env),
     baseToken,
     tableId,
   }
@@ -88,7 +95,7 @@ function readResultTableConfig(env: EnvLike, resultType: LarkResultType): LarkCo
   if (!tableId) throw new Error(`缺少 ${tableKey}`)
 
   return {
-    cliPath: env.LARK_CLI_PATH?.trim() || DEFAULT_CLI_PATH,
+    cliPath: requireLarkCliPath(env),
     baseToken,
     tableId,
   }
@@ -116,8 +123,15 @@ export async function runLarkBaseCommand(
     throw new Error(`不允许执行飞书 Base 命令：${command}`)
   }
 
-  const cliPath = options.cliPath || DEFAULT_CLI_PATH
-  const runner = options.runner || ((file, argv) => execFileAsync(file, argv))
+  const cliPath = options.cliPath || requireLarkCliPath()
+  // 默认 runner 加 15s 超时 + 10MB maxBuffer,防止 lark-cli 卡死或大表 stdout 溢出
+  const runner =
+    options.runner ||
+    ((file, argv) =>
+      execFileAsync(file, argv, {
+        timeout: 15_000,
+        maxBuffer: 10 * 1024 * 1024,
+      }))
   const { stdout } = await runner(cliPath, ["base", command, ...args, "--format", "json"])
   const text = stdout.trim()
   return text ? JSON.parse(text) : {}

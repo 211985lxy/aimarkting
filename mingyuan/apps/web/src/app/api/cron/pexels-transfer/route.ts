@@ -12,9 +12,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const transferred = await transferPendingPexelsMedia(20);
+  try {
+    const transferred = await transferPendingPexelsMedia(20);
 
-  return NextResponse.json({
-    data: { transferred },
-  });
+    return NextResponse.json({
+      data: { transferred },
+    });
+  } catch (error) {
+    console.error("[cron/pexels-transfer] failed:", error);
+    return NextResponse.json({ error: "Pexels 媒体转存失败" }, { status: 502 });
+  }
 }

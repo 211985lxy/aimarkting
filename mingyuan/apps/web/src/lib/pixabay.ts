@@ -98,7 +98,9 @@ async function pixabayRequest<T>(
     }
   }
 
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), {
+    signal: AbortSignal.timeout(15_000),
+  });
 
   // Track rate limit headers
   const remaining = res.headers.get("X-RateLimit-Remaining");

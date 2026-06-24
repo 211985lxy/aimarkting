@@ -67,7 +67,10 @@ export async function getAliyunNlsToken(): Promise<string> {
   // 构建最终请求 URL
   const requestUrl = `https://nls-meta.cn-shanghai.aliyuncs.com/?${canonicalizedQueryString}&Signature=${percentEncode(signature)}`
 
-  const response = await fetch(requestUrl, { method: "GET" })
+  const response = await fetch(requestUrl, {
+    method: "GET",
+    signal: AbortSignal.timeout(10_000),
+  })
   if (!response.ok) {
     const errorText = await response.text()
     throw new Error(`获取阿里云 NLS Token 失败: Status ${response.status}, ${errorText}`)
@@ -107,6 +110,7 @@ export async function transcribeAudioWav(audioBuffer: Buffer): Promise<string> {
       "Content-Type": "application/octet-stream",
     },
     body: new Uint8Array(audioBuffer),
+    signal: AbortSignal.timeout(30_000),
   })
 
   if (!response.ok) {

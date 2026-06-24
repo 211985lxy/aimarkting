@@ -12,11 +12,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const polled = await runTaskRecoveryPass({ trigger: "cron" });
+  try {
+    const polled = await runTaskRecoveryPass({ trigger: "cron" });
 
-  return NextResponse.json({
-    data: {
-      polled,
-    },
-  });
+    return NextResponse.json({
+      data: {
+        polled,
+      },
+    });
+  } catch (error) {
+    console.error("[cron/poll-tasks] failed:", error);
+    return NextResponse.json({ error: "任务恢复轮询失败" }, { status: 502 });
+  }
 }

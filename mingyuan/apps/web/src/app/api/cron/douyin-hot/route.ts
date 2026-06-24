@@ -10,6 +10,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const result = await fetchAndStore()
-  return NextResponse.json({ data: result })
+  try {
+    const result = await fetchAndStore()
+    return NextResponse.json({ data: result })
+  } catch (error) {
+    console.error("[cron/douyin-hot] failed:", error)
+    return NextResponse.json({ error: "抖音热点抓取失败" }, { status: 502 })
+  }
 }
