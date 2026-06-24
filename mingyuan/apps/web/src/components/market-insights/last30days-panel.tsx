@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
-import { AlertTriangle, ExternalLink, Flame, Loader2, MessageSquare, Wand2 } from "lucide-react"
+import { useEffect, useState } from "react"
+import { AlertTriangle, ExternalLink, Loader2, MessageSquare, RefreshCcw, Search, Wand2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -10,26 +10,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { AiResultPanel } from "@/components/workbench/ai-result-panel"
-
-interface Last30DaysItem {
-  id: string
-  platform: string
-  title: string
-  excerpt: string
-  url: string
-  author: string
-  date: string
-  score: number
-  engagement?: {
-    likes?: number
-    num_comments?: number
-  }
-}
+import { getMarketHotSnapshot, refreshMarketHotSnapshot } from "@/lib/api/client"
+import type { ApiMarketHotItem, ApiMarketHotSnapshot } from "@/types/api"
 
 interface Last30DaysResult {
   topic: string
   dateRange: { from: string; to: string }
-  items: Last30DaysItem[]
+  items: ApiMarketHotItem[]
   warnings: string[]
   summary: string
 }
@@ -43,15 +30,6 @@ const ALL_SEARCH_PLATFORMS = [
   { id: "wechat", name: "微信" },
   { id: "baidu", name: "百度" },
   { id: "toutiao", name: "今日头条" },
-]
-
-const MARKET_TOPIC_PRESETS = [
-  { topic: "AI智能体", heat: "高关注", reason: "老板AI化、自动化工作流和Agent工具都在持续讨论" },
-  { topic: "企业AI落地", heat: "高关注", reason: "适合观察企业老板、管理层和服务商的真实需求" },
-  { topic: "短视频获客", heat: "高转化", reason: "适合找内容选题、成交话术和行业案例" },
-  { topic: "老板IP", heat: "强相关", reason: "适合分析定位、人设、信任建立和成交路径" },
-  { topic: "小红书运营", heat: "内容密集", reason: "适合观察种草、获客、账号起号和爆文结构" },
-  { topic: "内容自动化", heat: "增长趋势", reason: "适合研究AI内容生产、矩阵运营和降本增效" },
 ]
 
 function formatCount(n: number) {
@@ -96,11 +74,34 @@ function renderMarkdownSummary(text: string) {
 }
 
 export function Last30DaysPanel() {
+  const [snapshot, setSnapshot] = useState<ApiMarketHotSnapshot | null>(null)
+  const [loadingSnapshot, setLoadingSnapshot] = useState(true)
+  const [refreshingSnapshot, setRefreshingSnapshot] = useState(false)
   const [researchTopic, setResearchTopic] = useState("")
   const [selectedSources, setSelectedSources] = useState<string[]>(ALL_SEARCH_PLATFORMS.map((p) => p.id))
   const [researching, setResearching] = useState(false)
   const [researchResult, setResearchResult] = useState<Last30DaysResult | null>(null)
   const [researchError, setResearchError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getMarketHotSnapshot()
+      .then(setSnapshot)
+      .catch(() => toast.error("近30天热榜暂时不可用"))
+      .finally(() => setLoadingSnapshot(false))
+  }, [])
+
+  async function handleRefreshSnapshot() {
+    setRefreshingSnapshot(true)
+    try {
+      const next = await refreshMarketHotSnapshot()
+      setSnapshot(next)
+      toast.success("近30天热榜已更新")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "近30天热榜刷新失败")
+    } finally {
+      setRefreshingSnapshot(false)
+    }
+  }
 
   async function handleStartResearch(topicOverride?: string) {
     const trimmed = (topicOverride ?? researchTopic).trim()
@@ -132,35 +133,51 @@ export function Last30DaysPanel() {
   return (
     <div className="space-y-6">
       <AiResultPanel
-        title="近30天热点研究"
+        title="近30天各平台热榜"
         icon={<MessageSquare className="h-4 w-4 text-primary" />}
-        meta={<span>选择一个热门方向，系统会实时检索各大中国平台近30天讨论</span>}
+        meta={<span>{snapshot?.generatedAt ? `更新时间：${new Date(snapshot.generatedAt).toLocaleString("zh-CN")}` : "等待今日热榜缓存"}</span>}
+        actions={
+          <Button variant="outline" size="sm" onClick={handleRefreshSnapshot} disabled={loadingSnapshot || refreshingSnapshot}>
+            {refreshingSnapshot ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+            手动更新缓存
+          </Button>
+        }
       >
-        <div className="space-y-4">
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {MARKET_TOPIC_PRESETS.map((preset) => (
-              <button
-                key={preset.topic}
-                type="button"
-                onClick={() => !researching && handleStartResearch(preset.topic)}
-                disabled={researching}
-                className="rounded-lg border bg-background p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/[0.03] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-sm text-foreground">{preset.topic}</span>
-                  <Badge variant="secondary" className="text-[11px]">
-                    <Flame className="mr-1 h-3 w-3" />
-                    {preset.heat}
-                  </Badge>
-                </div>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{preset.reason}</p>
-              </button>
+        {loadingSnapshot ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <Loader2 className="mb-4 h-9 w-9 animate-spin text-primary" />
+            <p className="text-sm font-medium">正在读取近30天热榜缓存...</p>
+          </div>
+        ) : !snapshot || snapshot.items.length === 0 ? (
+          <div className="rounded-lg border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+            暂无近30天热榜缓存。可以手动更新一次，或等待每天定时刷新。
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {snapshot.items.map((item) => (
+              <MarketHotCard key={item.id} item={item} />
             ))}
           </div>
+        )}
+      </AiResultPanel>
 
+      {snapshot && snapshot.warnings.length > 0 ? (
+        <Card className="border-amber-100 bg-amber-50/[0.3] text-amber-800/90">
+          <CardContent className="p-3 text-xs">
+            部分渠道未完整覆盖：{snapshot.warnings.join("；")}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <details className="rounded-xl border bg-background">
+        <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold">
+          <Search className="h-4 w-4 text-primary" />
+          按关键词研究近30天讨论
+        </summary>
+        <div className="space-y-4 border-t p-4">
           <div className="flex gap-3">
             <Input
-              placeholder="也可以手动输入：AI手机、短剧出海、椰子水经济..."
+              placeholder="输入研究主题：AI手机、短剧出海、椰子水经济..."
               value={researchTopic}
               onChange={(e) => setResearchTopic(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !researching && handleStartResearch()}
@@ -172,7 +189,7 @@ export function Last30DaysPanel() {
             </Button>
           </div>
 
-          <div className="flex flex-wrap gap-2 border-t pt-3">
+          <div className="flex flex-wrap gap-2">
             {ALL_SEARCH_PLATFORMS.map((platform) => {
               const isSelected = selectedSources.includes(platform.id)
               return (
@@ -195,7 +212,7 @@ export function Last30DaysPanel() {
             })}
           </div>
         </div>
-      </AiResultPanel>
+      </details>
 
       {researchError ? (
         <Card className="border-red-200 bg-red-50 text-red-700">
@@ -237,47 +254,51 @@ export function Last30DaysPanel() {
           ) : null}
 
           <div className="grid gap-4 md:grid-cols-2">
-            {researchResult.items.map((item) => (
-              <Card key={item.id} className="overflow-hidden">
-                <CardContent className="flex h-full flex-col gap-3 p-4">
-                  <div className="flex items-center justify-between gap-2 border-b pb-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      {getPlatformBadge(item.platform)}
-                      <span className="truncate text-xs font-semibold text-muted-foreground">@{item.author}</span>
-                    </div>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
-                      {item.date ? new Date(item.date).toLocaleDateString("zh-CN") : "30天内"}
-                    </span>
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{item.title}</p>
-                    {item.excerpt && item.excerpt !== item.title ? (
-                      <p className="line-clamp-3 text-xs leading-relaxed text-muted-foreground">{item.excerpt}</p>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center justify-between gap-2 border-t pt-2">
-                    <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                      {item.score > 0 ? <span className="font-semibold text-amber-600">推荐度: {item.score}</span> : null}
-                      {item.engagement?.likes != null ? <span>赞 {formatCount(item.engagement.likes)}</span> : null}
-                      {item.engagement?.num_comments != null ? <span>评 {formatCount(item.engagement.num_comments)}</span> : null}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" nativeButton={false} render={<Link href={`/aim?agent=ip_video&mode=asset_pack&idea=${encodeURIComponent(item.title)}`} />}>
-                        <Wand2 className="h-3 w-3" />
-                        创作
-                      </Button>
-                      <Button variant="outline" size="sm" nativeButton={false} render={<Link href={item.url} target="_blank" rel="noopener noreferrer" />}>
-                        原文
-                        <ExternalLink className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+            {researchResult.items.map((item) => <MarketHotCard key={item.id} item={item} />)}
           </div>
         </div>
       ) : null}
     </div>
+  )
+}
+
+function MarketHotCard({ item }: { item: ApiMarketHotItem }) {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="flex h-full flex-col gap-3 p-4">
+        <div className="flex items-center justify-between gap-2 border-b pb-2">
+          <div className="flex min-w-0 items-center gap-2">
+            {getPlatformBadge(item.platform)}
+            <span className="truncate text-xs font-semibold text-muted-foreground">@{item.author}</span>
+          </div>
+          <span className="shrink-0 text-[10px] text-muted-foreground">
+            {item.date ? new Date(item.date).toLocaleDateString("zh-CN") : "30天内"}
+          </span>
+        </div>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{item.title}</p>
+          {item.excerpt && item.excerpt !== item.title ? (
+            <p className="line-clamp-3 text-xs leading-relaxed text-muted-foreground">{item.excerpt}</p>
+          ) : null}
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t pt-2">
+          <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+            {item.score > 0 ? <span className="font-semibold text-amber-600">推荐度: {item.score}</span> : null}
+            {item.engagement?.likes != null ? <span>赞 {formatCount(item.engagement.likes)}</span> : null}
+            {item.engagement?.num_comments != null ? <span>评 {formatCount(item.engagement.num_comments)}</span> : null}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" nativeButton={false} render={<Link href={`/aim?agent=ip_video&mode=asset_pack&idea=${encodeURIComponent(item.title)}`} />}>
+              <Wand2 className="h-3 w-3" />
+              创作
+            </Button>
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link href={item.url} target="_blank" rel="noopener noreferrer" />}>
+              原文
+              <ExternalLink className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

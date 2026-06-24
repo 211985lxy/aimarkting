@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { BrandLogo } from "@/components/branding/brand-logo"
@@ -11,6 +11,8 @@ import {
   BriefcaseBusiness,
   BarChart2,
   Target,
+  Flame,
+  ChevronRight,
 } from "lucide-react"
 import {
   Sidebar,
@@ -27,8 +29,8 @@ import {
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 import {
-  AIM_AGENT_OPTIONS,
   DEFAULT_AIM_AGENT,
+  getAimAgent,
   isValidAimAgent,
   type AimAgentId,
 } from "@/lib/aim-ui-config"
@@ -50,6 +52,7 @@ const navGroups: NavGroup[] = [
     label: "创作中心",
     items: [
       { title: "工作总览", href: "/home", icon: LayoutDashboard },
+      { title: "热点中心", href: "/hot-topics", icon: Flame },
       { title: "IP营销全案", href: "/projects", icon: BriefcaseBusiness },
       { title: "市场洞察", href: "/competitor", icon: BarChart2 },
       { title: "选题中心", href: "/topic-planning", icon: Target },
@@ -69,7 +72,11 @@ const coreAimAgentIds: AimAgentId[] = [
   "content_review",
 ]
 
+const RECENT_ITEMS_PER_AGENT = 4
+
 export function AppSidebar() {
+  const [collapsedAgents, setCollapsedAgents] = useState<Set<AimAgentId>>(new Set())
+  const [showAllAgents, setShowAllAgents] = useState<Set<AimAgentId>>(new Set())
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const branding = useBranding()
@@ -89,6 +96,16 @@ export function AppSidebar() {
   }, [isAim, fetchHistory])
 
   const closeMobile = () => setOpenMobile(false)
+
+  const historyGroups = coreAimAgentIds
+    .map((agentId) => {
+      const agent = getAimAgent(agentId)
+      const items = history.filter((item) => {
+        const itemAgentId = isValidAimAgent(item.agentId) ? item.agentId : DEFAULT_AIM_AGENT
+        return itemAgentId === agentId
+      })
+      return { agent, items }
+    })
 
   return (
     <Sidebar className="border-r border-border/40 bg-sidebar/95 backdrop-blur-md">
@@ -136,73 +153,92 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
 
-        {/* AIM 智能体入口常驻（所有页面）；「最近内容」仅 /aim 显示 */}
+        {/* AIM 智能体入口常驻；/aim 下按 Codex 侧边栏样式展示历史 */}
         <SidebarGroup>
           <SidebarGroupLabel className="px-3 text-sm font-semibold tracking-wide text-foreground/80">
             AIM 智能体
           </SidebarGroupLabel>
             <SidebarGroupContent className="mt-1">
-              <div className="space-y-1 px-2">
-                {coreAimAgentIds.map((id) => AIM_AGENT_OPTIONS.find((a) => a.id === id)!).map((a) => {
-                  const Icon = a.icon
-                  const active = isAim && a.id === activeAgent
+              <div className="space-y-3 px-1.5">
+                {historyGroups.map(({ agent, items }) => {
+                  const Icon = agent.icon
+                  const active = isAim && agent.id === activeAgent
+                  const collapsed = collapsedAgents.has(agent.id)
+                  const showAll = showAllAgents.has(agent.id)
+                  const visibleItems = showAll ? items : items.slice(0, RECENT_ITEMS_PER_AGENT)
                   return (
-                    <Link
-                      key={a.id}
-                      href={`/aim?agent=${a.id}`}
-                      onClick={closeMobile}
-                      className={cn(
-                        "flex w-full items-start gap-2.5 rounded-lg p-2.5 text-left transition-colors",
-                        active ? "bg-primary/8 ring-1 ring-primary/20" : "hover:bg-muted/60",
-                      )}
-                    >
-                      <span
+                    <div key={agent.id} className="space-y-0.5">
+                      <div
                         className={cn(
-                          "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-                          active ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground",
+                          "flex h-8 w-full items-center rounded-md text-sm font-semibold transition-colors",
+                          active ? "bg-muted/70 text-foreground" : "text-foreground/85 hover:bg-muted/60 hover:text-foreground",
                         )}
                       >
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className={cn("block text-sm font-medium", active ? "text-primary" : "text-foreground")}>
-                          {a.title}
-                        </span>
-                        <span className="block text-[11px] leading-tight text-muted-foreground line-clamp-2">
-                          {a.description}
-                        </span>
-                      </span>
-                    </Link>
+                        <button
+                          type="button"
+                          aria-label={collapsed ? "展开历史" : "折叠历史"}
+                          disabled={!isAim || items.length === 0}
+                          onClick={() => {
+                            setCollapsedAgents((current) => {
+                              const next = new Set(current)
+                              if (next.has(agent.id)) next.delete(agent.id)
+                              else next.add(agent.id)
+                              return next
+                            })
+                          }}
+                          className="flex h-8 w-6 shrink-0 items-center justify-center rounded-l-md text-muted-foreground disabled:opacity-0"
+                        >
+                          <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", !collapsed && "rotate-90")} />
+                        </button>
+                        <Link
+                          href={`/aim?agent=${agent.id}`}
+                          onClick={closeMobile}
+                          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-r-md pr-1.5"
+                        >
+                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate">{agent.title}</span>
+                        </Link>
+                      </div>
+
+                      {isAim && items.length > 0 && !collapsed && (
+                        <div className="space-y-0.5 pl-8">
+                          {visibleItems.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                requestLoad(item.id)
+                                closeMobile()
+                              }}
+                              className="block h-8 w-full rounded-md px-1.5 text-left text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                              title={item.topicTitle || item.rawInput}
+                            >
+                              <span className="block truncate">{item.topicTitle || item.rawInput}</span>
+                            </button>
+                          ))}
+
+                          {items.length > RECENT_ITEMS_PER_AGENT && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowAllAgents((current) => {
+                                  const next = new Set(current)
+                                  if (next.has(agent.id)) next.delete(agent.id)
+                                  else next.add(agent.id)
+                                  return next
+                                })
+                              }}
+                              className="block h-8 w-full rounded-md px-1.5 text-left text-sm font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                            >
+                              {showAll ? "收起显示" : "展开显示"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )
                 })}
               </div>
-
-              {/* 最近内容：仅 /aim 显示 */}
-              {isAim && (
-              <div className="mt-3 border-t pt-3">
-                <p className="px-3 pb-1.5 text-xs font-semibold text-muted-foreground">最近内容</p>
-                {history.length === 0 ? (
-                  <p className="px-3 text-[11px] text-muted-foreground/70">还没有生成记录</p>
-                ) : (
-                  <div className="space-y-0.5 px-1.5">
-                    {history.slice(0, 8).map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => {
-                          requestLoad(item.id)
-                          closeMobile()
-                        }}
-                        className="block w-full truncate rounded-md px-1.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                        title={item.topicTitle || item.rawInput}
-                      >
-                        <span className="line-clamp-1">{item.topicTitle || item.rawInput}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              )}
             </SidebarGroupContent>
           </SidebarGroup>
       </SidebarContent>

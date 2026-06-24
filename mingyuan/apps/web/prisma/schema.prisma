@@ -682,6 +682,20 @@ model AiHotBriefing {
   @@index([generatedAt])
 }
 
+model MarketHotSnapshot {
+  id          String   @id @default(cuid())
+  date        String   @unique // Beijing date, YYYY-MM-DD
+  generatedAt DateTime
+  items       Json
+  warnings    Json
+  summary     String   @db.Text
+  status      String   @default("success") // success | partial | failed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([generatedAt])
+}
+
 // ─── Content Templates ────────────────────────────────────
 
 model ContentTemplate {
