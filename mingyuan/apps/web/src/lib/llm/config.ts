@@ -13,6 +13,26 @@ export function getProviderConfigs(): LLMProviderConfig[] {
     })
   }
 
+  // Alternative: JieKou AI — OpenAI-compatible API（接口AI中转站）
+  if (process.env.JIEKOU_API_KEY) {
+    configs.push({
+      name: "jiekou",
+      apiKey: process.env.JIEKOU_API_KEY,
+      baseURL: process.env.JIEKOU_BASE_URL || "https://api.highwayapi.ai/openai",
+      defaultModel: process.env.JIEKOU_MODEL || "gpt-4o",
+    })
+  }
+
+  // Backup: OpenRouter — unified LLM gateway（多模型聚合）
+  if (process.env.OPENROUTER_API_KEY) {
+    configs.push({
+      name: "openrouter",
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1",
+      defaultModel: process.env.OPENROUTER_MODEL || "anthropic/claude-sonnet-4.6",
+    })
+  }
+
   // Fallback: TheRouter — unified LLM gateway
   if (process.env.THEROUTER_API_KEY) {
     configs.push({

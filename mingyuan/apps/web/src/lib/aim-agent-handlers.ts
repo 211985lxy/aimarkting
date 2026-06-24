@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { LLMClient } from "@/lib/llm/client"
+import { getAgentLLM } from "@/lib/llm/agent-router"
 import type { ChatMessage } from "@/lib/llm/types"
 import { buildIpCopywritingMethodologyBlock } from "@/lib/ip-copywriting-methodology"
 import { buildBusinessDiagnosisMethodologyBlock } from "@/lib/business-diagnosis-methodology"
@@ -148,6 +149,28 @@ const FORMAT_INSTRUCTIONS: Record<ContentFormat, string> = {
 事实风险提醒：
 - 必拍镜头至少给 3 条，评论区引导和私域承接话术必须能直接复制使用
 - 不承诺效果，不写保证涨粉、保证成交、月入多少等高风险表达`,
+
+  koubo_script: `【口播文案】
+要求：
+- 200-500字纯口播文字，适合直接对着镜头念
+- 禁止分镜格式，不要写【画面】【旁白】等任何前缀或镜头标注
+- 开头3秒必须使用下方「爆款开头库」中的一种公式思路，制造停留
+- 正文必须使用下方「爆款文案结构库」中的一种结构节拍推进
+- 结尾必须使用下方「结尾类型库」中的一种方式收束
+- 用口语化表达，短句为主，保留必要停顿和语气词，禁止书面语
+- 一段话就是一个完整口播段落，可以直接录制
+- 禁止使用以下词汇：赋能、闭环、抓手、颗粒度、对齐、拉通、打通、沉淀、复盘、迭代、链路、触达、心智、赛道`,
+
+  xiaohongshu_post: `【小红书图文】
+要求：
+- 300-600字，适合小红书图文笔记
+- 第一行必须是吸睛标题（可带emoji，15字以内，制造好奇/反差/利益/痛点）
+- 正文用短段落+emoji分段，每段1-3句，节奏轻快
+- 语气真实、像真人分享经验，第一人称视角
+- 必须有1个核心干货或洞察，让用户觉得"有用想收藏"
+- 结尾引导互动（点赞收藏/评论/关注）
+- 最后用2-5个#话题标签收尾，贴合小红书搜索习惯
+- 禁止硬广和明显营销腔，禁止保证效果`,
 }
 
 // ─── 1. 内容生产官 (ContentProducerHandler) ──────────────────
@@ -177,7 +200,7 @@ ${params.methodologyBlock}
 
 请直接根据上文与用户的历史对话，产出下一轮内容。`
 
-    return executeChatLLM(systemPrompt, params.messages)
+    return executeChatLLM(this.agentId, systemPrompt, params.messages)
   }
 
   async generate(context: AimGenerateContext): Promise<AimGenerateResponse> {
@@ -190,7 +213,7 @@ ${params.methodologyBlock}
     const systemPrompt = buildProducerSystemPrompt(agentPrompt, formatBlocks, context)
     const userPrompt = buildUserPrompt(context, formatBlocks)
 
-    const completion = await executeGenerateLLM(systemPrompt, userPrompt)
+    const completion = await executeGenerateLLM(this.agentId, systemPrompt, userPrompt)
     const parsed = parseMultiFormatResponse(completion.content, context.targetFormats)
 
     const record = await saveAimGenerationRecord(context, completion, parsed)
@@ -240,7 +263,7 @@ C. 选项内容
 
 请直接根据上文与用户的历史对话，产出下一轮内容。`
 
-    return executeChatLLM(systemPrompt, params.messages)
+    return executeChatLLM(this.agentId, systemPrompt, params.messages)
   }
 
   async generate(context: AimGenerateContext): Promise<AimGenerateResponse> {
@@ -290,7 +313,7 @@ ${workflowContext}
 
 请生成这篇深度长文正文。直接输出正文，不要包含任何解释性文字。`
 
-    const completion = await executeGenerateLLM(systemPrompt, userPrompt)
+    const completion = await executeGenerateLLM(this.agentId, systemPrompt, userPrompt)
 
     const rawText = completion.content.trim()
 
@@ -300,6 +323,8 @@ ${workflowContext}
       moments_post: undefined,
       community_message: undefined,
       shooting_brief: undefined,
+      koubo_script: undefined,
+      xiaohongshu_post: undefined,
       raw_copy: safeTargets.includes("raw_copy") ? rawText : undefined,
     }
 
@@ -347,7 +372,7 @@ ${params.businessDiagnosisBlock}
 
 请直接根据上文与用户的历史对话，产出你下一轮的建议或追问。`
 
-    return executeChatLLM(systemPrompt, params.messages)
+    return executeChatLLM(this.agentId, systemPrompt, params.messages)
   }
 
   async generate(context: AimGenerateContext): Promise<AimGenerateResponse> {
@@ -385,7 +410,7 @@ ${workflowContext}
 
 请生成这份详细的"生意系统体检报告"。`
 
-    const completion = await executeGenerateLLM(systemPrompt, userPrompt)
+    const completion = await executeGenerateLLM(this.agentId, systemPrompt, userPrompt)
     const rawText = completion.content.trim()
 
     const parsed: Record<ContentFormat, string | undefined> = {
@@ -394,6 +419,8 @@ ${workflowContext}
       moments_post: undefined,
       community_message: undefined,
       shooting_brief: undefined,
+      koubo_script: undefined,
+      xiaohongshu_post: undefined,
       raw_copy: rawText,
     }
 
@@ -433,7 +460,7 @@ ${params.knowledgeBlock}
 
 请直接根据上文与用户的历史对话，产出你下一轮的建议或追问。`
 
-    return executeChatLLM(systemPrompt, params.messages)
+    return executeChatLLM(this.agentId, systemPrompt, params.messages)
   }
 
   async generate(context: AimGenerateContext): Promise<AimGenerateResponse> {
@@ -468,7 +495,7 @@ ${workflowContext}
 
 请生成这份详细的"IP营销策划定位方案"。`
 
-    const completion = await executeGenerateLLM(systemPrompt, userPrompt)
+    const completion = await executeGenerateLLM(this.agentId, systemPrompt, userPrompt)
     const rawText = completion.content.trim()
 
     const parsed: Record<ContentFormat, string | undefined> = {
@@ -477,6 +504,8 @@ ${workflowContext}
       moments_post: undefined,
       community_message: undefined,
       shooting_brief: undefined,
+      koubo_script: undefined,
+      xiaohongshu_post: undefined,
       raw_copy: rawText,
     }
 
@@ -517,7 +546,7 @@ ${params.knowledgeBlock}
 
 请直接根据上文与用户的历史对话，产出下一轮内容。`
 
-    return executeChatLLM(systemPrompt, params.messages)
+    return executeChatLLM(this.agentId, systemPrompt, params.messages)
   }
 
   async generate(context: AimGenerateContext): Promise<AimGenerateResponse> {
@@ -552,7 +581,7 @@ ${workflowContext}
 
 请生成这份详细的"内容数据复盘报告"。`
 
-    const completion = await executeGenerateLLM(systemPrompt, userPrompt)
+    const completion = await executeGenerateLLM(this.agentId, systemPrompt, userPrompt)
     const rawText = completion.content.trim()
 
     const parsed: Record<ContentFormat, string | undefined> = {
@@ -561,6 +590,8 @@ ${workflowContext}
       moments_post: undefined,
       community_message: undefined,
       shooting_brief: undefined,
+      koubo_script: undefined,
+      xiaohongshu_post: undefined,
       raw_copy: rawText,
     }
 
@@ -708,7 +739,7 @@ export async function buildAimGeneration(agentId: string, params: Omit<AimGenera
 
 // ─── 共享辅助函数 ───────────────────────────────────────────
 
-async function executeChatLLM(systemPrompt: string, messages: any[]): Promise<AimChatResponse> {
+async function executeChatLLM(agentId: string, systemPrompt: string, messages: any[]): Promise<AimChatResponse> {
   const formattedMessages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
     ...messages.map((m) => ({
@@ -717,7 +748,7 @@ async function executeChatLLM(systemPrompt: string, messages: any[]): Promise<Ai
     })),
   ]
 
-  const llm = LLMClient.shared()
+  const llm = getAgentLLM(agentId)
   const completion = await llm.complete({
     messages: formattedMessages,
     temperature: 0.7,
@@ -728,8 +759,8 @@ async function executeChatLLM(systemPrompt: string, messages: any[]): Promise<Ai
   }
 }
 
-async function executeGenerateLLM(systemPrompt: string, userPrompt: string) {
-  const llm = LLMClient.shared()
+async function executeGenerateLLM(agentId: string, systemPrompt: string, userPrompt: string) {
+  const llm = getAgentLLM(agentId)
   return llm.complete({
     messages: [
       { role: "system", content: systemPrompt },

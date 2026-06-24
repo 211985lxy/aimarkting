@@ -37,6 +37,9 @@ import type {
   ApiCompetitorAnalysis,
   CompetitorReportsResponse,
   ApiAiHotBriefing,
+  ApiHotDecisionResponse,
+  ApiHotDecisionSource,
+  ApiMarketHotSnapshot,
   ApiVideoCopyExtraction,
   ApiAgentApiKeySummary,
 } from "@/types/api"
@@ -190,6 +193,32 @@ export async function getTodayAiHotBriefing(): Promise<ApiAiHotBriefing> {
 
 export async function refreshTodayAiHotBriefing(): Promise<ApiAiHotBriefing> {
   const payload = await request<{ data: ApiAiHotBriefing }>("/api/aihot-briefing/today/refresh", {
+    method: "POST",
+  })
+  return payload.data
+}
+
+export async function getMarketHotSnapshot(): Promise<ApiMarketHotSnapshot> {
+  const payload = await request<{ data: ApiMarketHotSnapshot }>("/api/market-insights/last30days/hotlist")
+  return payload.data
+}
+
+export async function refreshMarketHotSnapshot(): Promise<ApiMarketHotSnapshot> {
+  const payload = await request<{ data: ApiMarketHotSnapshot }>("/api/market-insights/last30days/hotlist/refresh", {
+    method: "POST",
+  })
+  return payload.data
+}
+
+export async function getHotDecisions(source: ApiHotDecisionSource): Promise<ApiHotDecisionResponse> {
+  const payload = await request<{ data: ApiHotDecisionResponse }>(`/api/hot-decisions?source=${encodeURIComponent(source)}`, {
+    auth: false,
+  })
+  return payload.data
+}
+
+export async function refreshHotDecisions(source: ApiHotDecisionSource): Promise<ApiHotDecisionResponse> {
+  const payload = await request<{ data: ApiHotDecisionResponse }>(`/api/hot-decisions/refresh?source=${encodeURIComponent(source)}`, {
     method: "POST",
   })
   return payload.data
@@ -893,6 +922,8 @@ export type ContentFormat =
   | "community_message"
   | "shooting_brief"
   | "raw_copy"
+  | "koubo_script"
+  | "xiaohongshu_post"
 
 export type AimTaskType =
   | "polish_copy"
@@ -926,6 +957,7 @@ export interface AimGenerateResponse {
 
 export interface AimGeneration {
   id: string
+  agentId?: string | null
   projectId?: string | null
   rawInput: string
   videoScript: string | null

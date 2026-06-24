@@ -7,11 +7,11 @@ import {
   Check,
   Clipboard,
   FileText,
+  Image,
   Loader2,
   MessageCircle,
-  Send,
+  Mic,
   Sparkles,
-  Video,
   ShieldCheck,
   Plus,
   ArrowRight,
@@ -128,6 +128,8 @@ const FORMAT_LABELS: Record<ContentFormat, string> = {
   community_message: "社群运营文案",
   shooting_brief: "拍摄交接单",
   raw_copy: "诊断报告",
+  koubo_script: "口播文案",
+  xiaohongshu_post: "小红书图文",
 }
 
 const LOADING_MESSAGES = ["分析输入...", "检索知识库...", "生成内容..."]
@@ -419,8 +421,9 @@ function DeliverableBubble({
 
   const hasMoments = deliverables.results.some((r) => r.format === "moments_post")
   const hasWechat = deliverables.results.some((r) => r.format === "wechat_article")
-  const hasBrief = deliverables.results.some((r) => r.format === "shooting_brief")
   const hasVideo = deliverables.results.some((r) => r.format === "video_script")
+  const hasKoubo = deliverables.results.some((r) => r.format === "koubo_script")
+  const hasXiaohongshu = deliverables.results.some((r) => r.format === "xiaohongshu_post")
 
   return (
     <div className="mt-2 w-full">
@@ -512,29 +515,24 @@ function DeliverableBubble({
         </Tabs>
 
         <ActionStrip>
+          {!hasKoubo && hasVideo && (
+            <Button size="sm" variant="outline" onClick={() => onRepurpose("koubo_script")} disabled={isBusy}>
+              <Mic className="h-3.5 w-3.5 mr-1" /> 口播文案
+            </Button>
+          )}
+          {!hasXiaohongshu && hasVideo && (
+            <Button size="sm" variant="outline" onClick={() => onRepurpose("xiaohongshu_post")} disabled={isBusy}>
+              <Image className="h-3.5 w-3.5 mr-1" /> 小红书图文
+            </Button>
+          )}
           {!hasMoments && hasVideo && (
             <Button size="sm" variant="outline" onClick={() => onRepurpose("moments_post")} disabled={isBusy}>
-              <MessageCircle className="h-3.5 w-3.5 mr-1" /> 生成朋友圈
+              <MessageCircle className="h-3.5 w-3.5 mr-1" /> 朋友圈文案
             </Button>
           )}
           {!hasWechat && hasVideo && (
             <Button size="sm" variant="outline" onClick={() => onRepurpose("wechat_article")} disabled={isBusy}>
-              <FileText className="h-3.5 w-3.5 mr-1" /> 生成公众号
-            </Button>
-          )}
-          {!hasBrief && hasVideo && (
-            <Button size="sm" variant="outline" onClick={() => onRepurpose("shooting_brief")} disabled={isBusy}>
-              <Video className="h-3.5 w-3.5 mr-1" /> 拍摄交接单
-            </Button>
-          )}
-          {hasVideo && (
-            <Button size="sm" variant="outline" onClick={onQuality} disabled={isBusy}>
-              <ShieldCheck className="h-3.5 w-3.5 mr-1" /> 进入质检
-          </Button>
-          )}
-          {deliverables.id && !deliverables.id.startsWith("polish-") && (
-            <Button size="sm" variant="outline" onClick={() => onMarkStatus("ready_to_shoot")} disabled={isBusy}>
-              <Send className="h-3.5 w-3.5 mr-1" /> 标记待拍摄
+              <FileText className="h-3.5 w-3.5 mr-1" /> 公众号文章
             </Button>
           )}
         </ActionStrip>
@@ -963,31 +961,6 @@ export default function AimPage() {
               <p className="hidden truncate text-xs text-muted-foreground sm:block">{agent.description}</p>
             </div>
 
-            {/* 顶部模式切换 (仅在内容生产官下显示) */}
-            {selectedAgentId === "ip_video" && (
-              <Tabs
-                value={modeParam === "asset_pack" ? "asset_pack" : "single"}
-                onValueChange={(v) => {
-                  const nextParams = new URLSearchParams(searchParams.toString())
-                  if (v === "asset_pack") {
-                    nextParams.set("mode", "asset_pack")
-                  } else {
-                    nextParams.delete("mode")
-                  }
-                  router.push(`/aim?${nextParams.toString()}`)
-                }}
-                className="h-8 shrink-0"
-              >
-                <TabsList className="grid w-[180px] grid-cols-2 h-8 p-0.5">
-                  <TabsTrigger value="asset_pack" className="text-[11px] h-7 px-1.5">
-                    ✨ 资产包模式
-                  </TabsTrigger>
-                  <TabsTrigger value="single" className="text-[11px] h-7 px-1.5">
-                    单篇创作
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            )}
           </div>
           <div className="flex items-center gap-2">
             {projects.length > 0 ? (

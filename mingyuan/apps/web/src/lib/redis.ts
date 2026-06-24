@@ -2,9 +2,8 @@ import Redis from "ioredis"
 
 const globalForRedis = globalThis as unknown as { redis: Redis }
 
-export const redis =
-  globalForRedis.redis ??
-  new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+function createRedisClient(): Redis {
+  const client = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
     maxRetriesPerRequest: 5,
     lazyConnect: true,
     connectTimeout: 5000,
@@ -16,10 +15,15 @@ export const redis =
       return err.message.includes("READONLY")
     },
   })
+  // 仅在首次创建实例时注册一次 error listener。
+  // dev 热重载会重新求值本模块，若 on("error") 写在顶层会重复注册到同一个缓存实例，触发 MaxListenersExceededWarning。
+  client.on("error", () => {
+    // Redis is an optional cache layer for most app flows. Callers fall back to
+    // direct fetches, so avoid noisy unhandled error logs during builds/dev.
+  })
+  return client
+}
 
-redis.on("error", () => {
-  // Redis is an optional cache layer for most app flows. Callers fall back to
-  // direct fetches, so avoid noisy unhandled error logs during builds/dev.
-})
+export const redis = globalForRedis.redis ?? createRedisClient()
 
 if (process.env.NODE_ENV !== "production") globalForRedis.redis = redis

@@ -309,6 +309,65 @@ export interface ApiAiHotBriefing {
   items: ApiAiHotBriefingItem[];
 }
 
+export interface ApiMarketHotItem {
+  id: string;
+  platform: string;
+  title: string;
+  excerpt: string;
+  url: string;
+  author: string;
+  date: string;
+  score: number;
+  engagement?: {
+    likes?: number;
+    num_comments?: number;
+  };
+}
+
+export interface ApiMarketHotSnapshot {
+  date: string;
+  generatedAt: string | null;
+  items: ApiMarketHotItem[];
+  warnings: string[];
+  summary: string;
+  status: "success" | "partial" | "failed" | "empty";
+}
+
+export type ApiHotDecisionSource = "market" | "aihot";
+export type ApiHotDecisionItemSource = ApiHotDecisionSource | "last30days" | "douyin";
+export type ApiHotDecisionVerdict = "worth" | "watch" | "caution" | "avoid";
+export type ApiHotSourceTier = "selected" | "strong" | "medium" | "weak";
+
+export interface ApiHotDecisionItem {
+  id: string;
+  source: ApiHotDecisionItemSource;
+  title: string;
+  summary: string;
+  url: string;
+  platform: string;
+  sourceName: string;
+  publishedAt: string | null;
+  score: number;
+  verdict: ApiHotDecisionVerdict;
+  verdictLabel: string;
+  sourceTier: ApiHotSourceTier;
+  sourceTierLabel: string;
+  sourceConfidence: string;
+  reason: string;
+  recommendedAction: string;
+  isPreselected: boolean;
+  clusterSize: number;
+  relatedTitles: string[];
+}
+
+export interface ApiHotDecisionResponse {
+  source: ApiHotDecisionSource;
+  updatedAt: string | null;
+  items: ApiHotDecisionItem[];
+  warnings: string[];
+  summary: string;
+}
+
 export interface ApiVideoCopyAnalysis {
   /** 纯 Markdown 格式的四维拆解（结构拆解 + 心理拆解 + 商业拆解 + 迁移应用） */
   markdown: string;

@@ -11,6 +11,8 @@ export type ContentFormat =
   | "community_message"
   | "shooting_brief"
   | "raw_copy"
+  | "koubo_script"
+  | "xiaohongshu_post"
 
 export type AimTaskType =
   | "polish_copy"
@@ -119,6 +121,8 @@ export function parseMultiFormatResponse(
     community_message: undefined,
     shooting_brief: undefined,
     raw_copy: undefined,
+    koubo_script: undefined,
+    xiaohongshu_post: undefined,
   }
 
   for (let i = 0; i < formats.length; i++) {
