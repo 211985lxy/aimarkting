@@ -11,6 +11,7 @@ import {
   ExternalLink,
   FileText,
   Loader2,
+  MessageCircle,
   RefreshCw,
   Send,
   Video,
@@ -77,7 +78,8 @@ export default function VideoCopyPage() {
   const [history, setHistory] = useState<ApiVideoCopyExtraction[]>([])
 
   const isActive = record ? ACTIVE_STATUSES.has(record.status) : false
-  const analysis = record?.analysisResult as { markdown: string } | null | undefined
+  const analysis = record?.analysisResult as { markdown: string; topComments?: Array<{ text: string; likes: number; isTop: boolean }> } | null | undefined
+const topComments = analysis?.topComments ?? []
   const activeRecordId = record?.id
   const activeRecordStatus = record?.status
   const activeRecordUpdatedAt = record?.updatedAt
@@ -316,6 +318,35 @@ export default function VideoCopyPage() {
       ) : record?.analysisError ? (
         <Card className="border-amber-200">
           <CardContent className="p-4 text-sm text-amber-700">{record.analysisError}</CardContent>
+        </Card>
+      ) : null}
+
+      {topComments.length > 0 ? (
+        <AiResultPanel
+          title="粉丝热评"
+          icon={<MessageCircle className="h-4 w-4 text-primary" />}
+          meta={<span>精选高赞评论 · 帮你找到受众的真实反应和选题灵感</span>}
+          flat
+        >
+          <div className="space-y-3">
+            {topComments.map((comment, i) => (
+              <div key={i} className="rounded-lg border bg-muted/20 p-3">
+                <p className="text-sm leading-relaxed text-foreground/90">{comment.text}</p>
+                <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>👍 {comment.likes}</span>
+                  {comment.isTop && <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">置顶</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </AiResultPanel>
+      ) : record?.status === "completed" && !record.analysisError ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center gap-2 p-5 text-center text-sm text-muted-foreground">
+            <MessageCircle className="h-8 w-8" />
+            <p>暂无热评数据</p>
+            <p className="text-xs">热评需要视频有 100+ 点赞的评论才会展示，当前仅支持抖音和小红书。</p>
+          </CardContent>
         </Card>
       ) : null}
 

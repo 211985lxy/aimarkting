@@ -8,6 +8,10 @@ import {
   formatVideoTextExtractionError,
   submitVideoTextExtractionTask,
 } from "@/lib/video-text-extractor"
+import { getAdapter } from "@/lib/tikhub/adapters/index"
+import type { Platform } from "@/lib/tikhub/types"
+import { parseUrl } from "@/lib/tikhub/url-parser"
+import type { NormalizedComment } from "@/lib/tikhub/types"
 
 type VideoCopyExtractionRecord = NonNullable<
   Awaited<ReturnType<typeof prisma.videoCopyExtraction.findUnique>>
@@ -25,13 +29,64 @@ export interface ApiVideoCopyExtraction {
   videoDuration: string | null
   transcript: string | null
   analysisResult: unknown | null
+  topComments: TopCommentEntry[]
   createdAt: string
   updatedAt: string
   completedAt: string | null
 }
 
+export interface TopCommentEntry {
+  text: string
+  likes: number
+  isTop: boolean
+}
+
+function extractVideoId(platform: string, url: string): string | null {
+  if (platform !== "douyin") return null
+  const parsed = parseUrl(url)
+  if (!parsed) return null
+
+  // douyin 视频/分享链接提取 videoId: /video/<id> 或短链接经过 resolveUrl 后解析
+  const lower = url.toLowerCase()
+  const videoMatch = lower.match(/\/video\/(\d+)/)
+  if (videoMatch) return videoMatch[1]
+
+  // 短链无法直接提取 id，记录 platform 等 resolveUrl 完成后再补提
+  const shortLink = /\/(share|v\.douyin\.com)/i.test(url)
+  if (shortLink) return null
+
+  return null
+}
+
+async function fetchTopComments(
+  platform: string,
+  sourceUrl: string,
+): Promise<TopCommentEntry[]> {
+  const videoId = extractVideoId(platform, sourceUrl)
+  if (!videoId) return []
+
+  // 只有 douyin/xiaohongshu 支持 fetchComments
+  if (platform !== "douyin" && platform !== "xiaohongshu") return []
+
+  try {
+    const adapter = getAdapter(platform as Platform)
+    const comments = await adapter.fetchComments(videoId, 20)
+
+    return comments
+      .filter((c: NormalizedComment) => c.likes >= 100)
+      .slice(0, 10)
+      .map((c: NormalizedComment) => ({
+        text: c.text,
+        likes: c.likes,
+        isTop: c.isTop,
+      }))
+  } catch {
+    return []
+  }
+}
+
 export function serializeVideoCopyExtraction(
-  record: VideoCopyExtractionRecord
+  record: VideoCopyExtractionRecord,
 ): ApiVideoCopyExtraction {
   return {
     id: record.id,
@@ -45,6 +100,7 @@ export function serializeVideoCopyExtraction(
     videoDuration: record.videoDuration,
     transcript: record.transcript,
     analysisResult: record.analysisResult,
+    topComments: (record.analysisResult as { topComments?: TopCommentEntry[] } | null)?.topComments ?? [],
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     completedAt: record.completedAt?.toISOString() ?? null,
@@ -173,11 +229,18 @@ export async function syncVideoCopyExtraction(
       transcript: latest.transcript,
     })
 
+    // 分析完成后，抓取热评一并存进 analysisResult JSON
+    const comments = await fetchTopComments(latest.platform, latest.sourceUrl)
+    const newAnalysisResult: Record<string, unknown> = { markdown: analysis.markdown }
+    if (comments.length > 0) {
+      newAnalysisResult.topComments = comments
+    }
+
     return prisma.videoCopyExtraction.update({
       where: { id: latest.id },
       data: {
         status: "completed",
-        analysisResult: analysis as unknown as Prisma.InputJsonValue,
+        analysisResult: newAnalysisResult as unknown as Prisma.InputJsonValue,
         analysisError: null,
         errorMessage: null,
         completedAt: new Date(),

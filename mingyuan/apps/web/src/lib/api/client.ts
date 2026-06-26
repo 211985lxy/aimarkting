@@ -877,6 +877,12 @@ export async function syncVideoCopyExtraction(id: string): Promise<ApiVideoCopyE
   })
 }
 
+export interface TopCommentEntry {
+  text: string
+  likes: number
+  isTop: boolean
+}
+
 export interface KnowledgeEntry {
   id: string
   userId: string
