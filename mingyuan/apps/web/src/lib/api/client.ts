@@ -56,6 +56,13 @@ class ApiError extends Error {
   }
 }
 
+export function getApiErrorMessage(payload: unknown, status: number, statusText: string): string {
+  if (typeof (payload as { error?: unknown } | null)?.error === "string") {
+    return (payload as { error: string }).error
+  }
+  return statusText ? `${status} ${statusText}` : `Request failed: ${status}`
+}
+
 type RequestOptions = RequestInit & {
   auth?: boolean
   timeout?: number // timeout in milliseconds
@@ -94,9 +101,16 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     if (timeoutId) clearTimeout(timeoutId)
     if (signal) signal.removeEventListener("abort", abortFromSignal)
 
-    const payload = await response
-      .json()
-      .catch(() => null)
+    const text = await response.text().catch(() => "")
+    const payload = text
+      ? (() => {
+          try {
+            return JSON.parse(text) as unknown
+          } catch {
+            return { error: text }
+          }
+        })()
+      : null
 
     if (!response.ok) {
       if (response.status === 401) {
@@ -104,7 +118,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       }
 
       throw new ApiError(
-        typeof payload?.error === "string" ? payload.error : `Request failed: ${response.status}`,
+        getApiErrorMessage(payload, response.status, response.statusText),
         response.status,
         payload
       )
@@ -725,12 +739,22 @@ export async function getCompetitorAnalysis(id: string): Promise<ApiCompetitorAn
   return request<ApiCompetitorAnalysis>(`/api/competitor/${id}`)
 }
 
+export function buildCompetitorReportsPath(page = 1, limit = 10, targetUrl?: string): string {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  })
+  if (targetUrl) params.set("targetUrl", targetUrl)
+  return `/api/competitor/reports?${params.toString()}`
+}
+
 export async function listCompetitorReports(
   page = 1,
-  limit = 10
+  limit = 10,
+  targetUrl?: string
 ): Promise<CompetitorReportsResponse> {
   return request<CompetitorReportsResponse>(
-    `/api/competitor/reports?page=${page}&limit=${limit}`
+    buildCompetitorReportsPath(page, limit, targetUrl)
   )
 }
 
@@ -937,6 +961,7 @@ export interface AimGenerateRequest {
   targetFormats?: ContentFormat[]
   taskType?: AimTaskType
   projectId?: string
+  videoCopyExtractionId?: string
   topicTitle?: string
   topicRationale?: string
   hotTopic?: string
@@ -985,6 +1010,30 @@ export async function generateAimContent(data: AimGenerateRequest, signal?: Abor
     timeout: 60000,
     signal,
   })
+}
+
+export interface AimEvolutionSuggestion {
+  category: "user_insight"
+  title: string
+  content: string
+  tags: string[]
+}
+
+export async function evolveAimConversation(input: {
+  projectId: string
+  messages: Array<{ role: "user" | "assistant"; content: string }>
+  signal?: AbortSignal
+}): Promise<AimEvolutionSuggestion[]> {
+  const payload = await request<{ suggestions: AimEvolutionSuggestion[] }>("/api/aim/evolve", {
+    method: "POST",
+    body: JSON.stringify({
+      projectId: input.projectId,
+      messages: input.messages,
+    }),
+    signal: input.signal,
+    timeout: 30000,
+  })
+  return payload.suggestions
 }
 
 export function generateScript(data: {
@@ -1189,6 +1238,92 @@ export async function chatAim(
     timeout: 30000,
     signal,
   })
+}
+
+export async function chatAimStream(
+  messages: AimChatMessage[],
+  options: {
+    agentId?: string
+    projectId?: string
+    signal?: AbortSignal
+    onDelta: (delta: string, content: string) => void
+  },
+): Promise<{ content: string }> {
+  const { signal, onDelta, ...bodyOptions } = options
+  const token = useAuthStore.getState().token || getStoredAuthToken()
+  let response: Response
+  try {
+    response = await fetch("/api/aim/chat", {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ messages, ...bodyOptions, stream: true }),
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApiError("请求已停止", 499, { code: "ABORTED", originalPath: "/api/aim/chat" })
+    }
+    throw error
+  }
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "")
+    const payload = text
+      ? (() => {
+          try {
+            return JSON.parse(text) as unknown
+          } catch {
+            return { error: text }
+          }
+        })()
+      : null
+
+    if (response.status === 401) {
+      useAuthStore.getState().clearSession()
+    }
+
+    throw new ApiError(
+      getApiErrorMessage(payload, response.status, response.statusText),
+      response.status,
+      payload
+    )
+  }
+
+  if (!response.body) {
+    throw new ApiError("当前浏览器不支持流式输出", 500, { code: "NO_STREAM_BODY" })
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let content = ""
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const delta = decoder.decode(value, { stream: true })
+      if (!delta) continue
+      content += delta
+      onDelta(delta, content)
+    }
+    const tail = decoder.decode()
+    if (tail) {
+      content += tail
+      onDelta(tail, content)
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApiError("请求已停止", 499, { code: "ABORTED", originalPath: "/api/aim/chat" })
+    }
+    throw error
+  } finally {
+    reader.releaseLock()
+  }
+
+  return { content }
 }
 
 // ─── Inspiration（灵感收集） ─────────────────────────────

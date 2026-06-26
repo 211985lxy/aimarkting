@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { AimPromptComposer } from "@/components/aim/aim-prompt-composer"
@@ -31,9 +32,13 @@ import {
   getVideoCopyExtraction,
   checkScriptQuality,
   chatAim,
+  chatAimStream,
+  createKnowledge,
+  evolveAimConversation,
   ApiError,
   listClientProjects,
   updateAimWorkflowStatus,
+  type AimEvolutionSuggestion,
   type AimGenerateResponse,
   type AimGeneration,
   type AimChatToolAction,
@@ -74,14 +79,14 @@ const AGENT_EXTRAS: Record<AimAgentId, Omit<AimAgentOption, keyof AimAgentMeta>>
     primaryActionLabel: "生成内容",
   },
   deep_copywriter: {
-    intro: "我是你的深度文案官。把想法、视频原文、老板口述或对标文案给我，我会先用选择题挖观点，最后只生成一篇完整深度长文。",
-    placeholder: "粘贴想法、视频原文、老板口述、对标文案或想借势的热点，我先帮你挖观点再写母稿…",
-    defaultInstruction: "先用3-5个半开放选择题挖出用户真实观点；每题选项必须按 A. / B. / C. / D. 独立成行输出，方便用户点击。用户完成选择后，生成时只输出一篇完整深度长文正文，不输出观点确认卡、大纲、开头钩子、拆分方向或平台分发建议。热点只能自然融合，禁止硬蹭或编造。",
+    intro: "我是你的深度文案官。把想法、视频原文、老板口述或对标文案给我，我只做纯粹的长篇文案创作，先搭框架，再写成一篇完整长文。",
+    placeholder: "粘贴想法、视频原文、老板口述、对标文案或想借势的热点，我先帮你搭文案框架…",
+    defaultInstruction: "只做长篇文案创作。先输出文案框架，包含核心观点、目标读者、情绪入口、正文推进结构、开头方向；再用2-3个半开放选择题挖出用户真实观点。每题选项必须按 A. / B. / C. / D. 独立成行输出，方便用户点击。用户确认框架后，只输出一篇完整长文正文，正文结束立刻停止；不输出拆分方向、私域话术、任何平台分发内容或“你看是否符合”这类确认尾句。热点只能自然融合，禁止硬蹭或编造。",
     quickPrompts: [
-      "根据这段视频原文，先问我几个观点选择题，再打磨成适合我表达的深度母稿。",
-      "我有一个观点，先帮我挖出真实态度和可借势热点，再写成有钩子、有结构的母稿。",
+      "根据这段视频原文，先搭文案框架，再打磨成适合我表达的一篇长文。",
+      "我有一个观点，先帮我挖出真实态度，再写成开头有力量、结构完整的一篇长文。",
     ],
-    primaryActionLabel: "生成深度母稿",
+    primaryActionLabel: "生成长篇文案",
   },
   business_diagnosis: {
     intro: "我是你的定位策划官。告诉我你的产品、卖给谁、目前怎么获客、卡在哪，我会输出 IP 定位、内容定位和成交路径建议。",
@@ -114,6 +119,16 @@ const AGENT_EXTRAS: Record<AimAgentId, Omit<AimAgentOption, keyof AimAgentMeta>>
     ],
     primaryActionLabel: "生成复盘报告",
   },
+  persona: {
+    intro: "我来一步步帮你梳理来时路：经历成就 → 低谷转折 → 顿悟 → 现在的产品 → 目标用户 → 标志案例。聊完直接给你置顶视频脚本，还能逐句改。",
+    placeholder: "想到什么说什么，乱也没关系。从『某年某月，我…』开始最省事…",
+    defaultInstruction: "引导式：每轮只追问一个最关键的缺口并给回答示例，回复必须以【进度 XX%】开头；6 维收齐（100%）后产出『来时路总结 + 逐句口播与配图的置顶视频脚本』；用户说『第N句改X』时只改对应句。口语真诚，避免 AI 腔和过时热点。",
+    quickPrompts: [
+      "从『某年某月，我出生在…』开始讲我的来时路",
+      "我想做一条置顶视频讲清楚我是谁、为什么做现在这件事",
+    ],
+    primaryActionLabel: "梳理来时路",
+  },
 }
 
 const AGENT_OPTIONS: AimAgentOption[] = AIM_AGENT_OPTIONS.map((meta) => ({
@@ -122,7 +137,7 @@ const AGENT_OPTIONS: AimAgentOption[] = AIM_AGENT_OPTIONS.map((meta) => ({
 }))
 
 const FORMAT_LABELS: Record<ContentFormat, string> = {
-  video_script: "视频脚本",
+  video_script: "口播文案",
   wechat_article: "公众号文章",
   moments_post: "朋友圈文案",
   community_message: "社群运营文案",
@@ -156,6 +171,14 @@ interface ChoiceGroup {
 
 function cleanChoiceText(text: string) {
   return text.replace(/^#+\s*/, "").replace(/\*\*/g, "").trim()
+}
+
+/** 从人设故事官的回复里解析【进度 XX%】，用于顶部进度条 */
+function extractProgress(content: string): number | null {
+  const m = content.match(/【进度\s*(\d+)\s*%】/)
+  if (!m) return null
+  const v = parseInt(m[1], 10)
+  return Number.isNaN(v) ? null : Math.min(100, Math.max(0, v))
 }
 
 function extractChoiceGroups(content: string): ChoiceGroup[] {
@@ -269,6 +292,7 @@ interface AimDraft {
   selectedProjectId: string
   input: string
   messages: ChatMessage[]
+  videoCopyExtractionId?: string
 }
 
 function loadAimDraft(): AimDraft | null {
@@ -283,6 +307,7 @@ function loadAimDraft(): AimDraft | null {
       selectedProjectId: typeof draft.selectedProjectId === "string" ? draft.selectedProjectId : "",
       input: typeof draft.input === "string" ? draft.input : "",
       messages: draft.messages,
+      videoCopyExtractionId: typeof draft.videoCopyExtractionId === "string" ? draft.videoCopyExtractionId : undefined,
     }
   } catch {
     return null
@@ -318,8 +343,9 @@ const ZhuJianContent = memo(function ZhuJianContent({ text }: { text: string }) 
   return (
     <div className="space-y-3 select-text font-serif leading-loose tracking-wider text-foreground/95 antialiased">
       {lines.map((line, index) => {
+        const displayLine = line.replace(/\*\*/g, "")
         const regex = /(【[^】]+】)/g
-        const parts = line.split(regex)
+        const parts = displayLine.split(regex)
         if (parts.length > 1) {
           return (
             <p key={index} className="text-sm sm:text-base leading-loose my-2 text-[#2c2b2a] dark:text-[#f3ede2]">
@@ -352,7 +378,7 @@ const ZhuJianContent = memo(function ZhuJianContent({ text }: { text: string }) 
         }
         return (
           <p key={index} className="text-sm sm:text-base leading-loose my-2 text-[#2c2b2a] dark:text-[#f3ede2] min-h-6">
-            {line}
+            {displayLine}
           </p>
         )
       })}
@@ -556,12 +582,16 @@ export default function AimPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<AimAgentId>(() => agentParam ? activeAgentId : initialDraft?.selectedAgentId || activeAgentId)
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialDraft?.messages || [])
   const [input, setInput] = useState(() => initialDraft?.input || "")
+  const [sourceVideoCopyExtractionId, setSourceVideoCopyExtractionId] = useState<string | undefined>(() => initialDraft?.videoCopyExtractionId)
   const [isThinking, setIsThinking] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isQualityChecking, setIsQualityChecking] = useState(false)
   const [loadingIndex, setLoadingIndex] = useState(0)
   const [projects, setProjects] = useState<ClientProject[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState(() => initialDraft?.selectedProjectId || "")
+  const [projectEnabled, setProjectEnabled] = useState(true)
+  const [isEvolving, setIsEvolving] = useState(false)
+  const [evolutionSuggestions, setEvolutionSuggestions] = useState<AimEvolutionSuggestion[]>([])
 
   // 历史记录由侧边栏共享 store 管理（侧边栏渲染列表、生成成功后刷新、点击后触发加载）
   const storeHistory = useAimWorkspaceStore((s) => s.history)
@@ -600,7 +630,7 @@ export default function AimPage() {
         title: "内容生产官 · 单篇创作",
         defaultFormats: ["video_script" as const],
         placeholder: "说说今天要生产什么内容：选题、原始想法、老板口述、客户问题都可以…",
-        primaryActionLabel: "生成短视频脚本",
+        primaryActionLabel: "生成口播文案",
       }
     }
     return baseAgent
@@ -623,8 +653,8 @@ export default function AimPage() {
   const lastAgentParamRef = useRef(agentParam)
 
   useEffect(() => {
-    saveAimDraft({ selectedAgentId, selectedProjectId, input, messages })
-  }, [input, messages, selectedAgentId, selectedProjectId])
+    saveAimDraft({ selectedAgentId, selectedProjectId, input, messages, videoCopyExtractionId: sourceVideoCopyExtractionId })
+  }, [input, messages, selectedAgentId, selectedProjectId, sourceVideoCopyExtractionId])
 
   // 切换智能体（由全局侧边栏的 ?agent= 驱动）：同步选中态并重置当前对话
   useEffect(() => {
@@ -650,6 +680,7 @@ export default function AimPage() {
       if (projectIdParam) setSelectedProjectId(projectIdParam)
       setMessages([])
       setInput(prefillLines.join("\n"))
+      setSourceVideoCopyExtractionId(undefined)
     })
 
     const nextParams = new URLSearchParams(searchParams.toString())
@@ -668,13 +699,19 @@ export default function AimPage() {
         const isDeepCopy = shouldOpenDeepCopywriter(record)
         const prefill = [
           isDeepCopy
-            ? "请基于下面这条长对标文案，结合我的知识库，改写成适合我自己的深度母稿。"
+            ? "请基于下面这条长对标文案和已有拆解，提炼它的开头机制、结构节奏和心理推进方式，再结合我的知识库，创作一篇适合我自己的完整长篇文案。"
             : "请基于下面这条对标文案，结合我的知识库，改写成适合我自己的口播文案。",
           "",
-          "改写原则：",
-          "1. 开头第一句话不要轻易变，除非明显不适合我的产品和人设。",
-          "2. 中间结构框架不要轻易变，保留原文的信息推进顺序和节奏。",
-          "3. 只替换产品、案例、用户痛点、人设表达和行动引导。",
+          isDeepCopy ? "创作原则：" : "改写原则：",
+          isDeepCopy
+            ? "1. 先参考拆解里的开头类型和情绪入口，重新设计适合我的长文开头。"
+            : "1. 开头第一句话不要轻易变，除非明显不适合我的产品和人设。",
+          isDeepCopy
+            ? "2. 参考拆解里的正文结构、转折节奏和心理推进，但不要照搬原文。"
+            : "2. 中间结构框架不要轻易变，保留原文的信息推进顺序和节奏。",
+          isDeepCopy
+            ? "3. 用我的产品、案例、用户痛点和人设表达重新完成创作。"
+            : "3. 只替换产品、案例、用户痛点、人设表达和行动引导。",
           "",
           record.videoTitle ? `对标标题：${record.videoTitle}` : null,
           "对标原文：",
@@ -687,6 +724,7 @@ export default function AimPage() {
           if (isDeepCopy) setSelectedAgentId("deep_copywriter")
           setMessages([])
           setInput(prefill)
+          setSourceVideoCopyExtractionId(record.id)
         })
         toast.success("已带入对标文案")
       })
@@ -738,9 +776,17 @@ export default function AimPage() {
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, isThinking, isGenerating])
 
+  /** 人设故事官：取最近一条助手回复的【进度 XX%】驱动顶部进度条 */
+  const personaProgress = useMemo(() => {
+    if (agent.id !== "persona") return null
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")
+    return lastAssistant ? extractProgress(lastAssistant.content) : null
+  }, [messages, agent.id])
+
   function resetConversation() {
     setMessages([])
     setInput("")
+    setSourceVideoCopyExtractionId(undefined)
     if (typeof window !== "undefined") window.sessionStorage.removeItem(AIM_DRAFT_STORAGE_KEY)
   }
 
@@ -775,7 +821,7 @@ export default function AimPage() {
     setIsThinking(true)
     try {
       const toolAction = detectLarkToolAction(text)
-      if (toolAction && !selectedProjectId) {
+      if (toolAction && projectEnabled && !selectedProjectId) {
         toast.error("你的 IP 营销全案还在配置中")
         return
       }
@@ -784,23 +830,95 @@ export default function AimPage() {
         toast.error("当前没有可同步到飞书的 AIM 生成结果")
         return
       }
-      const { content } = await chatAim(
-        thread.map((m) => ({ role: m.role, content: m.content })),
-        {
+      const chatMessages = thread.map((m) => ({ role: m.role, content: m.content }))
+      if (toolAction) {
+        const { content } = await chatAim(chatMessages, {
           agentId: selectedAgentId,
-          projectId: selectedProjectId || undefined,
-          toolAction: toolAction || undefined,
+          projectId: projectEnabled ? selectedProjectId || undefined : undefined,
+          toolAction,
           resultId,
           signal: controller.signal,
+        })
+        setMessages((prev) => [...prev, { id: nextId(), role: "assistant", content }])
+        return
+      }
+
+      const assistantId = nextId()
+      let hasContent = false
+      setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "" }])
+      await chatAimStream(chatMessages, {
+        agentId: selectedAgentId,
+        projectId: projectEnabled ? selectedProjectId || undefined : undefined,
+        signal: controller.signal,
+        onDelta: (_delta, content) => {
+          hasContent = content.length > 0
+          setIsThinking(false)
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId ? { ...message, content } : message
+            )
+          )
         },
-      )
-      setMessages((prev) => [...prev, { id: nextId(), role: "assistant", content }])
+      })
+      if (!hasContent) {
+        setMessages((prev) => prev.filter((message) => message.id !== assistantId))
+      }
     } catch (error) {
       if (error instanceof ApiError && error.status === 499) toast.info("已停止")
       else toast.error(error instanceof Error ? error.message : "对话失败，请稍后重试")
     } finally {
       if (requestAbortRef.current === controller) requestAbortRef.current = null
       setIsThinking(false)
+    }
+  }
+
+  async function handleEvolveConversation() {
+    if (!projectEnabled || !selectedProjectId) {
+      toast.error("请先启用一个 IP 营销全案")
+      return
+    }
+    const sourceMessages = messages
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message) => ({ role: message.role, content: message.content }))
+
+    if (sourceMessages.length < 2) {
+      toast.error("对话太少，还没有可沉淀的偏好")
+      return
+    }
+
+    setIsEvolving(true)
+    try {
+      const suggestions = await evolveAimConversation({
+        projectId: selectedProjectId,
+        messages: sourceMessages,
+      })
+      setEvolutionSuggestions(suggestions)
+      if (suggestions.length === 0) toast.info("这轮对话还没有明显的长期偏好")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "偏好提炼失败")
+    } finally {
+      setIsEvolving(false)
+    }
+  }
+
+  async function handleSaveEvolutionSuggestion(suggestion: AimEvolutionSuggestion) {
+    if (!selectedProjectId) {
+      toast.error("请先选择 IP 营销全案")
+      return
+    }
+    try {
+      await createKnowledge({
+        projectId: selectedProjectId,
+        category: suggestion.category,
+        title: suggestion.title,
+        content: suggestion.content,
+        tags: suggestion.tags,
+        sourceType: "manual",
+      })
+      setEvolutionSuggestions((prev) => prev.filter((item) => item !== suggestion))
+      toast.success("已沉淀进知识库")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "知识沉淀失败")
     }
   }
 
@@ -814,7 +932,7 @@ export default function AimPage() {
       toast.error("请先在对话框里说点素材或需求")
       return
     }
-    if (!selectedProjectId) {
+    if (projectEnabled && !selectedProjectId) {
       toast.error("你的 IP 营销全案还在配置中")
       return
     }
@@ -827,7 +945,8 @@ export default function AimPage() {
         agentId: selectedAgentId,
         rawInput,
         targetFormats: agent.defaultFormats,
-        projectId: selectedProjectId || undefined,
+        projectId: projectEnabled ? selectedProjectId || undefined : undefined,
+        videoCopyExtractionId: sourceVideoCopyExtractionId,
         polishInstruction: agent.defaultInstruction,
         taskType: "write_script",
       }, controller.signal)
@@ -861,7 +980,7 @@ export default function AimPage() {
         setIsGenerating(true)
         setLoadingIndex(0)
         try {
-          if (!selectedProjectId) {
+          if (projectEnabled && !selectedProjectId) {
           toast.error("你的 IP 营销全案还在配置中")
           return
         }
@@ -871,7 +990,7 @@ export default function AimPage() {
         const response = await generateAimContent({
           rawInput: `基于以下脚本，派生${FORMAT_LABELS[fmt]}：\n\n${mainContent}`,
           targetFormats: [fmt],
-          projectId: selectedProjectId || undefined,
+          projectId: projectEnabled ? selectedProjectId || undefined : undefined,
           taskType: "repurpose",
         })
         setMessages((prev) =>
@@ -963,11 +1082,28 @@ export default function AimPage() {
 
           </div>
           <div className="flex items-center gap-2">
-            {projects.length > 0 ? (
-              <Badge variant="secondary" className="hidden max-w-[220px] truncate sm:inline-flex">
-                {projects.find((p) => p.id === selectedProjectId)?.name ?? "我的 IP 营销全案"}
-              </Badge>
-            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant={projectEnabled ? "secondary" : "outline"}
+              className="hidden h-8 max-w-[220px] gap-1.5 truncate sm:inline-flex"
+              onClick={() => setProjectEnabled((v) => !v)}
+              title={projectEnabled ? "已启用 IP 全案上下文，点击切到纯文案模式" : "纯文案模式，点击启用 IP 全案上下文"}
+            >
+              {projectEnabled
+                ? (projects.find((p) => p.id === selectedProjectId)?.name ?? "IP 全案")
+                : "纯文案模式"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-2"
+              onClick={() => void handleEvolveConversation()}
+              disabled={isThinking || isGenerating || isEvolving || messages.length < 2}
+              title="从当前对话提炼客户偏好"
+            >
+              {isEvolving ? "提炼中" : "沉淀偏好"}
+            </Button>
             <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => resetConversation()} title="新对话">
               <Plus className="h-4 w-4" />
             </Button>
@@ -984,6 +1120,47 @@ export default function AimPage() {
         {projects.length > 0 && !selectedProjectId && (
           <div className="border-b bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
             正在加载你的 IP 营销全案，请稍后再生成内容。
+          </div>
+        )}
+
+        {personaProgress != null && (
+          <div className="border-b bg-primary/5 px-3 py-2">
+            <div className="mx-auto flex max-w-2xl items-center gap-2">
+              <span className="shrink-0 text-[11px] font-medium text-primary">来时路信息收集</span>
+              <Progress value={personaProgress} className="h-1.5 flex-1" />
+              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{personaProgress}%</span>
+            </div>
+          </div>
+        )}
+
+        {evolutionSuggestions.length > 0 && (
+          <div className="border-b bg-muted/30 px-3 py-3">
+            <div className="mx-auto max-w-2xl space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">发现可沉淀的客户偏好</p>
+              {evolutionSuggestions.map((suggestion) => (
+                <div key={`${suggestion.title}-${suggestion.content}`} className="rounded-md border bg-background p-3">
+                  <p className="text-sm font-medium text-foreground">{suggestion.title}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{suggestion.content}</p>
+                  <div className="mt-2 flex justify-end gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setEvolutionSuggestions((prev) => prev.filter((item) => item !== suggestion))}
+                    >
+                      忽略
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => void handleSaveEvolutionSuggestion(suggestion)}
+                    >
+                      写入知识库
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -1024,7 +1201,11 @@ export default function AimPage() {
                           : "bg-transparent p-0 text-sm sm:text-base text-foreground/90 font-medium"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                      {m.role === "assistant" ? (
+                        <MarkdownRenderer content={m.content} />
+                      ) : (
+                        <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                      )}
                     </div>
 
                     {m.role === "assistant" && extractChoiceGroups(m.content).length > 0 && (
