@@ -187,6 +187,8 @@ export interface ScoredKnowledgeEntry {
   title: string
   content: string
   category: string
+  tags: unknown
+  valueGrade: string | null
   score: number
 }
 
@@ -232,7 +234,7 @@ export async function retrieveRelevantKnowledge(input: {
         select: {
           embedding: true,
           entry: {
-            select: { id: true, title: true, content: true, category: true },
+            select: { id: true, title: true, content: true, category: true, tags: true, valueGrade: true },
           },
         },
         take: 200,
@@ -247,6 +249,8 @@ export async function retrieveRelevantKnowledge(input: {
               title: row.entry.title,
               content: row.entry.content,
               category: row.entry.category,
+              tags: row.entry.tags,
+              valueGrade: row.entry.valueGrade,
               score: cosineSimilarity(queryVector.vector, embeddingArr),
             }
           })
@@ -267,7 +271,7 @@ export async function retrieveRelevantKnowledge(input: {
     },
     orderBy: { sortOrder: "asc" },
     take: topK,
-    select: { id: true, title: true, content: true, category: true },
+    select: { id: true, title: true, content: true, category: true, tags: true, valueGrade: true },
   })
 
   return {

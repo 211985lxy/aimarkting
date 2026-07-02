@@ -1,5 +1,5 @@
 import type { ComponentType } from "react"
-import { Activity, PenLine, RefreshCw, ShieldCheck, Video } from "lucide-react"
+import { Activity, Compass, PenLine, RefreshCw, ShieldCheck, Video } from "lucide-react"
 import type { ContentFormat } from "@/lib/api/client"
 
 /** 内容智能体 id */
@@ -9,6 +9,7 @@ export type AimAgentId =
   | "business_system_diagnosis"
   | "deep_copywriter"
   | "content_review"
+  | "persona"
 
 /** 智能体的共享元信息（侧边栏与工作台页面的单一事实源） */
 export interface AimAgentMeta {
@@ -46,7 +47,7 @@ export const AIM_AGENT_OPTIONS: AimAgentMeta[] = [
   {
     id: "deep_copywriter",
     title: "深度文案官",
-    description: "观点、结构、钩子、可拆分母稿",
+    description: "先出框架，纯长篇文案创作",
     icon: PenLine,
     defaultFormats: ["raw_copy"],
   },
@@ -56,6 +57,13 @@ export const AIM_AGENT_OPTIONS: AimAgentMeta[] = [
     description: "发布后数据复盘、优化、复用",
     icon: RefreshCw,
     defaultFormats: ["raw_copy"],
+  },
+  {
+    id: "persona",
+    title: "人设故事官",
+    description: "引导式梳理来时路，产出置顶视频脚本",
+    icon: Compass,
+    defaultFormats: ["video_script"],
   },
 ]
 

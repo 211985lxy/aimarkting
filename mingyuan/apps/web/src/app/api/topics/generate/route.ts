@@ -8,6 +8,7 @@ import { VALID_ELEMENT_CODES } from "@/lib/topic-validation"
 import type { TopicCard } from "@/lib/topic-validation"
 import { hasConflict } from "@/lib/topic-element-logic"
 import type { Prisma } from "@/generated/prisma/client"
+import type { ContentTheme } from "@/types/api"
 
 export const maxDuration = 60
 
@@ -43,12 +44,10 @@ function buildProjectSource(project: {
   }
 }
 
-async function getHotTopicSources(recommendationMode: RecommendationMode) {
-  if (recommendationMode === "normal") return []
-
+async function getHotTopicSources() {
   try {
     const briefing = await getTodayAiHotBriefing()
-    return briefing.items.slice(0, 6).map((item) => ({
+    return briefing.items.slice(0, 4).map((item) => ({
       category: "industry_hot",
       title: item.title,
       content: `${item.categoryLabel}｜${item.summary}｜${item.url}`,
@@ -57,6 +56,50 @@ async function getHotTopicSources(recommendationMode: RecommendationMode) {
     console.warn("[topic-gen] AIHOT briefing unavailable:", error)
     return []
   }
+}
+
+export function buildBenchmarkAccountSources(
+  accounts: Array<{ nickname: string | null; targetUrl: string; latestVideos: unknown; viralVideos: unknown }>,
+) {
+  return accounts.flatMap((account) => {
+    const viralVideos = Array.isArray(account.viralVideos) ? account.viralVideos.slice(0, 3) : []
+    const latestVideos = Array.isArray(account.latestVideos) ? account.latestVideos.slice(0, 3) : []
+    const videos = [...viralVideos, ...latestVideos]
+    if (videos.length === 0) return []
+
+    return [{
+      category: "benchmark_reference",
+      title: account.nickname || account.targetUrl,
+      content: videos.map((video, index) => {
+        const item = video as { title?: string; likes?: number; comments?: number; shares?: number; collects?: number }
+        return `${index + 1}. ${item.title || "无标题"}｜赞${item.likes ?? 0} 评${item.comments ?? 0} 转${item.shares ?? 0} 藏${item.collects ?? 0}`
+      }).join("\n"),
+    }]
+  }).slice(0, 4)
+}
+
+function truncateText(value: string | null | undefined, limit = 180) {
+  const text = value?.replace(/\s+/g, " ").trim() ?? ""
+  return text.length > limit ? `${text.slice(0, limit)}...` : text
+}
+
+export function buildVideoCopyExtractionSources(
+  extractions: Array<{ videoTitle: string | null; sourceUrl: string; transcript: string | null; analysisResult: unknown }>,
+) {
+  return extractions.flatMap((record) => {
+    const analysis = record.analysisResult ? truncateText(JSON.stringify(record.analysisResult), 240) : ""
+    const transcript = truncateText(record.transcript, 180)
+    if (!analysis && !transcript) return []
+    return [{
+      category: "benchmark_reference",
+      title: record.videoTitle || record.sourceUrl,
+      content: [
+        analysis ? `结构化拆解：${analysis}` : null,
+        transcript ? `原文摘要：${transcript}` : null,
+        `来源：${record.sourceUrl}`,
+      ].filter(Boolean).join("\n"),
+    }]
+  }).slice(0, 4)
 }
 
 export const POST = withUserAuth(async (request, { user }) => {
@@ -114,7 +157,7 @@ export const POST = withUserAuth(async (request, { user }) => {
 
   const refreshCount = typeof body.refreshCount === "number" ? body.refreshCount : 0
 
-  const [project, elements, recentSelections, selectedKnowledge] = await Promise.all([
+  const [project, elements, recentSelections, selectedKnowledge, ipProfile, watchAccounts, videoCopyExtractions] = await Promise.all([
     projectId
       ? prisma.clientProject.findFirst({
           where: { id: projectId, userId: user.id, status: "active" },
@@ -151,6 +194,55 @@ export const POST = withUserAuth(async (request, { user }) => {
           take: 12,
         })
       : Promise.resolve([]),
+    // Fetch IpProfile for content line themes (降级：不存在时跳过)
+    prisma.ipProfile.findUnique({
+      where: { userId: user.id },
+      select: {
+        id: true,
+        displayName: true,
+        nickname: true,
+        industry: true,
+        primaryOffer: true,
+        targetAudience: true,
+        ipTraits: true,
+        toneOfVoice: true,
+        proofPoints: true,
+        callToAction: true,
+        promptSnapshot: true,
+        content: true,
+      },
+    }).catch(() => null),
+    prisma.watchAccount.findMany({
+      where: { userId: user.id },
+      orderBy: { lastRefreshedAt: "desc" },
+      take: 6,
+      select: {
+        nickname: true,
+        targetUrl: true,
+        latestVideos: true,
+        viralVideos: true,
+      },
+    }).catch((error) => {
+      console.warn(`[${requestId}] Watch account sources unavailable:`, error)
+      return []
+    }),
+    prisma.videoCopyExtraction.findMany({
+      where: {
+        userId: user.id,
+        status: "completed",
+      },
+      orderBy: { completedAt: "desc" },
+      take: 8,
+      select: {
+        videoTitle: true,
+        sourceUrl: true,
+        transcript: true,
+        analysisResult: true,
+      },
+    }).catch((error) => {
+      console.warn(`[${requestId}] Video copy extraction sources unavailable:`, error)
+      return []
+    }),
   ])
 
   if (projectId && !project) {
@@ -191,15 +283,39 @@ export const POST = withUserAuth(async (request, { user }) => {
   )
   const startTime = Date.now()
   const projectSource = buildProjectSource(project)
-  const hotTopicSources = await getHotTopicSources(recommendationMode)
+  const hotTopicSources = await getHotTopicSources()
+  const benchmarkSources = buildBenchmarkAccountSources(watchAccounts)
+  const videoCopySources = buildVideoCopyExtractionSources(videoCopyExtractions)
   const topicSources = [
     ...(projectSource ? [projectSource] : []),
     ...selectedKnowledge,
+    ...benchmarkSources,
+    ...videoCopySources,
     ...hotTopicSources,
   ]
 
-  const result = await generateTopicCards({
-    ipProfile: null,
+  // Extract content line themes from IpProfile (降级：无定位时 themes 为空)
+  const contentRaw = ipProfile?.content as { themes?: ContentTheme[] } | null
+  const contentThemes = Array.isArray(contentRaw?.themes) ? contentRaw.themes : []
+  const topicIpProfile = ipProfile
+    ? {
+        id: ipProfile.id,
+        displayName: ipProfile.displayName,
+        nickname: ipProfile.nickname,
+        industry: ipProfile.industry,
+        primaryOffer: ipProfile.primaryOffer,
+        targetAudience: ipProfile.targetAudience,
+        ipTraits: ipProfile.ipTraits,
+        toneOfVoice: ipProfile.toneOfVoice,
+        proofPoints: ipProfile.proofPoints,
+        callToAction: ipProfile.callToAction,
+        promptSnapshot: ipProfile.promptSnapshot,
+        content: ipProfile.content,
+      }
+    : null
+
+  let result = await generateTopicCards({
+    ipProfile: topicIpProfile,
     elements,
     topicSources,
     recommendationMode,
@@ -207,7 +323,26 @@ export const POST = withUserAuth(async (request, { user }) => {
     recentElementSets,
     recentTitles,
     refreshCount,
+    contentThemes,
   })
+
+  if (!result.success && (benchmarkSources.length > 0 || videoCopySources.length > 0 || hotTopicSources.length > 0)) {
+    console.warn(`[${requestId}] Enriched topic generation failed, retrying with base sources: ${result.error}`)
+    result = await generateTopicCards({
+      ipProfile: topicIpProfile,
+      elements,
+      topicSources: [
+        ...(projectSource ? [projectSource] : []),
+        ...selectedKnowledge,
+      ],
+      recommendationMode,
+      forcedElementCodes,
+      recentElementSets,
+      recentTitles,
+      refreshCount,
+      contentThemes,
+    })
+  }
 
   const duration = Date.now() - startTime
   console.log(
@@ -218,6 +353,7 @@ export const POST = withUserAuth(async (request, { user }) => {
     return NextResponse.json({ error: result.error }, { status: 500 })
   }
 
+  const today = new Date().toISOString().split("T")[0]
   const selection = await prisma.topicSelection.create({
     data: {
       userId: user.id,
@@ -227,6 +363,8 @@ export const POST = withUserAuth(async (request, { user }) => {
       promptText: result.promptText,
       model: result.model,
       status: "pending",
+      recommendationMode,
+      recommendedDate: today,
     },
   })
 
@@ -238,6 +376,7 @@ export const POST = withUserAuth(async (request, { user }) => {
       cards: result.cards,
       elementCodes: result.elementCodes,
       strategy: result.strategy,
+      sourceHighlights: topicSources.slice(0, 16),
     },
   })
 })

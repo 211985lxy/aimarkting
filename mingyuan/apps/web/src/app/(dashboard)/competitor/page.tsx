@@ -180,7 +180,7 @@ export default function CompetitorWatchPage() {
     setAnalyzingUrl(url)
     try {
       const result = await startCompetitorAnalysis(url)
-      void loadReports(false)
+      void loadReports(url, false)
       toast.success("已成功创建分析任务，正在为您跳转...")
       router.push(`/competitor/${result.id}`)
     } catch (err) {
@@ -190,10 +190,10 @@ export default function CompetitorWatchPage() {
     }
   }
 
-  const loadReports = useCallback(async (showLoading = true) => {
+  const loadReports = useCallback(async (targetUrl: string, showLoading = true) => {
     if (showLoading) setReportsLoading(true)
     try {
-      const data = await listCompetitorReports(1, 10)
+      const data = await listCompetitorReports(1, 10, targetUrl)
       setReports(data.items)
     } catch {
       toast.error("加载分析历史失败")
@@ -226,7 +226,6 @@ export default function CompetitorWatchPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadAccounts()
-    void loadReports()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -383,6 +382,11 @@ export default function CompetitorWatchPage() {
 
   const activeAccount = accounts.find((a) => a.id === activeAccountId) || accounts[0]
 
+  useEffect(() => {
+    if (!activeAccount?.targetUrl) return
+    void loadReports(activeAccount.targetUrl)
+  }, [activeAccount?.targetUrl, loadReports])
+
   const activeLatestVideos = activeAccount && activeAccount.latestVideos
     ? (activeAccount.latestVideos || [])
         .map((v) => ({ ...v, account: activeAccount }))
@@ -394,7 +398,7 @@ export default function CompetitorWatchPage() {
     ? (activeAccount.viralVideos || [])
         .map((v) => ({ ...v, account: activeAccount }))
         .sort((a, b) => b.engagementScore - a.engagementScore)
-        .slice(0, 30)
+        .slice(0, 20)
     : []
 
   const hasRefreshingAccount = accounts.some((account) => account.refreshStatus === "refreshing")
@@ -438,7 +442,7 @@ export default function CompetitorWatchPage() {
     )
   }
 
-  function renderVideoCard(video: WatchVideo, options: { viral?: boolean } = {}) {
+  function renderVideoCard(video: WatchVideo, options: { viral?: boolean; rank?: number } = {}) {
     const key = `${video.account.id}-${video.videoId}`
     const record = videoExtractions[key]
     const isBusy = extractingVideoId === key || (record && ACTIVE_EXTRACTION_STATUSES.has(record.status))
@@ -483,7 +487,7 @@ export default function CompetitorWatchPage() {
             </span>
             {options.viral ? (
               <span className="text-[10px] px-1 py-0.5 rounded bg-orange-500/80 text-white font-bold">
-                爆款
+                TOP {options.rank ?? "?"}
               </span>
             ) : (
               <ExternalLink className="h-3 w-3 text-white/50 opacity-0 group-hover/video:opacity-100 transition-opacity" />
@@ -551,54 +555,6 @@ export default function CompetitorWatchPage() {
           </Card>
         </Link>
       </div>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <FileText className="h-4 w-4" />
-            最近分析报告
-            <Badge variant="secondary" className="text-xs ml-1">{reports.length}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {reportsLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-14 rounded-lg" />
-              ))}
-            </div>
-          ) : reports.length === 0 ? (
-            <p className="rounded-lg bg-muted/40 px-3 py-4 text-sm text-muted-foreground">
-              还没有分析报告。完成一次 AI 深度调查后会出现在这里。
-            </p>
-          ) : (
-            <div className="divide-y rounded-lg border">
-              {reports.map((report) => (
-                <Link
-                  key={report.id}
-                  href={`/competitor/${report.id}`}
-                  className="flex items-center justify-between gap-3 p-3 transition-colors hover:bg-muted/50"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{reportTitle(report)}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      分析于 {formatDate(report.completedAt ?? report.createdAt)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {report.overallScore != null ? (
-                      <span className="text-sm font-semibold">{Math.round(report.overallScore)}分</span>
-                    ) : null}
-                    <Badge variant={report.status === "failed" ? "destructive" : "secondary"}>
-                      {reportStatusLabel(report.status)}
-                    </Badge>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
           {/* Add Account Card */}
           <AiResultPanel
@@ -773,6 +729,54 @@ export default function CompetitorWatchPage() {
                 ))}
               </div>
 
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <FileText className="h-4 w-4" />
+                    最近分析报告
+                    <Badge variant="secondary" className="text-xs ml-1">{reports.length}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {reportsLoading ? (
+                    <div className="space-y-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-14 rounded-lg" />
+                      ))}
+                    </div>
+                  ) : reports.length === 0 ? (
+                    <p className="rounded-lg bg-muted/40 px-3 py-4 text-sm text-muted-foreground">
+                      当前账号还没有分析报告。点击该账号的 AI 深度调查后会出现在这里。
+                    </p>
+                  ) : (
+                    <div className="divide-y rounded-lg border">
+                      {reports.map((report) => (
+                        <Link
+                          key={report.id}
+                          href={`/competitor/${report.id}`}
+                          className="flex items-center justify-between gap-3 p-3 transition-colors hover:bg-muted/50"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{reportTitle(report)}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              分析于 {formatDate(report.completedAt ?? report.createdAt)}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {report.overallScore != null ? (
+                              <span className="text-sm font-semibold">{Math.round(report.overallScore)}分</span>
+                            ) : null}
+                            <Badge variant={report.status === "failed" ? "destructive" : "secondary"}>
+                              {reportStatusLabel(report.status)}
+                            </Badge>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* Latest Videos Section */}
               {activeLatestVideos.length > 0 && (
                 <Card>
@@ -803,7 +807,7 @@ export default function CompetitorWatchPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                      {activeViralVideos.map((video) => renderVideoCard(video, { viral: true }))}
+                      {activeViralVideos.map((video, index) => renderVideoCard(video, { viral: true, rank: index + 1 }))}
                     </div>
                   </CardContent>
                 </Card>

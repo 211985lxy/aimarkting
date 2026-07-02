@@ -50,7 +50,7 @@ export async function invalidateBrandingCache() {
 }
 
 function resolveActiveBrandName(value: string | undefined): string {
-  if (!value || value === "爱爆365" || value === "品牌授权测试") {
+  if (!value || value === "品牌授权测试") {
     return ACTIVE_BRANDING_SEED.name
   }
 

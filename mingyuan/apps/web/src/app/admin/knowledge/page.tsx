@@ -2,7 +2,6 @@
 
 import React from "react"
 import {
-  BookOpen,
   Search,
   ChevronLeft,
   ChevronRight,
@@ -10,7 +9,6 @@ import {
   Loader2,
   Archive,
   Trash2,
-  Tag,
   Upload,
   Plus,
   X,
@@ -30,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
@@ -37,6 +36,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  buildKnowledgeCleaningSuggestion,
+  knowledgeCleanupLabel,
+  parseKnowledgeTags,
+} from "@/lib/knowledge-tags"
+import { KnowledgeMap } from "@/components/admin/knowledge-map"
 
 // ─── 类型定义 ──────────────────────────────────────────────
 
@@ -49,6 +54,7 @@ interface KnowledgeEntry {
   content: string
   tags: string[]
   sourceType: string
+  valueGrade?: string | null
   status: string
   sortOrder: number
   createdAt: string
@@ -65,13 +71,6 @@ interface AdminProject {
   industry: string | null
   status: string
   user: { id: string; name: string | null; email: string }
-}
-
-interface StatsData {
-  totalEntries: number
-  categoryDistribution: { category: string; count: number }[]
-  sourceTypeDistribution: { sourceType: string; count: number }[]
-  topUsers: { userId: string; count: number; user: { name: string; email: string } | null }[]
 }
 
 interface DistillResult {
@@ -101,6 +100,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   hot_topic: "热点素材",
   positioning_material: "定位素材",
   private_domain_material: "私域素材",
+  writing_style_profile: "写作风格档案",
 }
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
@@ -154,6 +154,7 @@ async function fetchKnowledge(params: {
   userId?: string
   sourceType?: string
   projectId?: string
+  valueGrade?: string
 }) {
   const qs = new URLSearchParams()
   if (params.page) qs.set("page", String(params.page))
@@ -163,6 +164,7 @@ async function fetchKnowledge(params: {
   if (params.userId) qs.set("userId", params.userId)
   if (params.sourceType) qs.set("sourceType", params.sourceType)
   if (params.projectId) qs.set("projectId", params.projectId)
+  if (params.valueGrade) qs.set("valueGrade", params.valueGrade)
   
   const token = getAdminToken()
   const res = await fetch(`/api/admin/knowledge?${qs}`, {
@@ -195,20 +197,10 @@ function embeddingLabel(entry: KnowledgeEntry) {
   return "未生成"
 }
 
-async function fetchStats() {
-  const token = getAdminToken()
-  const res = await fetch("/api/admin/knowledge/stats", {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  })
-  return res.json() as Promise<{ data: StatsData }>
-}
-
 async function batchAction(
   ids: string[],
   action: string,
-  value?: string
+  value?: string | string[]
 ) {
   const token = getAdminToken()
   const res = await fetch("/api/admin/knowledge", {
@@ -259,14 +251,16 @@ export default function AdminKnowledgePage() {
   const [search, setSearch] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("")
   const [projectFilter, setProjectFilter] = React.useState("")
+  const [cleanupFilter, setCleanupFilter] = React.useState("")
+  const [gradeFilter, setGradeFilter] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const pageSize = 20
 
   // 项目
   const [projects, setProjects] = React.useState<AdminProject[]>([])
 
-  // 统计
-  const [stats, setStats] = React.useState<StatsData | null>(null)
+  // Tab 切换
+  const [activeTab, setActiveTab] = React.useState("map")
 
   // 选中
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
@@ -285,6 +279,7 @@ export default function AdminKnowledgePage() {
     tags: "",
     sourceType: "manual" as string,
     projectId: "none",
+    valueGrade: "" as string,
   })
   const [saving, setSaving] = React.useState(false)
 
@@ -317,24 +312,37 @@ export default function AdminKnowledgePage() {
         search,
         category: categoryFilter,
         projectId: projectFilter,
+        valueGrade: gradeFilter,
       })
       setEntries(res.data.results)
       setTotal(res.data.total)
     } finally {
       setLoading(false)
     }
-  }, [page, search, categoryFilter, projectFilter])
+  }, [page, search, categoryFilter, projectFilter, gradeFilter])
 
   React.useEffect(() => {
     void Promise.resolve().then(fetchData)
   }, [fetchData])
 
   React.useEffect(() => {
-    fetchStats().then((res) => setStats(res.data))
     fetchProjects().then((res) => setProjects(res.data)).catch(() => {})
   }, [])
 
   const totalPages = Math.ceil(total / pageSize)
+  const visibleEntries = React.useMemo(() => {
+    if (!cleanupFilter) return entries
+    return entries.filter((entry) => {
+      const parsed = parseKnowledgeTags(entry.tags)
+      if (cleanupFilter === "ip") return parsed.scope === "ip"
+      if (cleanupFilter === "project") return parsed.scope === "project"
+      if (cleanupFilter === "pending_verify") return parsed.confidence === "pending_verify"
+      if (cleanupFilter === "topic") return parsed.usableFor.includes("topic")
+      if (cleanupFilter === "sales") return parsed.usableFor.includes("sales")
+      if (cleanupFilter === "uncleaned") return !parsed.isCleaned
+      return true
+    })
+  }, [cleanupFilter, entries])
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
@@ -352,11 +360,17 @@ export default function AdminKnowledgePage() {
   }
 
   function toggleSelectAll() {
-    if (selectedIds.size === entries.length) {
+    if (selectedIds.size === visibleEntries.length) {
       setSelectedIds(new Set())
     } else {
-      setSelectedIds(new Set(entries.map((e) => e.id)))
+      setSelectedIds(new Set(visibleEntries.map((e) => e.id)))
     }
+  }
+
+  async function handleSuggestCleanup(entry: KnowledgeEntry) {
+    const tags = buildKnowledgeCleaningSuggestion(entry)
+    await batchAction([entry.id], "mergeTags", tags)
+    fetchData()
   }
 
   async function handleBatchArchive() {
@@ -365,6 +379,17 @@ export default function AdminKnowledgePage() {
     await batchAction([...selectedIds], "archive")
     setSelectedIds(new Set())
     fetchData()
+  }
+
+  async function handleBatchChangeGrade(grade: string) {
+    if (selectedIds.size === 0) return
+    try {
+      await batchAction([...selectedIds], "changeValueGrade", grade)
+      setSelectedIds(new Set())
+      fetchData()
+    } catch {
+      alert("批量改等级失败，请重试")
+    }
   }
 
   async function handleBatchDelete() {
@@ -406,14 +431,14 @@ export default function AdminKnowledgePage() {
           category: editForm.category,
           tags: editForm.tags ? editForm.tags.split(/[,，、]/).map((t: string) => t.trim()).filter(Boolean) : [],
           sourceType: editForm.sourceType,
+          valueGrade: editForm.valueGrade || undefined,
           ...(editForm.projectId !== "none" ? { projectId: editForm.projectId } : {}),
         }),
       })
       if (!res.ok) throw new Error("创建失败")
       setAddDialogOpen(false)
-      setEditForm({ title: "", content: "", category: "product_usp", tags: "", sourceType: "manual", projectId: "none" })
+      setEditForm({ title: "", content: "", category: "product_usp", tags: "", sourceType: "manual", projectId: "none", valueGrade: "" })
       fetchData()
-      fetchStats()
     } catch {
       alert("创建失败，请重试")
     } finally {
@@ -443,7 +468,6 @@ export default function AdminKnowledgePage() {
       setUploadFile(null)
       setUploadProjectId("none")
       fetchData()
-      fetchStats()
     } catch {
       alert("上传失败，请重试")
     } finally {
@@ -521,52 +545,33 @@ export default function AdminKnowledgePage() {
     }
   }
 
-  const categoryStatsMap = React.useMemo(() => {
-    const map: Record<string, number> = {}
-    if (stats) {
-      for (const c of stats.categoryDistribution) {
-        map[c.category] = c.count
-      }
-    }
-    return map
-  }, [stats])
-
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">知识库管理</h1>
 
-      {/* 统计卡片 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              知识库总量
-            </CardTitle>
-            <BookOpen className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats?.totalEntries?.toLocaleString() ?? <Skeleton className="h-8 w-16" />}
-            </div>
-          </CardContent>
-        </Card>
-        {Object.entries(CATEGORY_LABELS).slice(0, 3).map(([key, label]) => (
-          <Card key={key}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {label}
-              </CardTitle>
-              <Tag className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {categoryStatsMap[key] ?? 0}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Tab 切换 */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="map">知识地图</TabsTrigger>
+          <TabsTrigger value="list">条目列表</TabsTrigger>
+        </TabsList>
 
+      {/* 知识地图 Tab */}
+        <TabsContent value="map">
+          <KnowledgeMap
+            projects={projects}
+            onDrillDown={(filters) => {
+              if (filters.category) {
+                setCategoryFilter(filters.category)
+                setPage(1)
+                setActiveTab("list")
+              }
+            }}
+          />
+        </TabsContent>
+
+      {/* 条目列表 Tab */}
+        <TabsContent value="list">
       {/* 中转站测试面板（内部使用，客户不可见） */}
       <Card>
         <CardHeader
@@ -781,6 +786,44 @@ export default function AdminKnowledgePage() {
               ))}
             </SelectContent>
           </Select>
+          <Select
+            value={cleanupFilter || "all"}
+            onValueChange={(v) => {
+              setCleanupFilter(v === "all" ? "" : (v ?? ""))
+              setSelectedIds(new Set())
+            }}
+          >
+            <SelectTrigger className="w-full sm:w-[160px]">
+              <SelectValue placeholder="清洗状态" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部清洗状态</SelectItem>
+              <SelectItem value="ip">IP资产</SelectItem>
+              <SelectItem value="project">项目资产</SelectItem>
+              <SelectItem value="pending_verify">待核验</SelectItem>
+              <SelectItem value="topic">可用于选题</SelectItem>
+              <SelectItem value="sales">可用于成交</SelectItem>
+              <SelectItem value="uncleaned">未清洗</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={gradeFilter || "all"}
+            onValueChange={(v) => {
+              setGradeFilter(v === "all" ? "" : (v ?? ""))
+              setPage(1)
+            }}
+          >
+            <SelectTrigger className="w-full sm:w-[140px]">
+              <SelectValue placeholder="价值分级" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部分级</SelectItem>
+              <SelectItem value="S">S · 战略级</SelectItem>
+              <SelectItem value="A">A · 战术级</SelectItem>
+              <SelectItem value="B">B · 参考级</SelectItem>
+              <SelectItem value="C">C · 索引级</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* 批量操作 */}
@@ -799,6 +842,18 @@ export default function AdminKnowledgePage() {
               <Sparkles className="h-4 w-4 mr-1" />
               知识蒸馏
             </Button>
+            <Select onValueChange={(v) => handleBatchChangeGrade(typeof v === "string" ? v : "")}>
+              <SelectTrigger className="w-[150px] h-8">
+                <SelectValue placeholder="改分级" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="S">S · 战略级</SelectItem>
+                <SelectItem value="A">A · 战术级</SelectItem>
+                <SelectItem value="B">B · 参考级</SelectItem>
+                <SelectItem value="C">C · 索引级</SelectItem>
+                <SelectItem value="">清除分级</SelectItem>
+              </SelectContent>
+            </Select>
             <Button
               variant="outline"
               size="sm"
@@ -831,7 +886,7 @@ export default function AdminKnowledgePage() {
                   <th className="w-10 p-3 text-left">
                     <input
                       type="checkbox"
-                      checked={entries.length > 0 && selectedIds.size === entries.length}
+                      checked={visibleEntries.length > 0 && selectedIds.size === visibleEntries.length}
                       onChange={toggleSelectAll}
                       className="cursor-pointer"
                     />
@@ -855,34 +910,70 @@ export default function AdminKnowledgePage() {
                       </td>
                     </tr>
                   ))
-                ) : entries.length === 0 ? (
+                ) : visibleEntries.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="p-8 text-center text-muted-foreground">
                       暂无知识库条目
                     </td>
                   </tr>
                 ) : (
-                  entries.map((entry) => (
-                    <tr
-                      key={entry.id}
-                      className={`border-b hover:bg-muted/30 transition-colors ${
-                        selectedIds.has(entry.id) ? "bg-primary/5" : ""
-                      }`}
-                    >
-                      <td className="p-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(entry.id)}
-                          onChange={() => toggleSelect(entry.id)}
-                          className="cursor-pointer"
-                        />
-                      </td>
-                      <td className="p-3 max-w-[240px]">
-                        <p className="truncate font-medium">{entry.title}</p>
-                        <p className="truncate text-xs text-muted-foreground mt-0.5">
-                          {entry.content.slice(0, 80)}...
-                        </p>
-                      </td>
+                  visibleEntries.map((entry) => {
+                    const cleanup = parseKnowledgeTags(entry.tags)
+                    return (
+                      <tr
+                        key={entry.id}
+                        className={`border-b hover:bg-muted/30 transition-colors ${
+                          selectedIds.has(entry.id) ? "bg-primary/5" : ""
+                        }`}
+                      >
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(entry.id)}
+                            onChange={() => toggleSelect(entry.id)}
+                            className="cursor-pointer"
+                          />
+                        </td>
+                        <td className="p-3 max-w-[260px]">
+                          <p className="truncate font-medium">{entry.title}</p>
+                          <p className="truncate text-xs text-muted-foreground mt-0.5">
+                            {entry.content.slice(0, 80)}...
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {entry.valueGrade && ["S", "A", "B", "C"].includes(entry.valueGrade) && (
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] ${
+                                  entry.valueGrade === "S"
+                                    ? "border-amber-400 text-amber-700 bg-amber-50"
+                                    : entry.valueGrade === "A"
+                                    ? "border-emerald-500 text-emerald-700 bg-emerald-50"
+                                    : entry.valueGrade === "C"
+                                    ? "border-gray-400 text-gray-600 bg-gray-50"
+                                    : "border-indigo-500 text-indigo-700 bg-indigo-50"
+                                }`}
+                              >
+                                {entry.valueGrade}
+                              </Badge>
+                            )}
+                            <Badge variant={cleanup.isCleaned ? "outline" : "secondary"} className="text-[10px]">
+                              {knowledgeCleanupLabel(cleanup)}
+                            </Badge>
+                            {cleanup.assetRole ? (
+                              <Badge variant="secondary" className="text-[10px]">
+                                {cleanup.assetRole}
+                              </Badge>
+                            ) : null}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 px-1.5 text-[10px]"
+                              onClick={() => handleSuggestCleanup(entry)}
+                            >
+                              清洗建议
+                            </Button>
+                          </div>
+                        </td>
                       <td className="p-3 hidden xl:table-cell text-muted-foreground text-xs">
                         {entry.project ? (
                           <>
@@ -925,8 +1016,9 @@ export default function AdminKnowledgePage() {
                       <td className="p-3 hidden lg:table-cell text-muted-foreground text-xs">
                         {new Date(entry.updatedAt).toLocaleDateString()}
                       </td>
-                    </tr>
-                  ))
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>
@@ -962,6 +1054,8 @@ export default function AdminKnowledgePage() {
           </div>
         </div>
       )}
+        </TabsContent>
+      </Tabs>
 
       {/* 知识蒸馏结果弹窗 */}
       <Dialog open={distillDialogOpen} onOpenChange={setDistillDialogOpen}>
@@ -1081,6 +1175,20 @@ export default function AdminKnowledgePage() {
                       {projectLabel(project)}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>价值分级（决定检索优先级，默认 B）</Label>
+              <Select value={editForm.valueGrade || "none"} onValueChange={(v) => setEditForm((f) => ({ ...f, valueGrade: v === "none" ? "" : (v ?? "") }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">B · 参考级（默认）</SelectItem>
+                  <SelectItem value="S">S · 战略级（优先浮出）</SelectItem>
+                  <SelectItem value="A">A · 战术级</SelectItem>
+                  <SelectItem value="C">C · 索引级（靠后）</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -320,6 +320,42 @@
 - 写法：不要强吆喝，用判断、邀请和低摩擦动作收束。
 - 常用句式：`想清楚这件事，你就不会再焦虑了。`、`如果你也想构建自己的数字资产，可以来找我聊聊。`、`这不是捷径，但它是唯一能留下来的路。`
 
+## 方法论卡片 6：IP账号定位与内容策略策划阶段
+
+适用场景：老板/个人准备做 IP 或重新定位，需要从零梳理账号类型、人设角色、内容策略底盘，让后续选题和文案有据可依。
+核心判断：定位不只是静态人设描述——它必须能反向指导选题方向、内容形式、钩子模式和发布节奏。
+
+### IP定位层
+
+1. 明确账号类型：判断网红型（内容先行，人设服务于内容）、个人IP型（人设先行，内容是人设延伸）、混合型（两者兼顾但需明确主次）。
+2. 一句话定位：这个账号帮谁解决什么问题。必须具体到人群 + 痛点/需求 + 价值承诺。
+3. 目标人群与变现方式：锁定核心人群画像，明确变现路径（高客单咨询/课程/社群/带货/私域承接/品牌合作），定位和变现方式必须绑定。
+4. 生态位与人设角色：
+   - 专家：行业深耕，输出专业判断和解决方案。
+   - 老师：系统教学，降低用户学习门槛。
+   - 同学：陪伴成长，共同探索，拉近距离。
+   - 偶像：标杆示范，用结果和生活方式吸引追随。
+   - 代言人：替某个群体发声，引发共鸣和认同。
+   - 段子手：用娱乐和幽默传递观点，降低认知门槛。
+5. 标签与统一形象：功能标签（用户能一句话说清你是谁）、视觉形象（服装/场景/色调一致性）、口头禅（每次出场的记忆锚点）、动作记忆点（标志性动作或表达习惯）。
+6. 性格与命理辅助建模：八字、MBTI、九型人格、成长经历只用于校准表达风格、镜头气质、内容方向和记忆点设计。不输出玄学断言或强结论。
+
+### 内容策略层
+
+定位完成后，必须产出内容策略底盘，用于指导后续选题和文案：
+
+1. 话题分布：账号内容的核心主题占比（如 AI工具与教程 40%、AI变现与商业 30%、行业观察 20%、个人观点 10%）。有竞品数据时引用，无数据时标明"建议比例"。
+2. 内容形式占比：各内容形式的产出比例（如深度教程/分析 58%、中长视频 11%、快问快答 18%、观点/吐槽 13%）。
+3. 钩子模式：账号常用的开头钩子类型（如痛点提问、数字吸引、热点结合、悬念制造、反常识、对比冲击）。
+4. 发布频率：建议的更新节奏（如每周 3-4 条、每条间隔至少 1 天）。
+5. 最佳发布时段：基于目标人群活跃时间的发布时间建议（如工作日 18:00-21:00、周末 10:00-12:00）。
+6. 爆款公式：账号爆款内容的可复制结构（如"高价值信息 + 实操教程 + 热点话题 + 强烈情绪"或"反常识观点 + 数据佐证 + 行动号召"）。
+
+禁忌：
+- 不伪装量化事实。没有数据时必须标明"建议比例"，不能写成确定性结论。
+- 不输出玄学断言。命理、MBTI 等只用于风格校准，不作为定位依据。
+- 定位结果必须能反向指导后续选题和文案。如果方案只描述了人设但没有内容策略底盘，视为不完整。
+
 ## 后续可拆成的卡片
 
 - 七大爆款开头公式。
@@ -328,80 +364,3 @@
 - 5A 人群运营框架。
 - 私域承接与产品阶梯。
 - 去 AI 味质检清单。
-# AIM 智能体上下文工程升级计划
-
-## Summary
-当前 AIM 已有知识库、Embedding 和生成链路 RAG，但上下文工程还不完整：`生成交付物` 已走 `retrieveRelevantKnowledge()`，普通 `AIM 对话` 仍直接塞最多 50 条知识；不同智能体也没有独立的知识优先级和上下文预算。第一版升级目标是：不新增数据库、不重做知识库，只把 AIM chat/generate 统一成“项目知识检索 + 智能体优先级 + 字符预算”的稳定上下文链路。
-
-## Key Changes
-- 统一 AIM 知识检索入口：
-  - 新增轻量函数 `buildAimKnowledgeContext()`，内部复用现有 `retrieveRelevantKnowledge()`。
-  - `/api/aim/chat` 不再直接 `findMany(take: 50)` 拼知识，改为按当前用户、项目、用户最后一条消息检索相关知识。
-  - `buildAimGeneration()` 也改用同一个上下文函数，避免 chat 和 generate 两套逻辑漂移。
-  - 保留现有 fallback：Embedding 不可用时仍按项目取少量 active 知识。
-
-- 增加智能体知识优先级：
-  - `deep_copywriter`：优先 `boss_experience`、`product_usp`、`user_insight`、`benchmark_reference`、`positioning_material`。
-  - `business_system_diagnosis`：优先 `product_usp`、`customer_pain`、`project_case`、`customer_qa`、`user_insight`。
-  - `business_diagnosis`：优先 `positioning_material`、`boss_experience`、`product_usp`、`customer_pain`。
-  - `content_producer`：优先 `product_usp`、`project_case`、`private_domain_material`、`hot_topic`、`benchmark_reference`。
-  - `content_review`：优先 `project_case`、`benchmark_reference`、`user_insight`、`hot_topic`。
-  - 实现方式保持简单：先按语义相关度取结果，再按 agent 分类优先级做轻量重排，不新增复杂评分系统。
-
-- 增加上下文预算：
-  - 默认最多 12 条知识。
-  - 默认知识块总长度控制在 8000 字以内。
-  - 单条知识最长截断到 1200 字。
-  - 超出预算直接跳过后续知识，不做复杂摘要。
-  - `buildKnowledgeBlock()` 统一移动到共享位置，避免 `aim-tool-actions` 和 `aim-generator` 重复实现。
-
-- 增加可观测信息：
-  - AIM 生成记录继续保存 `knowledgeUsed`。
-  - chat 响应暂不改前端展示，只在服务端日志或返回内部字段前保守处理，不展示向量、分数、token 等技术信息。
-  - 前台保持“已用知识库 X 条”的用户表达，不暴露 Context Engineering 细节。
-
-- 不做的事：
-  - 不新增数据库表。
-  - 不做长对话自动摘要。
-  - 不做向量库替换。
-  - 不做每个智能体独立知识库。
-  - 不把所有聊天自动入库。
-
-## Public Interfaces / Types
-- 新增内部类型：
-  - `AimKnowledgeContextInput`
-  - `AimKnowledgeContextResult`
-- 新增内部函数：
-  - `buildAimKnowledgeContext({ userId, projectId, agentId, query, topicTitle?, topicRationale? })`
-  - 返回：`knowledgeBlock`、`entries`、`source`
-- 扩展 `retrieveRelevantKnowledge()` 入参：
-  - 可选 `preferredCategories?: string[]`
-  - 可选 `maxContentChars?: number`
-  - 或者在新 wrapper 中完成分类重排和截断，不改变原函数签名；推荐 wrapper 方案，改动更小。
-- `/api/aim/chat` 外部响应结构不变。
-- `/api/aim/generate` 外部响应结构不变。
-
-## Test Plan
-- 单元测试：
-  - `buildAimKnowledgeContext()` 能按 agent 分类优先级重排知识。
-  - 知识块总长度不会超过预算。
-  - 单条超长知识会被截断。
-  - Embedding 不可用时仍返回项目内 fallback 知识。
-  - 不同 `projectId` 不会互相读取知识。
-- 接口测试：
-  - `/api/aim/chat` 使用相关知识，不再直接加载 50 条。
-  - `/api/aim/generate` 行为不退化，仍返回 `knowledgeUsed`。
-  - 无项目或项目无知识时不报错，智能体正常回答，但不编造客户资料。
-- 回归验证：
-  - 深度文案官、商业诊断官、定位策划官、内容生产官、数据复盘官都能正常对话。
-  - 飞书工具动作不受影响。
-  - 知识库后台项目绑定不受影响。
-  - `pnpm --dir mingyuan/apps/web lint -- src/app/api/aim/chat/route.ts src/lib/aim-agent-handlers.ts src/lib/llm/embeddings.ts`
-  - `pnpm --dir mingyuan/apps/web build`
-
-## Assumptions
-- 第一版只做上下文检索、分类优先级和预算控制。
-- 智能体上下文策略写死在代码里，不做后台配置。
-- 预算先用字符数控制，不引入 token 计算依赖。
-- 知识优先级只影响排序，不过滤掉其他类别，避免信息缺失。
-- 长对话摘要放到下一阶段，因为现在最急的是防止知识库变多后上下文失控。

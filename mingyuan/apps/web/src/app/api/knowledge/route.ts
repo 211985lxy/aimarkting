@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { authenticateRequest, authErrorResponse } from "@/lib/user-auth"
 import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
+import { buildDefaultKnowledgeTags, mergeKnowledgeTags, normalizeValueGrade } from "@/lib/knowledge-tags"
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await authenticateRequest(request)
     const body = await request.json()
-    const { category, title, content, tags, sourceType, projectId } = body
+    const { category, title, content, tags, sourceType, projectId, valueGrade } = body
     const requiresProject = new Set([
       "daily_inspiration",
       "benchmark_reference",
@@ -79,8 +80,9 @@ export async function POST(request: NextRequest) {
         category,
         title,
         content,
-        tags: Array.isArray(tags) ? tags : [],
+        tags: mergeKnowledgeTags(tags, buildDefaultKnowledgeTags(category)),
         sourceType: sourceType || "manual",
+        valueGrade: normalizeValueGrade(valueGrade),
       },
     })
 

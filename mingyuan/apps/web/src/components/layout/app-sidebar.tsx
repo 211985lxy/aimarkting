@@ -70,6 +70,7 @@ const coreAimAgentIds: AimAgentId[] = [
   "ip_video",
   "deep_copywriter",
   "content_review",
+  "persona",
 ]
 
 const RECENT_ITEMS_PER_AGENT = 4

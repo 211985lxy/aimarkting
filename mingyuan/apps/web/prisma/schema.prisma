@@ -36,6 +36,7 @@ model User {
   knowledgeEntries               KnowledgeEntry[]
   aimGenerations                 AimGeneration[]
   clientProjects                 ClientProject[]
+  ipWikiPages                    IpWikiPage[]
   inspirations                   Inspiration[]
   agentApiKeys                   AgentApiKey[]
   agentApiCallLogs               AgentApiCallLog[]
@@ -279,6 +280,7 @@ model KnowledgeEntry {
   content    String   @db.Text
   tags       Json     @default("[]")
   sourceType String   @default("manual") // manual | voice_transcribe | import
+  valueGrade String?  @db.VarChar(2) // 价值分级：S(战略) | A(战术) | B(参考) | C(索引)；null 视为 B
   sortOrder  Int      @default(0)
   status     String   @default("active") // active | archived
   createdAt  DateTime @default(now())
@@ -291,6 +293,7 @@ model KnowledgeEntry {
 
   @@index([userId, category])
   @@index([userId, status])
+  @@index([userId, valueGrade])
   @@index([projectId])
 }
 
@@ -331,6 +334,7 @@ model ClientProject {
   user             User             @relation(fields: [userId], references: [id])
   aimGenerations   AimGeneration[]
   knowledgeEntries KnowledgeEntry[]
+  ipWikiPages      IpWikiPage[]
 
   @@index([userId, status])
   @@index([userId, createdAt])
@@ -341,6 +345,7 @@ model ClientProject {
 model AimGeneration {
   id               String   @id @default(cuid())
   userId           String
+  agentId          String?
   projectId        String?
   rawInput         String   @db.Text
   inputSource      String   @default("text") // text | voice
@@ -373,6 +378,35 @@ model AimGeneration {
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, projectId, createdAt(sort: Desc)])
   @@index([userId, workflowStatus])
+}
+
+// ─── IP 定位维基（Karpathy LLM-Wiki 模式） ──────────────
+// 每个 IP 营销全案一个「活体维基」：定位策划官产出的定位方案经 LLM
+// 增量编译成结构化页（定位主张/人设/内容策略底盘/目标人群/成交路径/选题方向），
+// 下游 agent 生成时直接读「已编译」的页，而非每次 JIT 向量检索碎片。
+
+model IpWikiPage {
+  id          String   @id @default(cuid())
+  userId      String
+  projectId   String
+  pageType    String // positioning | persona | content_strategy | audience | conversion_path | topic_direction | index | log
+  title       String
+  content     String   @db.Text
+  frontmatter Json     @default("{}") // 结构化字段（如内容策略底盘的话题分布/钩子/频率/时段/爆款公式）
+  sources     Json     @default("[]") // 溯源：[{ kind: "aim_generation" | "knowledge_entry", id, label }]
+  links       Json     @default("[]") // [[双向链接]] 目标 title 列表
+  sourceGenerationId String? // 编译自哪条 AimGeneration（定位方案），可溯源指针
+  version     Int      @default(1)
+  status      String   @default("active") // active | archived
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user    User         @relation(fields: [userId], references: [id])
+  project ClientProject @relation(fields: [projectId], references: [id])
+
+  @@index([projectId, status])
+  @@index([projectId, pageType, status])
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 // ─── 外部 Agent 调用 ─────────────────────────────────────
@@ -562,23 +596,26 @@ model EndingType {
 }
 
 model TopicSelection {
-  id            String    @id @default(cuid())
-  userId        String
-  ipProfileId   String
-  elementCodes  Json
-  candidates    Json
-  selectedIndex Int?
-  promptText    String    @db.Text
-  model         String?
-  status        String    @default("pending")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  userId            String
+  ipProfileId       String
+  elementCodes      Json
+  candidates        Json
+  selectedIndex     Int?
+  promptText        String    @db.Text
+  model             String?
+  status            String    @default("pending")
+  recommendationMode String?  @db.VarChar(20) // normal | daily | weekly，用于判断"今天的每日推荐"
+  recommendedDate   String?  @db.VarChar(10) // YYYY-MM-DD，生成当天日期，便于按天查重
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   user      User      @relation(fields: [userId], references: [id])
   ipProfile IpProfile @relation(fields: [ipProfileId], references: [id])
 
   @@index([userId, status])
   @@index([ipProfileId])
+  @@index([userId, recommendationMode, recommendedDate])
 }
 
 // ─── Video Packaging ────────────────────────────────────

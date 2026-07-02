@@ -105,6 +105,8 @@ interface GenerateScriptCandidatesParams {
   topicContext?: TopicContext | null
   // Phase 14: hot topic fusion (COPY-04)
   hotTopicFusion?: HotTopicFusionContext | null
+  // IP 写作风格档案（用户级全局，由调用方从知识库读取后注入）
+  styleProfileBlock?: string | null
 }
 
 export interface CandidateScore {
@@ -312,6 +314,16 @@ function buildContextBlock(params: GenerateScriptCandidatesParams): string {
     sections.push(
       "【个人IP档案】",
       ipProfile.promptSnapshot,
+      "",
+    )
+  }
+
+  // IP 写作风格档案：描述「怎么想、怎么说」的认知模型，让措辞/节奏/语气贴合该 IP 的长期风格
+  if (params.styleProfileBlock) {
+    sections.push(
+      "【写作风格档案 · 全局风格】",
+      "以下是这位 IP 的长期写作风格认知模型（思维/情绪/结构/语言/价值观）。请在保持本次选题和结构节拍的同时，让措辞、节奏、语气贴合该风格。",
+      params.styleProfileBlock,
       "",
     )
   }

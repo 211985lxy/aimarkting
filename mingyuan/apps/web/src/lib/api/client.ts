@@ -42,6 +42,7 @@ import type {
   ApiMarketHotSnapshot,
   ApiVideoCopyExtraction,
   ApiAgentApiKeySummary,
+  ApiTopicCard,
 } from "@/types/api"
 
 class ApiError extends Error {
@@ -718,6 +719,20 @@ export async function listEndingTypes(): Promise<ApiEndingType[]> {
   return payload.data
 }
 
+// ─── Today Topics Cache ─────────────────────────────────
+
+export interface TodayTopicsResult {
+  mode: "cached" | "missing"
+  topicSelectionId?: string
+  cards?: ApiTopicCard[]
+  createdAt?: string
+}
+
+export async function getTodayTopics(mode: ApiTopicRecommendationMode = "daily"): Promise<TodayTopicsResult> {
+  const qs = mode !== "normal" ? `?mode=${mode}` : ""
+  return request<TodayTopicsResult>(`/api/topics/today${qs}`)
+}
+
 // ─── Competitor Analysis (v5.0) ──────────────────────────
 
 export async function startCompetitorAnalysis(url: string): Promise<{
@@ -924,6 +939,97 @@ export async function createKnowledge(data: {
   })
 }
 
+// ─── IP 定位维基（Karpathy LLM-Wiki 模式） ──────────────
+
+export interface IpWikiCompiledPage {
+  pageType: string
+  title: string
+  content: string
+  frontmatter: Record<string, unknown>
+  sources: Array<{ kind: "aim_generation" | "knowledge_entry"; id: string; label?: string }>
+  links: string[]
+}
+
+export interface IpWikiPageDTO {
+  id: string
+  projectId: string
+  pageType: string
+  title: string
+  content: string
+  frontmatter: Record<string, unknown>
+  sources: IpWikiCompiledPage["sources"]
+  links: string[]
+  sourceGenerationId: string | null
+  version: number
+  status: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** Ingest：把定位方案编译成结构化维基页（提议，待人工确认） */
+export async function compileIpWikiPositioning(input: {
+  projectId: string
+  sourceGenerationId?: string
+  positioningText?: string
+  signal?: AbortSignal
+}): Promise<{ pages: IpWikiCompiledPage[]; sourceGenerationId: string | null }> {
+  return request("/api/aim/ip-wiki/compile", {
+    method: "POST",
+    body: JSON.stringify(input),
+    signal: input.signal,
+    timeout: 60000,
+  })
+}
+
+/** 列出某 IP 全案的 active 维基页 */
+export async function listIpWikiPages(projectId: string): Promise<IpWikiPageDTO[]> {
+  const params = new URLSearchParams({ projectId })
+  const payload = await request<{ pages: IpWikiPageDTO[] }>(
+    `/api/aim/ip-wiki/pages?${params}`
+  )
+  return payload.pages
+}
+
+/** 人工确认后写入维基页 */
+export async function saveIpWikiPages(input: {
+  projectId: string
+  sourceGenerationId?: string
+  pages: IpWikiCompiledPage[]
+}): Promise<IpWikiPageDTO[]> {
+  const payload = await request<{ pages: IpWikiPageDTO[] }>("/api/aim/ip-wiki/pages", {
+    method: "POST",
+    body: JSON.stringify(input),
+    timeout: 30000,
+  })
+  return payload.pages
+}
+
+export interface IpWikiLintFindingDTO {
+  severity: "error" | "warning"
+  rule: string
+  pageType?: string
+  pageId?: string
+  message: string
+}
+
+export interface IpWikiLintReportDTO {
+  projectId: string
+  totalPages: number
+  findings: IpWikiLintFindingDTO[]
+  errorCount: number
+  warningCount: number
+  passed: boolean
+}
+
+/** Lint：对某 IP 全案的维基页跑体检（死链/底盘字段缺失/来源过时/比例失衡） */
+export async function lintIpWikiPages(projectId: string): Promise<IpWikiLintReportDTO> {
+  const params = new URLSearchParams({ projectId })
+  const payload = await request<{ report: IpWikiLintReportDTO }>(
+    `/api/aim/ip-wiki/lint?${params}`
+  )
+  return payload.report
+}
+
 export async function updateKnowledge(
   id: string,
   data: Partial<{
@@ -970,8 +1076,10 @@ export interface AimGenerateRequest {
   videoCopyExtractionId?: string
   topicTitle?: string
   topicRationale?: string
+  topicType?: string
   hotTopic?: string
   polishInstruction?: string
+  useMarketViralVideos?: boolean
 }
 
 export interface AimGenerateResult {
@@ -984,6 +1092,8 @@ export interface AimGenerateResponse {
   id: string
   results: AimGenerateResult[]
   knowledgeUsed: { id: string; title: string; category: string }[]
+  /** 本次实际生效的知识调用策略（由服务端解析，供 UI 反馈） */
+  knowledgeStrategy?: string
 }
 
 export interface AimGeneration {
@@ -1040,6 +1150,26 @@ export async function evolveAimConversation(input: {
     timeout: 30000,
   })
   return payload.suggestions
+}
+
+export interface StyleProfileEvolveResult {
+  delta: { evidence: string; confidence: string } | null
+  profile: { id: string; title: string } | null
+  created?: boolean
+  reason?: string
+}
+
+/** 渐进沉淀：从当前对话提炼并更新【用户级全局】写作风格档案（不需 projectId） */
+export async function evolveStyleConversation(input: {
+  messages: Array<{ role: "user" | "assistant"; content: string }>
+  signal?: AbortSignal
+}): Promise<StyleProfileEvolveResult> {
+  return request<StyleProfileEvolveResult>("/api/aim/evolve-style", {
+    method: "POST",
+    body: JSON.stringify({ messages: input.messages }),
+    signal: input.signal,
+    timeout: 60000,
+  })
 }
 
 export function generateScript(data: {

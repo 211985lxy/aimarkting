@@ -242,3 +242,18 @@ describe('analyzeCompetitor — posting_heatmap', () => {
     expect(result.stats.posting_heatmap['Wed-14']).toBe(1)
   })
 })
+
+describe('analyzeCompetitor — top videos', () => {
+  it('does not copy likes into views when play count is unavailable', async () => {
+    mockComplete.mockResolvedValue({
+      content: JSON.stringify(makeAnalysisResult()),
+      model: 'claude-3-5-sonnet-20241022',
+      provider: 'therouter',
+    })
+
+    const result = await analyzeCompetitor(makeAccount(), [makeVideo({ views: 0, likes: 115000 })], [], makeMetrics())
+
+    expect(result.stats.top_videos[0].views).toBe(0)
+    expect(result.stats.top_videos[0].likes).toBe(115000)
+  })
+})

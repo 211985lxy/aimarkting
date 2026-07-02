@@ -57,4 +57,22 @@ export class OpenAICompatibleProvider implements LLMProvider {
         : undefined,
     }
   }
+
+  async *stream(options: CompletionOptions): AsyncIterable<string> {
+    const model = options.model || this.defaultModel
+
+    const response = await this.client.chat.completions.create({
+      model,
+      messages: options.messages,
+      temperature: options.temperature,
+      max_tokens: options.maxTokens,
+      response_format: options.responseFormat,
+      stream: true,
+    })
+
+    for await (const chunk of response) {
+      const delta = chunk.choices[0]?.delta?.content
+      if (delta) yield delta
+    }
+  }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { withAdminAuth } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
+import { buildDefaultKnowledgeTags, mergeKnowledgeTags, normalizeValueGrade } from "@/lib/knowledge-tags"
 
 // GET — 查看所有用户的知识库条目（分页+搜索+过滤）
 export const GET = withAdminAuth(async (request) => {
@@ -13,6 +14,7 @@ export const GET = withAdminAuth(async (request) => {
   const userId = searchParams.get("userId") ?? ""
   const sourceType = searchParams.get("sourceType") ?? ""
   const projectId = searchParams.get("projectId") ?? ""
+  const valueGrade = normalizeValueGrade(searchParams.get("valueGrade"))
 
   const where: Record<string, unknown> = {}
   if (category) where.category = category
@@ -20,6 +22,7 @@ export const GET = withAdminAuth(async (request) => {
   if (sourceType) where.sourceType = sourceType
   if (projectId === "unbound") where.projectId = null
   else if (projectId) where.projectId = projectId
+  if (valueGrade) where.valueGrade = valueGrade
   if (search) {
     where.OR = [
       { title: { contains: search } },
@@ -50,7 +53,7 @@ export const GET = withAdminAuth(async (request) => {
 // POST — 管理员手动录入知识条目
 export const POST = withAdminAuth(async (request, { admin }) => {
   const body = await request.json()
-  const { category, title, content, tags, sourceType } = body
+  const { category, title, content, tags, sourceType, valueGrade } = body
   const projectId = typeof body.projectId === "string" && body.projectId.trim()
     ? body.projectId.trim()
     : null
@@ -88,8 +91,9 @@ export const POST = withAdminAuth(async (request, { admin }) => {
       category,
       title,
       content,
-      tags: Array.isArray(tags) ? tags : [],
+      tags: mergeKnowledgeTags(tags, buildDefaultKnowledgeTags(category)),
       sourceType: sourceType || "manual",
+      valueGrade: normalizeValueGrade(valueGrade),
       status: "active",
     },
   })
@@ -127,6 +131,27 @@ export const PUT = withAdminAuth(async (request) => {
       where: { id: { in: ids } },
       data: { category: value },
     })
+  } else if (action === "changeValueGrade") {
+    // value 为空字符串 → 清除分级(设为 null)；否则校验 S/A/B/C
+    const grade = value === "" ? null : normalizeValueGrade(value)
+    if (value !== "" && !grade) {
+      return NextResponse.json({ error: "无效的价值分级（应为 S/A/B/C）" }, { status: 400 })
+    }
+    await prisma.knowledgeEntry.updateMany({
+      where: { id: { in: ids } },
+      data: { valueGrade: grade },
+    })
+  } else if (action === "mergeTags" && Array.isArray(value)) {
+    const entries = await prisma.knowledgeEntry.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, tags: true },
+    })
+    await Promise.all(entries.map((entry) =>
+      prisma.knowledgeEntry.update({
+        where: { id: entry.id },
+        data: { tags: mergeKnowledgeTags(entry.tags, value) },
+      }),
+    ))
   } else {
     return NextResponse.json({ error: "无效操作" }, { status: 400 })
   }

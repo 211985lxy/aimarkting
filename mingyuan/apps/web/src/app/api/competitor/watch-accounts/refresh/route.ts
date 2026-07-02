@@ -13,19 +13,7 @@ type RefreshLog = Pick<typeof logger, "info" | "error">
 export const maxDuration = 300
 export const runtime = "nodejs"
 
-function calculateViralVideos(
-  videos: Array<{
-    videoId: string
-    title: string
-    coverUrl: string
-    createTime: number
-    views: number
-    likes: number
-    comments: number
-    shares: number
-    collects: number
-  }>,
-): Array<{
+export interface WatchVideoInput {
   videoId: string
   title: string
   coverUrl: string
@@ -35,26 +23,20 @@ function calculateViralVideos(
   comments: number
   shares: number
   collects: number
+}
+
+export interface NormalizedVideoWithEngagement extends WatchVideoInput {
   engagementScore: number
-}> {
-  const scored = videos.map((v) => ({
-    ...v,
-    engagementScore: v.likes + v.comments * 2 + v.collects * 3 + v.shares * 4,
-  }))
+}
 
-  // 按综合互动分排序
-  scored.sort((a, b) => b.engagementScore - a.engagementScore)
-
-  if (scored.length <= 3) return scored
-
-  const avgScore = scored.reduce((sum, v) => sum + v.engagementScore, 0) / scored.length
-  const viralThreshold = avgScore * 1.5
-
-  const viral = scored.filter((v) => v.engagementScore >= viralThreshold)
-  if (viral.length >= 2) return viral
-
-  // 若没有达标作品，取前 3 条作为参考爆款
-  return scored.slice(0, 3)
+export function calculateViralVideos(videos: WatchVideoInput[]): NormalizedVideoWithEngagement[] {
+  return videos
+    .map((v) => ({
+      ...v,
+      engagementScore: v.likes + v.comments * 2 + v.collects * 3 + v.shares * 4,
+    }))
+    .sort((a, b) => b.engagementScore - a.engagementScore)
+    .slice(0, 20)
 }
 
 async function refreshAccount(

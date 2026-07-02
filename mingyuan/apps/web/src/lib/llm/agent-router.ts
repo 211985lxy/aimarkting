@@ -7,7 +7,7 @@ import type { LLMProvider, LLMProviderConfig } from "./types"
  * 智能体模型路由策略
  *
  * 核心思路：DeepSeek 走官方直连（无中转差价），其他模型走中转站聚合
- * - 深度文案官 / 定位策划官 → Claude（走中转站 OpenRouter，高质量产出）
+ * - 深度文案官 / 定位策划官 → DeepSeek 优先，稳定产出
  * - 内容生产 / 商业诊断 / 数据复盘 → DeepSeek（官方直连，日常分发成本低）
  *
  * provider 名与 config.ts 一致：deepseek / jiekou / openrouter / therouter / glm / openai
@@ -17,18 +17,20 @@ import type { LLMProvider, LLMProviderConfig } from "./types"
 type AgentModelRoute = { name: string; model?: string }
 
 const AGENT_ROUTES: Record<string, AgentModelRoute[]> = {
-  // ── Claude 组（高质量产出）──
-  // 深度文案官 + 定位策划官：优先 OpenRouter 的 claude-sonnet-4.6
+  // ── 高质量写作组 ──
+  // Claude 当前受地区限制，先走 DeepSeek；中转模型只做备用。
   deep_copywriter: [
-    { name: "openrouter", model: "anthropic/claude-sonnet-4.6" },
-    { name: "therouter", model: "anthropic/claude-sonnet-4.6" },
-    { name: "jiekou", model: "claude-sonnet-4-5" },
+    { name: "deepseek" },
+    { name: "jiekou" },
+    { name: "openrouter" },
+    { name: "therouter" },
     { name: "glm" },
   ],
   business_diagnosis: [
-    { name: "openrouter", model: "anthropic/claude-sonnet-4.6" },
-    { name: "therouter", model: "anthropic/claude-sonnet-4.6" },
-    { name: "jiekou", model: "claude-sonnet-4-5" },
+    { name: "deepseek" },
+    { name: "jiekou" },
+    { name: "openrouter" },
+    { name: "therouter" },
     { name: "glm" },
   ],
 

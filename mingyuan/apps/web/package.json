@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "worker:task-recovery": "DOTENV_CONFIG_PATH=.env NODE_OPTIONS='-r dotenv/config' tsx --tsconfig tsconfig.json src/worker/task-recovery.ts",

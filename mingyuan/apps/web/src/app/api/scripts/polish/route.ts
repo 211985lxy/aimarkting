@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server"
 import { withUserAuth } from "@/lib/user-auth"
 import { LLMClient } from "@/lib/llm"
+import { getStyleProfileBlock } from "@/lib/style-profile"
 
 export const maxDuration = 60
 
 const POLISH_MODEL = process.env.SCRIPT_GENERATION_MODEL || "openai/gpt-5.4"
 
-export const POST = withUserAuth(async (request) => {
+export const POST = withUserAuth(async (request, { user }) => {
   const body = await request.json()
   const content = typeof body.content === "string" ? body.content.trim() : ""
   const weakDimensions = Array.isArray(body.weakDimensions) ? body.weakDimensions as string[] : []
@@ -71,9 +72,12 @@ export const POST = withUserAuth(async (request) => {
     )
   }
 
+  // 用户级全局写作风格档案（用户从未沉淀时返回空串，跳过）
+  const styleProfileBlock = await getStyleProfileBlock(user.id).catch(() => "")
   const contextSection = [
     topicTitle ? `选题方向：${topicTitle}` : null,
     persona ? `IP人设：${persona}` : null,
+    styleProfileBlock ? `写作风格档案：\n${styleProfileBlock}` : null,
   ].filter(Boolean).join("\n")
 
   const result = await llm.complete({

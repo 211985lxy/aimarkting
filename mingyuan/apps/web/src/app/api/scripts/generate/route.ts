@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { withUserAuth } from "@/lib/user-auth"
 import { validateVariables } from "@/lib/template-engine"
 import { generateScriptCandidates } from "@/lib/script-generator"
+import { getStyleProfileBlock } from "@/lib/style-profile"
 import {
   HotTopicIntelligenceError,
   evaluateHotTopicFit,
@@ -207,6 +208,8 @@ export const POST = withUserAuth(async (request, { user }) => {
   const startTime = Date.now()
 
   try {
+    // 用户级全局写作风格档案（用户从未沉淀时返回空串，跳过注入，行为不变）
+    const styleProfileBlock = await getStyleProfileBlock(user.id).catch(() => "")
     const generation = await generateScriptCandidates({
       template: {
         ...template,
@@ -230,6 +233,7 @@ export const POST = withUserAuth(async (request, { user }) => {
       },
       topicContext,
       hotTopicFusion,
+      styleProfileBlock,
     })
 
     const duration = Date.now() - startTime

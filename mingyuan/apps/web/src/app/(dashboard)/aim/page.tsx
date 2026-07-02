@@ -15,13 +15,16 @@ import {
   ShieldCheck,
   Plus,
   ArrowRight,
+  BookOpen,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
+import { KNOWLEDGE_STRATEGY_PROFILES } from "@/lib/aim-knowledge-strategy"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
+import { IpWikiDialog, type IpWikiDialogContext } from "./ip-wiki-dialog"
 import { AimPromptComposer } from "@/components/aim/aim-prompt-composer"
 import { ActionStrip } from "@/components/workbench/action-strip"
 import { AiResultPanel } from "@/components/workbench/ai-result-panel"
@@ -35,6 +38,7 @@ import {
   chatAimStream,
   createKnowledge,
   evolveAimConversation,
+  evolveStyleConversation,
   ApiError,
   listClientProjects,
   updateAimWorkflowStatus,
@@ -223,6 +227,7 @@ interface ChatMessage {
   id: string
   role: "user" | "assistant"
   content: string
+  agentId?: string | null
   deliverables?: AimGenerateResponse | null
   qualityReport?: QualityCheckReport | null
 }
@@ -394,6 +399,7 @@ function DeliverableBubble({
   onMarkStatus,
   isBusy,
   onUpdateResults,
+  onCompileToWiki,
 }: {
   deliverables: AimGenerateResponse
   onRepurpose: (format: ContentFormat) => void
@@ -401,6 +407,7 @@ function DeliverableBubble({
   onMarkStatus: (status: string) => void
   isBusy: boolean
   onUpdateResults?: (newResults: AimGenerateResponse["results"]) => void
+  onCompileToWiki?: () => void
 }) {
   const [activeTab, setActiveTab] = useState<ContentFormat>(deliverables.results[0]?.format || "raw_copy")
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null)
@@ -456,9 +463,18 @@ function DeliverableBubble({
       <AiResultPanel
         title="AI 交付物"
         icon={<Sparkles className="h-4 w-4 text-primary animate-pulse" />}
-        meta={deliverables.knowledgeUsed?.length > 0 ? (
-          <Badge variant="secondary" className="text-[10px]">已用知识库 {deliverables.knowledgeUsed.length} 条</Badge>
-        ) : null}
+        meta={
+          <div className="flex items-center gap-1.5">
+            {deliverables.knowledgeStrategy && (
+              <Badge variant="outline" className="text-[10px]">
+                {KNOWLEDGE_STRATEGY_PROFILES[deliverables.knowledgeStrategy as keyof typeof KNOWLEDGE_STRATEGY_PROFILES]?.label ?? deliverables.knowledgeStrategy}
+              </Badge>
+            )}
+            {deliverables.knowledgeUsed?.length > 0 && (
+              <Badge variant="secondary" className="text-[10px]">已用知识库 {deliverables.knowledgeUsed.length} 条</Badge>
+            )}
+          </div>
+        }
         flat
       >
         <Tabs value={activeFormat} onValueChange={(v) => setActiveTab(v as ContentFormat)} className="w-full">
@@ -561,6 +577,11 @@ function DeliverableBubble({
               <FileText className="h-3.5 w-3.5 mr-1" /> 公众号文章
             </Button>
           )}
+          {onCompileToWiki && (
+            <Button size="sm" variant="outline" onClick={onCompileToWiki} disabled={isBusy}>
+              <BookOpen className="h-3.5 w-3.5 mr-1" /> 编译进 IP 维基
+            </Button>
+          )}
         </ActionStrip>
       </AiResultPanel>
     </div>
@@ -589,6 +610,10 @@ export default function AimPage() {
   const [loadingIndex, setLoadingIndex] = useState(0)
   const [projects, setProjects] = useState<ClientProject[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState(() => initialDraft?.selectedProjectId || "")
+  const [wikiDialog, setWikiDialog] = useState<{ open: boolean; context: IpWikiDialogContext | null }>({
+    open: false,
+    context: null,
+  })
   const [projectEnabled, setProjectEnabled] = useState(true)
   const [isEvolving, setIsEvolving] = useState(false)
   const [evolutionSuggestions, setEvolutionSuggestions] = useState<AimEvolutionSuggestion[]>([])
@@ -751,6 +776,7 @@ export default function AimPage() {
               id: nextId(),
               role: "assistant" as const,
               content: `已加载历史记录${item.topicTitle ? `「${item.topicTitle}」` : ""}，可继续改写或追问。`,
+              agentId: item.agentId ?? undefined,
               deliverables: {
                 id: item.id,
                 results: contents.map((c) => ({ format: c.format, content: c.content, wordCount: c.content.length })),
@@ -873,10 +899,6 @@ export default function AimPage() {
   }
 
   async function handleEvolveConversation() {
-    if (!projectEnabled || !selectedProjectId) {
-      toast.error("请先启用一个 IP 营销全案")
-      return
-    }
     const sourceMessages = messages
       .filter((message) => message.role === "user" || message.role === "assistant")
       .map((message) => ({ role: message.role, content: message.content }))
@@ -886,14 +908,34 @@ export default function AimPage() {
       return
     }
 
+    // 纯文案模式（未启用 IP 全案）也能沉淀全局写作风格；选了项目则同时提炼项目偏好
+    const canEvolveProject = projectEnabled && !!selectedProjectId
+
     setIsEvolving(true)
     try {
-      const suggestions = await evolveAimConversation({
-        projectId: selectedProjectId,
-        messages: sourceMessages,
-      })
-      setEvolutionSuggestions(suggestions)
-      if (suggestions.length === 0) toast.info("这轮对话还没有明显的长期偏好")
+      const results = await Promise.allSettled([
+        evolveStyleConversation({ messages: sourceMessages }),
+        canEvolveProject
+          ? evolveAimConversation({ projectId: selectedProjectId, messages: sourceMessages })
+          : Promise.resolve<AimEvolutionSuggestion[]>([]),
+      ])
+
+      const [styleOutcome, projectOutcome] = results
+
+      if (styleOutcome.status === "fulfilled") {
+        const r = styleOutcome.value
+        if (r.profile) {
+          toast.success(r.created ? "已建立全局写作风格档案" : "全局写作风格档案已更新")
+        } else if (r.reason === "no_style") {
+          toast.info("这轮对话还没有明显的写作风格可沉淀")
+        }
+      } else {
+        toast.error("写作风格沉淀失败")
+      }
+
+      if (projectOutcome.status === "fulfilled") {
+        setEvolutionSuggestions(projectOutcome.value)
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "偏好提炼失败")
     } finally {
@@ -949,6 +991,7 @@ export default function AimPage() {
         videoCopyExtractionId: sourceVideoCopyExtractionId,
         polishInstruction: agent.defaultInstruction,
         taskType: "write_script",
+        useMarketViralVideos: selectedAgentId === "business_diagnosis",
       }, controller.signal)
       setMessages((prev) => [
         ...prev,
@@ -956,6 +999,7 @@ export default function AimPage() {
           id: nextId(),
           role: "assistant",
           content: `${agent.title} 交付物已生成，可直接复制使用，也能继续在下方对话里让我改写。`,
+          agentId: agent.id,
           deliverables: response,
         },
       ])
@@ -1100,9 +1144,9 @@ export default function AimPage() {
               className="h-8 px-2"
               onClick={() => void handleEvolveConversation()}
               disabled={isThinking || isGenerating || isEvolving || messages.length < 2}
-              title="从当前对话提炼客户偏好"
+              title="从当前对话提炼客户偏好 + 更新全局写作风格档案"
             >
-              {isEvolving ? "提炼中" : "沉淀偏好"}
+              {isEvolving ? "提炼中" : "沉淀偏好与风格"}
             </Button>
             <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => resetConversation()} title="新对话">
               <Plus className="h-4 w-4" />
@@ -1234,6 +1278,24 @@ export default function AimPage() {
                               )
                             )
                           }}
+                          onCompileToWiki={
+                            m.agentId === "business_diagnosis" &&
+                            !!selectedProjectId &&
+                            !!m.deliverables.results.some((r) => r.format === "raw_copy")
+                              ? () => {
+                                  const text =
+                                    m.deliverables!.results.find((r) => r.format === "raw_copy")?.content ?? ""
+                                  setWikiDialog({
+                                    open: true,
+                                    context: {
+                                      projectId: selectedProjectId,
+                                      sourceGenerationId: m.deliverables!.id,
+                                      positioningText: text,
+                                    },
+                                  })
+                                }
+                              : undefined
+                          }
                         />
                       </div>
                     )}
@@ -1308,6 +1370,14 @@ export default function AimPage() {
           />
         </footer>
       </section>
+
+      {wikiDialog.open && wikiDialog.context && (
+        <IpWikiDialog
+          key={wikiDialog.context.sourceGenerationId ?? "ip-wiki"}
+          context={wikiDialog.context}
+          onClose={() => setWikiDialog((prev) => ({ ...prev, open: false }))}
+        />
+      )}
     </div>
   )
 }

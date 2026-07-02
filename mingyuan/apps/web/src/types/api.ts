@@ -637,15 +637,37 @@ export interface ApiTopicCard {
   sourceType?: "个人灵感" | "客户资料" | "公司卖点" | "行业热点" | "对标参考";
   score?: number;
   scoreReason?: string;
+  scoreBreakdown?: {
+    projectFit: number;
+    contentValue: number;
+    viralHook: number;
+    conversionFit: number;
+    feasibility: number;
+  };
+  reviewVerdict?: "strong" | "usable" | "observe" | "revise";
+  revisionAdvice?: string;
   hook?: string;
   angle?: string;
   cta?: string;
+  contentLine?: string;
+  defamiliarization?: {
+    scarcityType?: "scenery" | "emotion" | "beauty" | "info" | "curio" | "event";
+    rhetoric?: "fu" | "bi" | "xing";
+    noveltyScore?: number;
+    note?: string;
+    advice?: string;
+  };
 }
 
 export interface ApiTopicGenerateResponse {
   topicSelectionId: string;
   cards: ApiTopicCard[];
   elementCodes: string[];
+  sourceHighlights?: Array<{
+    category: string;
+    title: string;
+    content: string;
+  }>;
 }
 
 export interface ApiTopicSelectResponse {

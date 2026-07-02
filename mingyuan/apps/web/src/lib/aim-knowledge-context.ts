@@ -1,5 +1,10 @@
 import { retrieveRelevantKnowledge, ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
 import type { ScoredKnowledgeEntry } from "@/lib/llm/embeddings"
+import { parseKnowledgeTags, normalizeValueGrade } from "@/lib/knowledge-tags"
+import {
+  type ResolvedKnowledgeStrategy,
+  getStrategyProfile,
+} from "@/lib/aim-knowledge-strategy"
 
 // ─── 类型定义 ──────────────────────────────────────────────
 
@@ -10,6 +15,8 @@ export interface AimKnowledgeContextInput {
   query: string
   topicTitle?: string
   topicRationale?: string
+  /** 知识调用策略，默认 deep（=改造前行为，保证向后兼容） */
+  strategy?: ResolvedKnowledgeStrategy
 }
 
 export interface AimKnowledgeContextResult {
@@ -32,16 +39,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   hot_topic: "热点素材",
   positioning_material: "定位素材",
   private_domain_material: "私域素材",
+  writing_style_profile: "写作风格档案",
 }
-
-/** 默认最多检索条数 */
-const DEFAULT_TOP_K = 12
-
-/** 知识块总字符上限 */
-const MAX_KNOWLEDGE_BLOCK_CHARS = 8000
-
-/** 单条知识最长字符数 */
-const MAX_ENTRY_CHARS = 1200
 
 /**
  * 智能体分类优先级（影响排序但不过滤）
@@ -94,6 +93,18 @@ const DEFAULT_PRIORITY_CATEGORIES = [
   "project_case",
 ]
 
+/**
+ * 价值分级权重（S/A/B/C），与 confidence(真不真) 正交，管"重不重要"。
+ * null / 未知等级 → 视为 B(×1.0)，与改造前行为一致，保证零回归。
+ * 与策略档叠加：策略档决定调几条，分级决定调哪条优先。
+ */
+const GRADE_WEIGHT: Record<string, number> = {
+  S: 1.3, // 战略级：改变认知，优先浮出
+  A: 1.15, // 战术级：可复用方法
+  B: 1.0, // 参考级（默认）
+  C: 0.7, // 索引级：轻量参与、靠后
+}
+
 // ─── 截断函数 ──────────────────────────────────────────────
 
 function truncateContent(content: string, maxChars: number): string {
@@ -120,6 +131,9 @@ export async function buildAimKnowledgeContext(
 ): Promise<AimKnowledgeContextResult> {
   const { userId, projectId, agentId, query, topicTitle, topicRationale } = input
 
+  // 策略画像决定本次调用量与侧重（默认 deep = 改造前行为）
+  const profile = getStrategyProfile(input.strategy ?? "deep")
+
   // 1. 语义检索
   const retrieved = await retrieveRelevantKnowledge({
     userId,
@@ -127,39 +141,25 @@ export async function buildAimKnowledgeContext(
     query,
     topicTitle,
     topicRationale,
-    topK: DEFAULT_TOP_K,
+    topK: profile.topK,
   })
 
   let entries = retrieved.entries
 
-  // 2. 按智能体分类优先级重排（仅影响排序，不过滤）
-  if (entries.length > 0) {
-    const prioritySet = new Set(
-      AGENT_PRIORITY_CATEGORIES[agentId] ?? DEFAULT_PRIORITY_CATEGORIES
-    )
-
-    // 高优先级 × 1.15，低优先级 × 0.85，再按调整后得分降序
-    entries = entries
-      .map((entry) => ({
-        ...entry,
-        score: prioritySet.has(entry.category)
-          ? entry.score * 1.15
-          : entry.score * 0.85,
-      }))
-      .sort((a, b) => b.score - a.score)
-  }
+  // 2. 按智能体分类优先级、策略分类权重和清洗标签重排（仅影响排序，不过滤）
+  entries = rankKnowledgeEntriesForAgent(agentId, entries, profile.categoryBoost)
 
   // 3. 截断超长条目
-  const needTruncation = entries.some((e) => e.content.length > MAX_ENTRY_CHARS)
+  const needTruncation = entries.some((e) => e.content.length > profile.maxEntryChars)
   if (needTruncation) {
     entries = entries.map((e) => ({
       ...e,
-      content: truncateContent(e.content, MAX_ENTRY_CHARS),
+      content: truncateContent(e.content, profile.maxEntryChars),
     }))
   }
 
   // 4. 拼接知识块，控制总字符预算
-  const knowledgeBlock = buildKnowledgeBlockWithBudget(entries, MAX_KNOWLEDGE_BLOCK_CHARS)
+  const knowledgeBlock = buildKnowledgeBlockWithBudget(entries, profile.maxBlockChars)
 
   return {
     knowledgeBlock,
@@ -174,13 +174,42 @@ export async function buildAimKnowledgeContext(
  * @param maxChars 总字符上限，超出则跳过后续知识
  */
 export function buildKnowledgeBlock(
-  entries: Array<{ category: string; title: string; content: string }>
+  entries: Array<{ category: string; title: string; content: string; tags?: unknown }>
 ): string {
   return buildKnowledgeBlockWithBudget(entries, Infinity)
 }
 
+export function rankKnowledgeEntriesForAgent<T extends { category: string; score: number; tags?: unknown; valueGrade?: string | null }>(
+  agentId: string,
+  entries: T[],
+  categoryBoost: Record<string, number> = {},
+): T[] {
+  if (entries.length === 0) return entries
+
+  const prioritySet = new Set(
+    AGENT_PRIORITY_CATEGORIES[agentId] ?? DEFAULT_PRIORITY_CATEGORIES
+  )
+  const wantsIp = agentId === "deep_copywriter" || agentId === "business_diagnosis"
+  const wantsProject = agentId === "content_producer" || agentId === "business_system_diagnosis" || agentId === "content_review"
+
+  return entries
+    .map((entry) => {
+      const parsed = parseKnowledgeTags(entry.tags)
+      let score = prioritySet.has(entry.category) ? entry.score * 1.15 : entry.score * 0.85
+      if (wantsIp && parsed.scope === "ip") score *= 1.2
+      if (wantsProject && parsed.scope === "project") score *= 1.2
+      // 策略级分类权重叠加（hot_topic 突出热点/对标、conversion 突出卖点/痛点等）
+      if (categoryBoost[entry.category]) score *= categoryBoost[entry.category]
+      // 价值分级权重：S/A 优先浮出，C 靠后；null 视为 B(×1.0)
+      score *= GRADE_WEIGHT[normalizeValueGrade(entry.valueGrade) ?? "B"]
+      return { entry, score }
+    })
+    .sort((a, b) => b.score - a.score)
+    .map(({ entry, score }) => ({ ...entry, score }))
+}
+
 function buildKnowledgeBlockWithBudget(
-  entries: Array<{ category: string; title: string; content: string }>,
+  entries: Array<{ category: string; title: string; content: string; tags?: unknown; valueGrade?: string | null }>,
   maxChars: number
 ): string {
   if (entries.length === 0) return ""
@@ -198,7 +227,14 @@ function buildKnowledgeBlockWithBudget(
   for (const [category, items] of grouped) {
     let categoryBlock = `\n【${CATEGORY_LABELS[category] || category}】\n`
     for (const item of items) {
-      const entryLine = `- ${item.title}：${item.content}\n`
+      const parsed = parseKnowledgeTags(item.tags)
+      // 等级前缀：仅显式标注 S/A/C 时展示（B 是默认，省略避免噪声）
+      const grade = normalizeValueGrade(item.valueGrade)
+      const gradePrefix = grade && grade !== "B" ? `[${grade}] ` : ""
+      const title = parsed.confidence === "pending_verify"
+        ? `${gradePrefix}${item.title}（待核验）`
+        : `${gradePrefix}${item.title}`
+      const entryLine = `- ${title}：${item.content}\n`
       categoryBlock += entryLine
     }
 

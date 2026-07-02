@@ -71,4 +71,39 @@ describe("buildTopicDailyReport", () => {
     expect(report.copyText).toContain("AI工具先看流程")
     expect(report.copyText).toContain("评论“流程”")
   })
+
+  it("includes benchmark video sources in daily report", () => {
+    const report = buildTopicDailyReport(cards, [item(1)], "daily", [
+      {
+        category: "benchmark_reference",
+        title: "对标拆解视频",
+        content: "结构化拆解：反差开头，痛点到方案。",
+      },
+    ])
+
+    expect(report.signals[0].title).toBe("对标拆解视频")
+    expect(report.signals[0].source).toBe("对标")
+    expect(report.evidence[0].source).toBe("对标视频/拆解文案")
+    expect(report.evidence[0].summary).toContain("反差开头")
+  })
+
+  it("explains lead decision with score breakdown when available", () => {
+    const report = buildTopicDailyReport([
+      {
+        ...cards[1],
+        scoreBreakdown: {
+          projectFit: 92,
+          contentValue: 88,
+          viralHook: 70,
+          conversionFit: 82,
+          feasibility: 86,
+        },
+        scoreReason: "项目匹配和内容价值更强。",
+      },
+    ], [], "daily")
+
+    expect(report.decision.why).toContain("总分 91")
+    expect(report.decision.why).toContain("强项是项目匹配")
+    expect(report.decision.why).toContain("短板是传播钩子")
+  })
 })

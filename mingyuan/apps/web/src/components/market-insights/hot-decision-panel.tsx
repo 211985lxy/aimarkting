@@ -156,6 +156,12 @@ export function HotDecisionPanel({ source }: { source: ApiHotDecisionSource }) {
 }
 
 function HotDecisionCard({ item }: { item: ApiHotDecisionItem }) {
+  const topicPoolParams = new URLSearchParams({
+    idea: item.title,
+    source: item.sourceName,
+    summary: item.summary,
+  })
+
   return (
     <Card className="overflow-hidden border-muted/70">
       <CardContent className="flex h-full flex-col gap-4 p-4">
@@ -192,8 +198,8 @@ function HotDecisionCard({ item }: { item: ApiHotDecisionItem }) {
               <Wand2 className="h-3.5 w-3.5" />
               深度文案
             </Button>
-            <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/topic-planning?idea=${encodeURIComponent(item.title)}`} />}>
-              加入选题库
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/topic-planning?${topicPoolParams.toString()}`} />}>
+              加入选题池
               <ArrowRight className="h-3.5 w-3.5" />
             </Button>
             <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={item.url} target="_blank" rel="noopener noreferrer" />}>

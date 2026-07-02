@@ -11,7 +11,10 @@
     "dev": "turbo dev --filter='./apps/*'",
     "build": "turbo build",
     "lint": "turbo lint",
-    "dev:web": "npm -w @mingyuan/web run dev"
+    "dev:web": "npm -w @mingyuan/web run dev",
+    "dev:desktop": "pnpm --filter @mingyuan/desktop dev",
+    "build:desktop": "pnpm --filter @mingyuan/desktop build",
+    "icon:desktop": "pnpm --filter @mingyuan/desktop icon"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

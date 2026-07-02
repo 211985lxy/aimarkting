@@ -1,4 +1,5 @@
 import type { ContentFormat, AimTaskType } from "@/lib/aim-generator"
+import { VALID_TOPIC_TYPES } from "@/lib/topic-validation"
 
 const VALID_FORMATS = new Set([
   "video_script",
@@ -29,10 +30,13 @@ export interface ParseGenerateBodyResult {
   taskType: AimTaskType | undefined
   targetFormats: ContentFormat[]
   projectId: string
+  videoCopyExtractionId: string | undefined
   topicTitle: string | undefined
   topicRationale: string | undefined
+  topicType: string | undefined
   hotTopic: string | undefined
   polishInstruction: string | undefined
+  useMarketViralVideos: boolean | undefined
 }
 
 export function parseGenerateBody(body: Record<string, unknown>): ParseGenerateBodyResult {
@@ -56,6 +60,13 @@ export function parseGenerateBody(body: Record<string, unknown>): ParseGenerateB
     targetFormats = TASK_DEFAULT_FORMATS[taskType] || []
   }
 
+  // 解析 topicType（复用定位策划官的内容类型：人设型/转化型/流量型）
+  const topicType: string | undefined =
+    typeof body.topicType === "string" &&
+    (VALID_TOPIC_TYPES as readonly string[]).includes(body.topicType)
+      ? body.topicType
+      : undefined
+
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : ""
 
   return {
@@ -64,10 +75,14 @@ export function parseGenerateBody(body: Record<string, unknown>): ParseGenerateB
     taskType,
     targetFormats,
     projectId,
+    videoCopyExtractionId: typeof body.videoCopyExtractionId === "string" ? body.videoCopyExtractionId.trim() || undefined : undefined,
     topicTitle: typeof body.topicTitle === "string" ? body.topicTitle : undefined,
     topicRationale: typeof body.topicRationale === "string" ? body.topicRationale : undefined,
+    topicType,
     hotTopic: typeof body.hotTopic === "string" ? body.hotTopic : undefined,
     polishInstruction: typeof body.polishInstruction === "string" ? body.polishInstruction : undefined,
+    useMarketViralVideos:
+      typeof body.useMarketViralVideos === "boolean" ? body.useMarketViralVideos : undefined,
   }
 }
 
@@ -77,7 +92,6 @@ export function validateGenerateInput(parsed: {
   targetFormats: ContentFormat[]
 }): string | null {
   if (!parsed.rawInput) return "请输入内容"
-  if (!parsed.projectId) return "请选择 IP 营销全案"
   if (parsed.targetFormats.length === 0) return "请选择至少一种生成格式"
   return null
 }

@@ -46,12 +46,6 @@ export function AimPromptComposer({
         <textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault()
-              if (canSend) onSend()
-            }
-          }}
           rows={1}
           placeholder={placeholder}
           disabled={busy}
@@ -64,7 +58,7 @@ export function AimPromptComposer({
             ) : isRecording ? (
               <span className="text-red-500">正在录音，点击停止后可发送</span>
             ) : (
-              "回车发送 · Shift+回车换行"
+              "回车换行 · 点击发送按钮发送"
             )}
           </p>
           <div className="flex items-center justify-end gap-1.5">

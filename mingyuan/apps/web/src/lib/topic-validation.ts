@@ -32,7 +32,22 @@ export const VALID_TOPIC_SOURCE_TYPES = [
   "对标参考",
 ] as const
 
+export const REVIEW_VERDICTS = ["strong", "usable", "observe", "revise"] as const
+
+// ─── 陌生化（Defamiliarization）代码集 ──────────────────────
+// 6 类稀缺 + 赋比兴三法，详见 lib/topic-defamiliarization.ts
+import { VALID_SCARCITY_CODES, VALID_RHETORIC_CODES } from "@/lib/topic-defamiliarization"
+export { VALID_SCARCITY_CODES, VALID_RHETORIC_CODES }
+
 // ─── Zod schemas ────────────────────────────────────────
+
+export const TopicScoreBreakdownSchema = z.object({
+  projectFit: z.number().min(0).max(100),
+  contentValue: z.number().min(0).max(100),
+  viralHook: z.number().min(0).max(100),
+  conversionFit: z.number().min(0).max(100),
+  feasibility: z.number().min(0).max(100),
+})
 
 export const TopicCardSchema = z.object({
   title: z.string().min(2, "标题至少2字").max(20, "标题不超过20字"),
@@ -47,9 +62,22 @@ export const TopicCardSchema = z.object({
   sourceType: z.enum(VALID_TOPIC_SOURCE_TYPES).optional(),
   score: z.number().min(0).max(100).optional(),
   scoreReason: z.string().min(5).max(200).optional(),
+  scoreBreakdown: TopicScoreBreakdownSchema.optional(),
+  reviewVerdict: z.enum(REVIEW_VERDICTS).optional(),
+  revisionAdvice: z.string().min(5).max(200).optional(),
   hook: z.string().min(2).max(200).optional(),
   angle: z.string().min(2).max(300).optional(),
   cta: z.string().min(2).max(200).optional(),
+  contentLine: z.string().min(2).max(40).optional(),
+  defamiliarization: z
+    .object({
+      scarcityType: z.enum(VALID_SCARCITY_CODES).optional(),
+      rhetoric: z.enum(VALID_RHETORIC_CODES).optional(),
+      noveltyScore: z.number().min(0).max(100).optional(),
+      note: z.string().min(2).max(200).optional(),
+      advice: z.string().min(2).max(200).optional(),
+    })
+    .optional(),
 })
 
 export const TopicCardsSchema = z

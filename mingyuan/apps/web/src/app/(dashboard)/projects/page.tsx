@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { toast } from "sonner"
 import { AiResultPanel } from "@/components/workbench/ai-result-panel"
 import { WorkbenchHero } from "@/components/workbench/workbench-hero"
 import {
@@ -22,7 +23,6 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<ClientProject[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState("")
   const [form, setForm] = useState({
     name: "",
     companyName: "",
@@ -35,19 +35,21 @@ export default function ProjectsPage() {
   useEffect(() => {
     listClientProjects()
       .then(setProjects)
-      .catch(() => setError("IP营销全案读取失败，请重新登录后再试"))
+      .catch(() => toast.error("IP营销全案读取失败，请重新登录后再试"))
       .finally(() => setLoading(false))
   }, [])
 
   async function handleCreateProject() {
     const name = form.name.trim()
     if (!name) {
-      setError("先填写全案名称")
+      toast.error("请先填写全案名称")
+      const nameEl = document.getElementById("project-name") as HTMLInputElement | null
+      nameEl?.focus()
+      nameEl?.scrollIntoView({ block: "center", behavior: "smooth" })
       return
     }
 
     setSaving(true)
-    setError("")
     try {
       const project = await createClientProject({
         name,
@@ -66,8 +68,9 @@ export default function ProjectsPage() {
         offer: "",
         deliveryGoal: "",
       })
+      toast.success(`已创建全案「${project.name}」`)
     } catch {
-      setError("IP营销全案创建失败，请检查必填信息")
+      toast.error("IP营销全案创建失败，请检查必填信息或重新登录")
     } finally {
       setSaving(false)
     }
@@ -89,7 +92,9 @@ export default function ProjectsPage() {
           contentClassName="space-y-4 p-4"
         >
             <div className="space-y-2">
-              <Label htmlFor="project-name">全案名称</Label>
+              <Label htmlFor="project-name">
+                全案名称 <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="project-name"
                 value={form.name}
@@ -171,7 +176,6 @@ export default function ProjectsPage() {
                 }
               />
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
             <Button
               className="w-full"
               disabled={saving}

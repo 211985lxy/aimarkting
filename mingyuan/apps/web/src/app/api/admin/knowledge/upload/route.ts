@@ -3,6 +3,7 @@ import { withAdminAuth } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 import { parseDocument } from "@/lib/document-parser"
 import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
+import { buildDefaultKnowledgeTags } from "@/lib/knowledge-tags"
 
 export const POST = withAdminAuth(async (request, { admin }) => {
   const formData = await request.formData()
@@ -53,7 +54,7 @@ export const POST = withAdminAuth(async (request, { admin }) => {
         title,
         content: content.slice(0, 50000),
         sourceType: "import",
-        tags: [],
+        tags: buildDefaultKnowledgeTags(category),
         status: "active",
       },
     })

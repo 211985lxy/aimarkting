@@ -40,3 +40,8 @@ next-env.d.ts
 
 # output artifacts
 output/
+
+# tauri / rust (desktop client)
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/gen
+apps/desktop/src-tauri/.window-state.json

@@ -29,8 +29,10 @@ interface AimInput {
   taskType?: AimTaskType
   topicTitle?: string
   topicRationale?: string
+  topicType?: string
   hotTopic?: string
   polishInstruction?: string
+  videoCopyExtractionId?: string
 }
 
 function asStringArray(value: unknown): string[] {
@@ -154,9 +156,6 @@ export function parseMultiFormatResponse(
 // ─── 代理生成器 ──────────────────────────────────────────────
 
 export async function generateAimContent(input: AimInput) {
-  if (!input.projectId) {
-    throw new Error("请选择 IP 营销全案后再生成内容")
-  }
   return buildAimGeneration(input.agentId || "content_producer", {
     userId: input.userId,
     projectId: input.projectId,
@@ -165,7 +164,9 @@ export async function generateAimContent(input: AimInput) {
     taskType: input.taskType,
     topicTitle: input.topicTitle,
     topicRationale: input.topicRationale,
+    topicType: input.topicType,
     hotTopic: input.hotTopic,
     polishInstruction: input.polishInstruction,
+    videoCopyExtractionId: input.videoCopyExtractionId,
   })
 }

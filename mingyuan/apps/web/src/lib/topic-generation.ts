@@ -7,6 +7,7 @@ import {
 import type { TopicCard } from "@/lib/topic-validation"
 import { sampleElements, sampleWithHistory, pickStrategy } from "@/lib/topic-element-logic"
 import type { DerivationStrategy } from "@/lib/topic-element-logic"
+import { normalizeDefamiliarization } from "@/lib/topic-defamiliarization"
 import type { TopicElement } from "@/generated/prisma/client"
 
 const TOPIC_MODEL = process.env.TOPIC_GENERATION_MODEL || "openai/gpt-5.4"
@@ -48,6 +49,8 @@ export interface TopicGenerationInput {
   recentTitles?: string[]
   /** How many times the user has refreshed (0 = first time) */
   refreshCount?: number
+  /** Content line themes from IpProfile.content.themes (name + ratio) */
+  contentThemes?: Array<{ name: string; ratio: number }>
 }
 
 const TOPIC_SOURCE_LABELS: Record<string, string> = {
@@ -105,15 +108,23 @@ export function buildTopicSystemPrompt(
 
 输出要求：
 - 严格返回 JSON 格式，结构为 {"topics": [card1, card2, card3, card4]}
-- 每张卡片包含：title (选题标题，2-20字), elementCodes (使用的元素代码数组), openingTypeCode (推荐开场类型代码), structureCode (推荐文案结构代码), rationale (一句话理由，20-60字), topicType, sourceType, score, scoreReason
+- 每张卡片包含：title (选题标题，2-20字), elementCodes (使用的元素代码数组), openingTypeCode (推荐开场类型代码), structureCode (推荐文案结构代码), rationale (一句话理由，20-60字), topicType, sourceType, score, scoreReason, scoreBreakdown, reviewVerdict, revisionAdvice
 - topicType 必须从以下选择：${VALID_TOPIC_TYPES.join("、")}
 - sourceType 必须从以下选择：${VALID_TOPIC_SOURCE_TYPES.join("、")}
-- score 为 0-100 的整数，scoreReason 用一句话说明评分原因
+- scoreBreakdown 必须包含五个 0-100 整数：projectFit(客户/项目匹配度，权重25), contentValue(内容价值，权重25), viralHook(传播钩子，权重20), conversionFit(成交关联，权重15), feasibility(执行可行性，权重15)
+- score 为 0-100 的整数，由五维加权得出；scoreReason 用一句话说明评分原因
+- reviewVerdict 必须从 strong、usable、observe、revise 选择；任一维度低于40必须为 revise；revisionAdvice 必须给出具体修改指令
 - 4个选题必须标题各不相同，角度各异
-- 每个选题使用指定的营销元素代码
+- 如果提供了账号内容线，至少1个选题必须贴合某条内容线，并在 contentLine 字段填写该内容线的名称（如"职场干货"）；未提供内容线时 contentLine 留空
 - openingTypeCode 必须从以下选择：curiosity_open, leverage_open, pain_open, extreme_open, fear_open, contrast_open, benefit_open
 - structureCode 必须从以下选择：suspense_reveal, contrast_hook, three_beat_ramp, proof_first, pain_solution, pov_walkthrough, objection_dialogue, before_after, universal
-- 开场类型和文案结构的推荐要与选题内容和使用的元素逻辑匹配`
+- 开场类型和文案结构的推荐要与选题内容和使用的元素逻辑匹配
+
+【陌生化含金量（选题的硬指标）】没有陌生化的选题是没有含金量的，每张卡片必须给出 defamiliarization：
+- scarcityType（稀缺类型，6 选 1）：scenery=稀缺景观（没见过的大海/特殊视觉效果）、emotion=稀缺情感（特别饱满的情感）、beauty=稀缺美好（极其稀有的美好品质）、info=稀缺信息资讯（财经博主式稀缺信息）、curio=稀缺奇闻异事（说书号/电影号式奇闻）、event=稀缺事件（婆媳剑拔弩张/街头抓眼球/稀缺故事）
+- rhetoric（赋比兴手法，3 选 1）：fu=赋（平铺直叙、铺陈堆叠，演绎细节之美）、bi=比（以彼物比此物，并置/对立/结合之美）、xing=兴（先言他物引起所咏，转化之美）
+- noveltyScore（含金量分，0-100 整数）：素材可遇不可求的程度 × 表达手法的陌生度，宁低勿凑数
+- note（一句话"凭什么陌生"）：说明这条选题具体靠什么制造陌生，20-60字`
 
   // Strategy-specific instructions
   const strategyInstructions: Record<DerivationStrategy, string> = {
@@ -173,7 +184,7 @@ export function buildTopicUserPrompt(
   input: TopicGenerationInput,
   selectedCodes: string[],
 ): string {
-  const { ipProfile, topicSources, recommendationMode = "normal" } = input
+  const { ipProfile, topicSources, recommendationMode = "normal", contentThemes } = input
   const selectedElements = input.elements.filter((e) =>
     selectedCodes.includes(e.code),
   )
@@ -218,7 +229,16 @@ export function buildTopicUserPrompt(
         ? "这是本周选题池，请兼顾人设、转化和流量，不要只追逐短期热点。"
         : ""
 
-  return `${profileSection ? profileSection + "\n\n" : ""}${sourceSection ? sourceSection + "\n\n" : ""}${elementSection}\n\n请基于以上${profileSection ? " IP 档案、" : ""}${sourceSection ? "选题素材和" : ""}营销元素，生成4个差异化的短视频选题卡片。每个选题都要巧妙融入指定的营销元素，并推荐最匹配的开场类型和文案结构。${modeInstruction}`
+  const contentThemeSection = contentThemes && contentThemes.length > 0
+    ? `## 账号内容线\n${contentThemes.map((t) => `- ${t.name}（占比 ${Math.round(t.ratio * 100)}%）`).join("\n")}\n\n请至少生成1个贴合某条内容线的选题，并在 contentLine 字段标出该内容线名称。其余选题可自由发挥。`
+    : ""
+  const benchmarkRewriteInstruction = topicSources?.some((source) => source.category === "benchmark_reference")
+    ? `## 对标文案迁移规则
+对标参考只能提供"结构和钩子"，不能按原行业模板照搬。必须基于上方 IP 档案里的行业、人设、产品、目标受众、说话风格，改写成这个 IP 自己的写法开启方向。
+每个借鉴对标的选题，都要在 rationale 或 angle 中体现：这个 IP 应该怎么开头、旧认知怎么改、方法模块怎么迁移、结尾如何承接自己的产品。`
+    : ""
+
+  return `${profileSection ? profileSection + "\n\n" : ""}${contentThemeSection ? contentThemeSection + "\n\n" : ""}${sourceSection ? sourceSection + "\n\n" : ""}${benchmarkRewriteInstruction ? benchmarkRewriteInstruction + "\n\n" : ""}${elementSection}\n\n请基于以上${profileSection ? " IP 档案、" : ""}${sourceSection ? "选题素材和" : ""}营销元素，生成4个差异化的短视频选题卡片。每个选题都要巧妙融入指定的营销元素，并推荐最匹配的开场类型和文案结构。${modeInstruction}`
 }
 
 function inferTopicType(card: TopicCard, index: number): TopicCard["topicType"] {
@@ -248,18 +268,82 @@ export function normalizeTopicCards(
 ): TopicCard[] {
   const recommendationMode = input.recommendationMode ?? "normal"
   return cards.map((card, index) => {
-    const score = typeof card.score === "number"
-      ? Math.max(0, Math.min(100, Math.round(card.score)))
-      : Math.max(72, 88 - index * 4)
+    const scoreBreakdown = normalizeScoreBreakdown(card.scoreBreakdown)
+    const score = weightedScore(scoreBreakdown)
+    const reviewVerdict = verdictFor(score, scoreBreakdown)
 
     return {
       ...card,
       topicType: inferTopicType(card, index),
       sourceType: inferSourceType(card, input.topicSources, recommendationMode),
+      scoreBreakdown,
       score,
-      scoreReason: card.scoreReason || "账号适配、内容价值和执行可行性综合评分。",
+      reviewVerdict,
+      scoreReason: card.scoreReason || scoreReasonFor(scoreBreakdown),
+      revisionAdvice: card.revisionAdvice || revisionAdviceFor(scoreBreakdown, reviewVerdict),
+      defamiliarization: normalizeDefamiliarization(card.defamiliarization),
     }
   })
+}
+
+function clampScore(value: unknown) {
+  return Math.max(0, Math.min(100, Math.round(Number(value) || 0)))
+}
+
+function normalizeScoreBreakdown(breakdown: TopicCard["scoreBreakdown"]): NonNullable<TopicCard["scoreBreakdown"]> {
+  return {
+    projectFit: breakdown ? clampScore(breakdown.projectFit) : 80,
+    contentValue: breakdown ? clampScore(breakdown.contentValue) : 80,
+    viralHook: breakdown ? clampScore(breakdown.viralHook) : 70,
+    conversionFit: breakdown ? clampScore(breakdown.conversionFit) : 75,
+    feasibility: breakdown ? clampScore(breakdown.feasibility) : 80,
+  }
+}
+
+function weightedScore(breakdown: NonNullable<TopicCard["scoreBreakdown"]>) {
+  return Math.floor(
+    breakdown.projectFit * 0.25
+    + breakdown.contentValue * 0.25
+    + breakdown.viralHook * 0.2
+    + breakdown.conversionFit * 0.15
+    + breakdown.feasibility * 0.15,
+  )
+}
+
+function verdictFor(score: number, breakdown: NonNullable<TopicCard["scoreBreakdown"]>): NonNullable<TopicCard["reviewVerdict"]> {
+  if (Object.values(breakdown).some((value) => value < 40)) return "revise"
+  if (score >= 80) return "strong"
+  if (score >= 65) return "usable"
+  return "observe"
+}
+
+const SCORE_LABELS: Record<keyof NonNullable<TopicCard["scoreBreakdown"]>, string> = {
+  projectFit: "客户/项目匹配度",
+  contentValue: "内容价值",
+  viralHook: "传播钩子",
+  conversionFit: "成交关联",
+  feasibility: "执行可行性",
+}
+
+function weakestDimension(breakdown: NonNullable<TopicCard["scoreBreakdown"]>) {
+  return (Object.keys(breakdown) as Array<keyof typeof breakdown>)
+    .sort((a, b) => breakdown[a] - breakdown[b])[0]
+}
+
+function scoreReasonFor(breakdown: NonNullable<TopicCard["scoreBreakdown"]>) {
+  const weakest = weakestDimension(breakdown)
+  return `${SCORE_LABELS[weakest]}是当前短板，需用更具体的素材补强。`
+}
+
+function revisionAdviceFor(
+  breakdown: NonNullable<TopicCard["scoreBreakdown"]>,
+  verdict: NonNullable<TopicCard["reviewVerdict"]>,
+) {
+  const weakest = weakestDimension(breakdown)
+  if (verdict === "strong") return "可以直接主推。"
+  if (verdict === "usable") return "补充更具体的客户场景或案例证据。"
+  if (verdict === "observe") return `先放入观察池，重点补强${SCORE_LABELS[weakest]}。`
+  return `请先重写角度，优先补强${SCORE_LABELS[weakest]}。`
 }
 
 export async function generateTopicCards(

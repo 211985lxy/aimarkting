@@ -6,11 +6,16 @@ export const GET = withUserAuth(async (request, { user }) => {
   const { searchParams } = new URL(request.url)
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
   const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') ?? '10', 10)))
+  const targetUrl = searchParams.get('targetUrl')?.trim()
   const skip = (page - 1) * limit
+  const where = {
+    userId: user.id,
+    ...(targetUrl ? { targetUrl } : {}),
+  }
 
   const [items, total] = await Promise.all([
     prisma.competitorAnalysis.findMany({
-      where: { userId: user.id },
+      where,
       orderBy: { createdAt: 'desc' },
       skip,
       take: limit,
@@ -32,7 +37,7 @@ export const GET = withUserAuth(async (request, { user }) => {
       },
     }),
     prisma.competitorAnalysis.count({
-      where: { userId: user.id },
+      where,
     }),
   ])
 

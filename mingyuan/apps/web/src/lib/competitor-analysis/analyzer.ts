@@ -32,7 +32,7 @@ export async function analyzeCompetitor(
     heatmap[key] = (heatmap[key] ?? 0) + 1
   }
 
-  // ── Build top 10 videos by likes (views often 0 on Douyin due to API limitation)
+  // ── Build top 10 videos by views, falling back to likes only for sorting.
   const topVideos = [...videos]
     .sort((a, b) => (b.views || b.likes) - (a.views || a.likes))
     .slice(0, 10)
@@ -40,7 +40,7 @@ export async function analyzeCompetitor(
       const denominator = v.views > 0 ? v.views : (account.followerCount || 1)
       return {
         title: v.title,
-        views: v.views > 0 ? v.views : v.likes, // show likes as proxy when views unavailable
+        views: v.views,
         likes: v.likes,
         engagement_rate: Math.round(((v.likes + v.comments + v.shares) / denominator) * 10000) / 100,
         url: v.videoUrl,
