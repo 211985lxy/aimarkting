@@ -867,8 +867,41 @@ ${params.knowledgeBlock}
 请根据上文与用户的历史对话，产出下一轮内容（必须以【进度 XX%】开头）。`
   }
 
+  private buildIntakeReceivePrompt(): string {
+    return `你是一个「前采信息整理专家」。用户会分批发送前采资料。
+规则：
+1. 用户发来前采文字时，只需回复"收到"。
+2. 不要追问、不要分析、不要输出任何报告。
+3. 等待用户发送"开始整理"的指令。
+请回复"收到"。`
+  }
+
+  private buildIntakeCompilePrompt(knowledgeBlock: string): string {
+    return `你是一个「前采信息整理专家」。请根据对话历史中的所有前采内容，输出结构化报告：
+
+## 一、身份信息
+## 二、人设特征
+## 三、故事素材（3-5 个有爆点的真实故事）
+## 四、商业逻辑
+## 五、客户画像
+## 六、内容素材（5-10 个可做选题的话题 + 金句）
+## 七、信息缺口与补采建议（5-10 个具体问题）
+
+直接输出报告，不要追问。`
+  }
+
   async chat(params: AimChatParams): Promise<AimChatResponse> {
-    return executeChatLLM(this.agentId, this.buildChatPrompt(params), params.messages)
+    const lastUserMsg = params.messages[params.messages.length - 1]?.content ?? ""
+    const mode = detectPersonaMode(lastUserMsg)
+    let prompt: string
+    if (mode === "intake") {
+      prompt = this.buildIntakeReceivePrompt()
+    } else if (mode === "intake_compile") {
+      prompt = this.buildIntakeCompilePrompt(params.knowledgeBlock)
+    } else {
+      prompt = this.buildChatPrompt(params)
+    }
+    return executeChatLLM(this.agentId, prompt, params.messages)
   }
 
   streamChat(params: AimChatParams): AsyncIterable<string> {
@@ -917,6 +950,16 @@ ${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}请直�
       knowledgeUsed: record.knowledgeUsed as any[],
     }
   }
+}
+
+// ─── 前采模式检测 ───────────────────────────────────────────
+
+export function detectPersonaMode(input: string): "guided" | "intake" | "intake_compile" {
+  const text = input.trim()
+  if (text.includes("开始整理")) return "intake_compile"
+  const intakeKeywords = ["前采", "访谈", "录音", "整理", "报告", "资料整理", "逐字稿"]
+  if (intakeKeywords.some((kw) => text.includes(kw))) return "intake"
+  return "guided"
 }
 
 // ─── 调度与分流器 ───────────────────────────────────────────
