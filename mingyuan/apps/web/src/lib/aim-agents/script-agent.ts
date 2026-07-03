@@ -1,10 +1,11 @@
 import { LLMClient } from "@/lib/llm/client"
 import { prisma } from "@/lib/prisma"
 import { buildIpCopywritingMethodologyBlock } from "@/lib/ip-copywriting-methodology"
+import { getStylePromptBlock, type StyleGuideId } from "@/lib/style-guide-config"
 
 /**
  * 改文案 Agent
- * 输入原始文案 + 可选优化指令，输出精修文案。
+ * 输入原始文案 + 可选优化指令 + 可选风格指令，输出精修文案。
  * 短期复用 aim-generator 的 prompt 思路，独立为 Agent 边界。
  */
 export async function polishCopy(input: {
@@ -12,11 +13,14 @@ export async function polishCopy(input: {
   projectId?: string
   rawInput: string
   instruction?: string
+  styleId?: StyleGuideId
 }): Promise<{ content: string; wordCount: number }> {
   const [knowledge, methodologyBlock] = await Promise.all([
     loadProjectKnowledge(input.userId, input.projectId),
     buildIpCopywritingMethodologyBlock(),
   ])
+
+  const styleBlock = getStylePromptBlock(input.styleId)
 
   const systemPrompt = `你是一个企业营销文案专家。你的任务是对用户提供的文案进行精修和优化。
 
@@ -30,7 +34,7 @@ ${methodologyBlock}
 - 结尾必须有明确行动号召
 - 直接输出改好的文案，不要追问用户，不要让用户补充资料
 - 禁止使用：赋能、闭环、抓手、颗粒度、对齐、拉通、打通、沉淀、复盘、迭代、链路、触达、心智、赛道
-- 输出纯文本，不要加格式标记或解释`
+- 输出纯文本，不要加格式标记或解释${styleBlock}`
 
   const userPrompt = `请优化以下文案：${input.instruction ? `\n优化要求：${input.instruction}` : ""}
 
@@ -62,6 +66,7 @@ export async function writeScript(input: {
   projectId?: string
   rawInput: string
   instruction?: string
+  structureCode?: string
 }): Promise<{ content: string; wordCount: number }> {
   const [knowledge, viralBlock, methodologyBlock] = await Promise.all([
     loadProjectKnowledge(input.userId, input.projectId),
@@ -85,7 +90,10 @@ ${viralBlock}
 - 必须结合企业知识库中的产品卖点、客户痛点、老板经验
 - 直接输出脚本成稿，不要追问用户，不要让用户补充资料
 - 禁止使用：赋能、闭环、抓手、颗粒度、对齐、拉通、打通、沉淀、复盘、迭代、链路、触达、心智、赛道
-- 输出纯脚本文本，不要加格式标记或解释`
+- 输出纯脚本文本，不要加格式标记或解释
+${input.structureCode
+  ? `\n- 本次指定使用文案结构：${input.structureCode}，请严格按照该结构的节拍展开\n`
+  : ""}`
 
   const userPrompt = `请根据以下信息写一条短视频口播脚本：${input.instruction ? `\n补充要求：${input.instruction}` : ""}
 
