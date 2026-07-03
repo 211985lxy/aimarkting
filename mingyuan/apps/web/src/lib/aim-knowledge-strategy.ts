@@ -1,4 +1,5 @@
 import { VALID_TOPIC_TYPES } from "@/lib/topic-validation"
+import { type ContentScenario, getScenarioConfig } from "@/lib/content-scenario-config"
 
 /**
  * 知识调用策略（resolved）
@@ -20,6 +21,13 @@ export type ResolvedKnowledgeStrategy =
   | "conversion" // 转化型：偏大量，突出产品卖点/痛点/问答
   | "traffic" // 流量型：中少量，突出用户洞察/热点
   | "deep" // 深度创作：全量（=现状，默认，保证向后兼容）
+
+export type AimRuntimeTask =
+  | "light_edit"
+  | "rewrite_copy"
+  | "new_copy"
+  | "positioning_topic"
+  | "quality_review"
 
 /** 单档策略的检索画像 */
 export interface KnowledgeStrategyProfile {
@@ -100,8 +108,12 @@ const TOPIC_TYPE_STRATEGY: Record<string, ResolvedKnowledgeStrategy> = {
 }
 
 export interface ResolveKnowledgeStrategyInput {
+  /** AIM 运行时先识别出的任务类型；只用于压低轻改/改写的上下文预算 */
+  runtimeTask?: AimRuntimeTask
   /** 定位策划官产出/前端传入的内容类型（人设型/转化型/流量型） */
   topicType?: string
+  /** 内容场景（场景模式 → 知识策略，优先级仅次于 light_edit） */
+  contentScenario?: ContentScenario
   /** 当前热点（流量型 + 热点 → hot_topic 轻量档） */
   hotTopic?: string
   /** 对标爆款文案 id（有对标 → hot_topic） */
@@ -112,14 +124,72 @@ export interface ResolveKnowledgeStrategyInput {
   polishInstruction?: string
 }
 
+export interface ResolveAimRuntimeTaskInput {
+  agentId?: string
+  input?: string
+  taskType?: string
+  polishInstruction?: string
+  targetFormats?: string[]
+}
+
+function includesAny(text: string, words: string[]): boolean {
+  return words.some((word) => text.includes(word))
+}
+
+export function resolveAimRuntimeTask(input: ResolveAimRuntimeTaskInput): AimRuntimeTask {
+  const text = `${input.input ?? ""} ${input.polishInstruction ?? ""}`.trim()
+
+  if (input.taskType === "quality_check" || input.agentId === "content_review") {
+    return "quality_review"
+  }
+
+  if (input.agentId === "business_diagnosis" || includesAny(text, ["定位", "选题", "人设", "账号方向", "内容方向", "IP策划", "策划方案"])) {
+    return "positioning_topic"
+  }
+
+  const asksForExternalContext =
+    includesAny(text, ["结合", "参考", "用上", "调用"]) &&
+    includesAny(text, ["案例", "产品", "客户", "对标", "知识库", "老板经历", "卖点", "痛点"])
+
+  if (
+    !asksForExternalContext &&
+    (
+      input.taskType === "polish_copy" ||
+      Boolean(input.polishInstruction?.trim()) ||
+      includesAny(text, ["润色", "顺一下", "自然点", "口语化", "换个说法", "改得", "改成", "这里改", "这句话"])
+    )
+  ) {
+    return "light_edit"
+  }
+
+  if (includesAny(text, ["重写", "改写", "优化", "重新写", "大改"])) {
+    return "rewrite_copy"
+  }
+
+  if (input.taskType === "write_script" || (input.targetFormats?.length ?? 0) > 0 || includesAny(text, ["写一版", "写个", "生成", "起草", "创作", "出一条"])) {
+    return "new_copy"
+  }
+
+  return "rewrite_copy"
+}
+
+export function shouldUseKnowledgeContextForTask(task: AimRuntimeTask): boolean {
+  return task !== "light_edit"
+}
+
+export function shouldUseMarketViralContextForTask(task: AimRuntimeTask): boolean {
+  return task === "new_copy" || task === "positioning_topic"
+}
+
 /**
  * 根据输入信号解析出最终的知识调用策略。
  *
  * 优先级（命中即止）：
  *   1. 轻改润色（polishInstruction 或 polish_copy）
- *   2. 热点创作（hotTopic 或对标文案）
- *   3. 内容类型档（人设型/转化型/流量型）
- *   4. 深度创作（默认，=现状）
+ *   2. 内容场景（contentScenario → 场景配置中的知识策略）
+ *   3. 热点创作（hotTopic 或对标文案）
+ *   4. 内容类型档（人设型/转化型/流量型）
+ *   5. 深度创作（默认，=现状）
  *
  * 注意：热点优先级高于 topicType，因为「流量型 + 热点」时
  * 用户更需要的是结合热点的轻量创作，而非全量知识。
@@ -127,24 +197,30 @@ export interface ResolveKnowledgeStrategyInput {
 export function resolveKnowledgeStrategy(
   input: ResolveKnowledgeStrategyInput
 ): ResolvedKnowledgeStrategy {
-  const { topicType, hotTopic, videoCopyExtractionId, taskType, polishInstruction } = input
+  const { runtimeTask, topicType, contentScenario, hotTopic, videoCopyExtractionId, taskType, polishInstruction } = input
 
   // 1. 轻改润色：用户只想改一段，没必要拉知识库
-  if (polishInstruction?.trim() || taskType === "polish_copy") {
+  if (runtimeTask === "light_edit" || runtimeTask === "rewrite_copy" || polishInstruction?.trim() || taskType === "polish_copy") {
     return "light_edit"
   }
 
-  // 2. 热点创作：有热点或对标文案，突出热点/对标，知识库轻量调用
+  // 2. 内容场景：场景模式优先级仅次于 light_edit
+  if (contentScenario) {
+    const scenarioConfig = getScenarioConfig(contentScenario)
+    return scenarioConfig.knowledgeStrategy as ResolvedKnowledgeStrategy
+  }
+
+  // 3. 热点创作：有热点或对标文案，突出热点/对标，知识库轻量调用
   if (hotTopic?.trim() || videoCopyExtractionId?.trim()) {
     return "hot_topic"
   }
 
-  // 3. 内容类型档：复用定位策划官的 topicType
+  // 4. 内容类型档：复用定位策划官的 topicType
   if (topicType && VALID_TOPIC_TYPES.includes(topicType as (typeof VALID_TOPIC_TYPES)[number])) {
     return TOPIC_TYPE_STRATEGY[topicType] ?? "deep"
   }
 
-  // 4. 深度创作：默认全量（=改造前行为，保证向后兼容）
+  // 5. 深度创作：默认全量（=改造前行为，保证向后兼容）
   return "deep"
 }
 
