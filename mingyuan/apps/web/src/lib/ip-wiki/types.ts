@@ -12,6 +12,7 @@ export type IpWikiPageType =
   | "audience" // 目标人群画像
   | "conversion_path" // 成交路径与产品阶梯
   | "topic_direction" // 选题方向
+  | "viral_methodology" // 爆款方法论：爆款结构 / 钩子 / 情绪曲线
   | "index" // 维基目录（导航入口）
   | "log" // 操作日志（时序记录）
 
@@ -22,6 +23,7 @@ export const IP_WIKI_PAGE_TYPES: IpWikiPageType[] = [
   "audience",
   "conversion_path",
   "topic_direction",
+  "viral_methodology",
   "index",
   "log",
 ]
@@ -37,6 +39,7 @@ export const IP_WIKI_PAGE_TYPE_LABELS: Record<IpWikiPageType, string> = {
   audience: "目标人群",
   conversion_path: "成交路径",
   topic_direction: "选题方向",
+  viral_methodology: "爆款方法论",
   index: "维基目录",
   log: "操作日志",
 }
