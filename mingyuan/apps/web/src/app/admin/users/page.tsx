@@ -9,6 +9,7 @@ import {
   ChevronRight,
   UserPlus,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -49,6 +50,7 @@ export default function AdminUsersPage() {
       console.error(error)
       setUsers([])
       setTotal(0)
+      toast.error(error instanceof Error ? error.message : "用户列表加载失败，请重试")
     } finally {
       setLoading(false)
     }
@@ -65,6 +67,7 @@ export default function AdminUsersPage() {
       .catch((error) => {
         console.error(error)
         setStats(null)
+        toast.error(error instanceof Error ? error.message : "用户统计加载失败")
       })
   }, [])
 
@@ -193,7 +196,7 @@ export default function AdminUsersPage() {
                       <td className="p-3 text-right">{user._count.videoTasks}</td>
                       <td className="p-3 text-right">{user._count.avatars}</td>
                       <td className="p-3 text-muted-foreground">
-                        {new Date(user.createdAt).toLocaleDateString()}
+                        {new Date(user.createdAt).toLocaleDateString("zh-CN")}
                       </td>
                     </tr>
                   ))

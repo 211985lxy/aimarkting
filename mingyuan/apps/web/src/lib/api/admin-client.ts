@@ -16,7 +16,12 @@ class AdminApiError extends Error {
 
 type RequestOptions = RequestInit & {
   auth?: boolean
+  /** 请求超时（毫秒），默认 20s。设为 0 表示不超时（仅长任务用）。 */
+  timeoutMs?: number
 }
+
+/** 默认请求超时。后台绝大多数接口都是 DB 查询，20s 足够；蒸馏/上传等长任务由各调用方覆盖。 */
+const DEFAULT_TIMEOUT_MS = 20000
 
 function handleAdminUnauthorized() {
   useAdminStore.getState().clearSession()
@@ -26,20 +31,54 @@ function handleAdminUnauthorized() {
   }
 }
 
+/** 从后端返回体中提取可读的错误信息，兼容多种 error 字段写法。 */
+function extractErrorMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") return fallback
+  const p = payload as Record<string, unknown>
+  if (typeof p.error === "string") return p.error
+  if (typeof p.message === "string") return p.message
+  if (p.error && typeof p.error === "object") {
+    const inner = (p.error as Record<string, unknown>).message
+    if (typeof inner === "string") return inner
+  }
+  return fallback
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { auth = true, headers, ...init } = options
+  const { auth = true, headers, timeoutMs = DEFAULT_TIMEOUT_MS, ...init } = options
   const token = auth
     ? useAdminStore.getState().token || getStoredAdminToken()
     : null
 
-  const response = await fetch(path, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(headers ?? {}),
-    },
-  })
+  const controller = timeoutMs > 0 ? new AbortController() : null
+  const timer = controller
+    ? window.setTimeout(() => controller.abort(), timeoutMs)
+    : null
+
+  let response: Response
+  try {
+    response = await fetch(path, {
+      ...init,
+      signal: controller ? controller.signal : init.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(headers ?? {}),
+      },
+    })
+  } catch (err) {
+    // 网络错误（断网/DNS/CORS）或超时（abort）——统一归一化为 AdminApiError，
+    // 否则 fetch 抛出的 TypeError 会绕过调用方的 instanceof 判断，错误信息被吞。
+    if (timer) window.clearTimeout(timer)
+    const aborted = err instanceof DOMException && err.name === "AbortError"
+    throw new AdminApiError(
+      aborted ? "请求超时，请检查网络后重试" : "网络连接失败，请检查网络后重试",
+      0,
+      { cause: String(err) }
+    )
+  } finally {
+    if (timer) window.clearTimeout(timer)
+  }
 
   const payload = await response.json().catch(() => null)
 
@@ -48,7 +87,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       handleAdminUnauthorized()
     }
     throw new AdminApiError(
-      typeof payload?.error === "string" ? payload.error : `Request failed: ${response.status}`,
+      extractErrorMessage(payload, `Request failed: ${response.status}`),
       response.status,
       payload
     )
@@ -126,25 +165,36 @@ export function getActivationCodesExportUrl(params: { status?: string; batchId?:
 
 export async function downloadActivationCodesExport(params: { status?: string; batchId?: string }) {
   const token = useAdminStore.getState().token || getStoredAdminToken()
-  const response = await fetch(getActivationCodesExportUrl(params), {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  })
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
+
+  let response: Response
+  try {
+    response = await fetch(getActivationCodesExportUrl(params), {
+      signal: controller.signal,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+  } catch (err) {
+    window.clearTimeout(timer)
+    const aborted = err instanceof DOMException && err.name === "AbortError"
+    throw new AdminApiError(
+      aborted ? "导出超时，请重试" : "网络连接失败，请检查网络后重试",
+      0,
+      { cause: String(err) }
+    )
+  } finally {
+    window.clearTimeout(timer)
+  }
 
   if (!response.ok) {
-    let payload: { error?: string } | null = null
-
-    try {
-      payload = await response.json()
-    } catch {
-      payload = null
-    }
+    const payload = await response.json().catch(() => null)
 
     if (response.status === 401) {
       handleAdminUnauthorized()
     }
 
     throw new AdminApiError(
-      payload?.error ?? `Request failed: ${response.status}`,
+      extractErrorMessage(payload, `Request failed: ${response.status}`),
       response.status,
       payload
     )

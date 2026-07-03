@@ -30,6 +30,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { toast } from "sonner"
 import { useAdminStore } from "@/lib/admin-store"
 
 const navItems = [
@@ -51,6 +52,7 @@ export function AdminSidebar() {
 
   function handleLogout() {
     clearSession()
+    toast.success("已退出登录")
     router.replace("/admin/login")
   }
 

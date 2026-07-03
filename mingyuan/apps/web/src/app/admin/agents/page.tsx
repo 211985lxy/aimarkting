@@ -191,7 +191,7 @@ export default function AdminAgentsPage() {
                   <StatusBadge status={trace.status} />
                 </div>
                 <p className="mt-2 line-clamp-2 text-xs text-slate-500">{trace.inputSummary || "无输入摘要"}</p>
-                <p className="mt-2 text-[11px] text-slate-600">{formatDuration(trace.durationMs)} · {new Date(trace.createdAt).toLocaleString()}</p>
+                <p className="mt-2 text-[11px] text-slate-600">{formatDuration(trace.durationMs)} · {new Date(trace.createdAt).toLocaleString("zh-CN")}</p>
               </button>
             ))}
             {!traces.length ? <p className="rounded-lg border border-white/10 p-4 text-sm text-slate-500">{loading ? "加载中..." : "暂无执行记录"}</p> : null}

@@ -7,6 +7,7 @@ import {
   Check,
   Pencil,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { useBrandingControls } from "@/components/providers/branding-provider"
 import { Button } from "@/components/ui/button"
@@ -55,6 +56,7 @@ export default function AdminSettingsPage() {
     } catch (error) {
       console.error(error)
       setGrouped({})
+      toast.error(error instanceof Error ? error.message : "设置加载失败，请重试")
     } finally {
       setLoading(false)
     }
@@ -178,8 +180,11 @@ function SettingRow({
       await updateAdminSetting(setting.key, value)
       onUpdated(setting.key, value)
       setEditing(false)
+      toast.success("设置已保存")
     } catch (err) {
-      setError(err instanceof AdminApiError ? err.message : "保存失败")
+      const msg = err instanceof AdminApiError ? err.message : "保存失败"
+      setError(msg)
+      toast.error(msg)
     } finally {
       setSaving(false)
     }
@@ -192,9 +197,12 @@ function SettingRow({
     updateAdminSetting(setting.key, newVal)
       .then(() => {
         onUpdated(setting.key, newVal)
+        toast.success("已切换")
       })
       .catch((err) => {
-        setError(err instanceof AdminApiError ? err.message : "切换失败")
+        const msg = err instanceof AdminApiError ? err.message : "切换失败"
+        setError(msg)
+        toast.error(msg)
         setValue(setting.value)
       })
       .finally(() => setSaving(false))

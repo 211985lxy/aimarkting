@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Circle,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,6 +78,7 @@ export default function AdminActivationCodesPage() {
       setCodes([]);
       setTotal(0);
       setBatches([]);
+      toast.error(error instanceof Error ? error.message : "激活码列表加载失败，请重试");
     } finally {
       setLoading(false);
     }
@@ -89,6 +91,7 @@ export default function AdminActivationCodesPage() {
     } catch (error) {
       console.error(error);
       setStats(null);
+      toast.error(error instanceof Error ? error.message : "激活码统计加载失败");
     }
   }, []);
 
@@ -118,8 +121,10 @@ export default function AdminActivationCodesPage() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      toast.success("导出成功");
     } catch (error) {
       console.error(error);
+      toast.error(error instanceof Error ? error.message : "导出失败，请重试");
     }
   }
 
@@ -289,11 +294,11 @@ export default function AdminActivationCodesPage() {
                       </td>
                       <td className="p-3 text-muted-foreground">
                         {code.usedAt
-                          ? new Date(code.usedAt).toLocaleString()
+                          ? new Date(code.usedAt).toLocaleString("zh-CN")
                           : "-"}
                       </td>
                       <td className="p-3 text-muted-foreground">
-                        {new Date(code.createdAt).toLocaleDateString()}
+                        {new Date(code.createdAt).toLocaleDateString("zh-CN")}
                       </td>
                     </tr>
                   ))
@@ -393,11 +398,12 @@ function GenerateCodesForm({ onSuccess }: { onSuccess: () => void }) {
     try {
       const res = await generateActivationCodes(qty, duration, batchNote || undefined);
       setResult({ count: res.data.count, durationDays: res.data.durationDays });
+      toast.success(`已生成 ${res.data.count} 个激活码`);
       setTimeout(() => onSuccess(), 1500);
     } catch (err) {
-      setError(
-        err instanceof AdminApiError ? err.message : "生成失败",
-      );
+      const msg = err instanceof AdminApiError ? err.message : "生成失败，请重试";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

@@ -84,8 +84,8 @@ export default function AdminUserDetailPage() {
           <CardContent className="space-y-3">
             <InfoRow label="邮箱" value={user.email} />
             <InfoRow label="套餐" value={user.plan} />
-            <InfoRow label="注册时间" value={new Date(user.createdAt).toLocaleString()} />
-            <InfoRow label="更新时间" value={new Date(user.updatedAt).toLocaleString()} />
+            <InfoRow label="注册时间" value={new Date(user.createdAt).toLocaleString("zh-CN")} />
+            <InfoRow label="更新时间" value={new Date(user.updatedAt).toLocaleString("zh-CN")} />
           </CardContent>
         </Card>
 
@@ -153,11 +153,11 @@ export default function AdminUserDetailPage() {
                       <td className="p-3 text-muted-foreground">{task.videoType}</td>
                       <td className="p-3">{task.avatarName}</td>
                       <td className="p-3 text-muted-foreground">
-                        {new Date(task.createdAt).toLocaleDateString()}
+                        {new Date(task.createdAt).toLocaleDateString("zh-CN")}
                       </td>
                       <td className="p-3 text-muted-foreground">
                         {task.completedAt
-                          ? new Date(task.completedAt).toLocaleDateString()
+                          ? new Date(task.completedAt).toLocaleDateString("zh-CN")
                           : "-"}
                       </td>
                     </tr>
@@ -191,7 +191,7 @@ export default function AdminUserDetailPage() {
                         {avatar.status}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        {new Date(avatar.createdAt).toLocaleDateString()}
+                        {new Date(avatar.createdAt).toLocaleDateString("zh-CN")}
                       </span>
                     </div>
                   </div>

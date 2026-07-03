@@ -9,7 +9,10 @@ import {
   FileText,
   ArrowRight,
   TrendingUp,
+  RotateCw,
+  AlertTriangle,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,65 +30,100 @@ interface DashboardData {
   }
 }
 
-export default function AdminDashboardPage() {
-  const [dashboard, setDashboard] = React.useState<DashboardData | null>(null)
-  const [userStats, setUserStats] = React.useState<UserStats | null>(null)
-  const [codeStats, setCodeStats] = React.useState<CodeStats | null>(null)
-  const [loading, setLoading] = React.useState(true)
+type LoadState<T> = { status: "loading"; data: null } | { status: "error"; data: null } | { status: "ok"; data: T }
 
-  React.useEffect(() => {
+export default function AdminDashboardPage() {
+  const [dashboard, setDashboard] = React.useState<LoadState<DashboardData>>({ status: "loading", data: null })
+  const [userStats, setUserStats] = React.useState<LoadState<UserStats>>({ status: "loading", data: null })
+  const [codeStats, setCodeStats] = React.useState<LoadState<CodeStats>>({ status: "loading", data: null })
+
+  const loadAll = React.useCallback(() => {
     const token = getStoredAdminToken()
 
-    Promise.all([
-      fetch("/api/admin/dashboard", {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+    setDashboard({ status: "loading", data: null })
+    setCodeStats({ status: "loading", data: null })
+    setUserStats({ status: "loading", data: null })
+
+    fetch("/api/admin/dashboard", {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`仪表盘数据加载失败 (${r.status})`))))
+      .then((r) => setDashboard({ status: "ok", data: r?.data ?? null }))
+      .catch((err) => {
+        setDashboard({ status: "error", data: null })
+        toast.error(err instanceof Error ? err.message : "仪表盘数据加载失败")
       })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((r) => setDashboard(r?.data ?? null))
-        .catch(() => null),
-      getAdminUserStats()
-        .then((r) => setUserStats(r.data))
-        .catch(() => null),
-      getActivationCodeStats()
-        .then((r) => setCodeStats(r.data))
-        .catch(() => null),
-    ]).finally(() => setLoading(false))
+
+    getAdminUserStats()
+      .then((r) => setUserStats({ status: "ok", data: r.data }))
+      .catch((err) => {
+        setUserStats({ status: "error", data: null })
+        toast.error(err instanceof Error ? err.message : "用户统计加载失败")
+      })
+
+    getActivationCodeStats()
+      .then((r) => setCodeStats({ status: "ok", data: r.data }))
+      .catch((err) => {
+        setCodeStats({ status: "error", data: null })
+        toast.error(err instanceof Error ? err.message : "激活码统计加载失败")
+      })
   }, [])
+
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadAll()
+  }, [loadAll])
+
+  const anyError = dashboard.status === "error" || codeStats.status === "error" || userStats.status === "error"
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">仪表盘</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">仪表盘</h1>
+        <Button variant="outline" size="sm" onClick={loadAll}>
+          <RotateCw className="mr-1.5 h-4 w-4" />
+          刷新
+        </Button>
+      </div>
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="用户总数"
-          value={dashboard?.totalUsers}
+          state={dashboard.status === "ok" ? { status: "ok", value: dashboard.data?.totalUsers } : dashboard.status === "error" ? { status: "error" } : { status: "loading" }}
           icon={<Users className="h-5 w-5 text-primary" />}
-          loading={loading}
         />
         <MetricCard
           title="今日视频"
-          value={dashboard?.videosToday}
+          state={dashboard.status === "ok" ? { status: "ok", value: dashboard.data?.videosToday } : dashboard.status === "error" ? { status: "error" } : { status: "loading" }}
           icon={<Video className="h-5 w-5 text-primary" />}
-          loading={loading}
         />
         <MetricCard
           title="活跃模板"
-          value={dashboard?.activeTemplates}
+          state={dashboard.status === "ok" ? { status: "ok", value: dashboard.data?.activeTemplates } : dashboard.status === "error" ? { status: "error" } : { status: "loading" }}
           icon={<FileText className="h-5 w-5 text-primary" />}
-          loading={loading}
         />
         <MetricCard
           title="激活码"
-          value={codeStats?.total}
-          subtitle={codeStats ? `${codeStats.unused} 未使用` : undefined}
+          state={
+            codeStats.status === "ok"
+              ? { status: "ok", value: codeStats.data?.total, subtitle: codeStats.data ? `${codeStats.data.unused} 未使用` : undefined }
+              : codeStats.status === "error"
+              ? { status: "error" }
+              : { status: "loading" }
+          }
           icon={<KeyRound className="h-5 w-5 text-primary" />}
-          loading={loading}
         />
       </div>
+
+      {anyError ? (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>部分数据加载失败，请点击右上角「刷新」重试。</span>
+        </div>
+      ) : null}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -100,27 +138,24 @@ export default function AdminDashboardPage() {
             </Link>
           </CardHeader>
           <CardContent>
-            {loading || !userStats ? (
-              <div className="space-y-3">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-              </div>
-            ) : (
+            {userStats.status === "ok" ? (
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">本周新增</span>
                   <span className="font-medium flex items-center gap-1">
                     <TrendingUp className="h-3 w-3 text-green-600" />
-                    {userStats.newThisWeek}
+                    {userStats.data?.newThisWeek ?? 0}
                   </span>
                 </div>
-                {userStats.byPlan.map((p) => (
+                {userStats.data?.byPlan.map((p) => (
                   <div key={p.plan} className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground capitalize">{{ free: "免费", basic: "基础", pro: "专业" }[p.plan] || p.plan} 套餐</span>
                     <span className="font-medium">{p.count}</span>
                   </div>
                 ))}
               </div>
+            ) : (
+              <SummarySkeleton failed={userStats.status === "error"} />
             )}
           </CardContent>
         </Card>
@@ -136,30 +171,27 @@ export default function AdminDashboardPage() {
             </Link>
           </CardHeader>
           <CardContent>
-            {loading || !codeStats ? (
-              <div className="space-y-3">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-              </div>
-            ) : (
+            {codeStats.status === "ok" ? (
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">总码数</span>
-                  <span className="font-medium">{codeStats.total}</span>
+                  <span className="font-medium">{codeStats.data?.total ?? 0}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">未使用</span>
-                  <span className="font-medium">{codeStats.unused}</span>
+                  <span className="font-medium">{codeStats.data?.unused ?? 0}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">已使用</span>
-                  <span className="font-medium">{codeStats.used}</span>
+                  <span className="font-medium">{codeStats.data?.used ?? 0}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">使用率</span>
-                  <span className="font-medium">{codeStats.usageRate}%</span>
+                  <span className="font-medium">{codeStats.data?.usageRate ?? 0}%</span>
                 </div>
               </div>
+            ) : (
+              <SummarySkeleton failed={codeStats.status === "error"} />
             )}
           </CardContent>
         </Card>
@@ -170,28 +202,25 @@ export default function AdminDashboardPage() {
             <CardTitle className="text-base">系统状态</CardTitle>
           </CardHeader>
           <CardContent>
-            {loading || !dashboard ? (
-              <div className="space-y-3">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-              </div>
-            ) : (
+            {dashboard.status === "ok" && dashboard.data ? (
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">热榜抓取 (24h)</span>
                   <span className="font-medium text-green-600">
-                    {dashboard.hotListHealth.successLast24h} 成功
+                    {dashboard.data.hotListHealth.successLast24h} 成功
                   </span>
                 </div>
-                {dashboard.hotListHealth.failedLast24h > 0 && (
+                {dashboard.data.hotListHealth.failedLast24h > 0 && (
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">失败抓取 (24h)</span>
                     <span className="font-medium text-red-600">
-                      {dashboard.hotListHealth.failedLast24h}
+                      {dashboard.data.hotListHealth.failedLast24h}
                     </span>
                   </div>
                 )}
               </div>
+            ) : (
+              <SummarySkeleton failed={dashboard.status === "error"} />
             )}
           </CardContent>
         </Card>
@@ -227,18 +256,35 @@ export default function AdminDashboardPage() {
   )
 }
 
+function SummarySkeleton({ failed }: { failed: boolean }) {
+  if (failed) {
+    return (
+      <p className="py-2 text-sm text-muted-foreground">
+        加载失败，请刷新重试。
+      </p>
+    )
+  }
+  return (
+    <div className="space-y-3">
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-3/4" />
+    </div>
+  )
+}
+
+type MetricState =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ok"; value: number | undefined; subtitle?: string }
+
 function MetricCard({
   title,
-  value,
-  subtitle,
+  state,
   icon,
-  loading,
 }: {
   title: string
-  value: number | undefined
-  subtitle?: string
+  state: MetricState
   icon: React.ReactNode
-  loading: boolean
 }) {
   return (
     <Card>
@@ -248,14 +294,14 @@ function MetricCard({
         </div>
         <div>
           <p className="text-xs text-muted-foreground">{title}</p>
-          {loading ? (
-            <Skeleton className="h-7 w-12 mt-1" />
+          {state.status === "loading" ? (
+            <Skeleton className="mt-1 h-7 w-12" />
+          ) : state.status === "error" ? (
+            <p className="mt-1 text-sm font-medium text-muted-foreground">加载失败</p>
           ) : (
             <>
-              <p className="text-2xl font-bold">{value?.toLocaleString() ?? 0}</p>
-              {subtitle && (
-                <p className="text-xs text-muted-foreground">{subtitle}</p>
-              )}
+              <p className="text-2xl font-bold">{state.value?.toLocaleString() ?? 0}</p>
+              {state.subtitle ? <p className="text-xs text-muted-foreground">{state.subtitle}</p> : null}
             </>
           )}
         </div>
