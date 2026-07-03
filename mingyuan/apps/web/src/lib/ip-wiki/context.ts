@@ -21,7 +21,7 @@ export interface IpWikiBlockInput {
 }
 
 /** 仅取与下游内容生产最相关的核心页，避免 index/log 等导航页污染 prompt */
-const BLOCK_PAGE_TYPES = IP_WIKI_CORE_PAGE_TYPES
+const BLOCK_PAGE_TYPES = [...IP_WIKI_CORE_PAGE_TYPES, "viral_methodology" as IpWikiPageType]
 
 const MAX_PAGES_IN_BLOCK = 6
 const MAX_CONTENT_CHARS = 1200
