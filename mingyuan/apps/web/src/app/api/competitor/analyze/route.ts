@@ -5,11 +5,15 @@ import { parseUrl } from '@/lib/tikhub/url-parser'
 import { runCompetitorAnalysisPipeline } from '@/lib/competitor-analysis/pipeline'
 import { getCompetitorPlatformGate } from '@/lib/competitor-analysis/platform-scope'
 import { logger } from '@/lib/logger'
+import { enforceDailyBetaLimit } from '@/lib/internal-beta-limits'
 
 // Pipeline can take up to 5 minutes (scrape + comments + AI)
 export const maxDuration = 300
 
 export const POST = withUserAuth(async (request, { user }) => {
+  const quotaResponse = await enforceDailyBetaLimit(user.id, 'competitor_analysis')
+  if (quotaResponse) return quotaResponse
+
   let body: { url?: unknown }
   try {
     body = await request.json()

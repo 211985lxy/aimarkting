@@ -6,8 +6,11 @@ import { buildIpCopywritingMethodologyBlock } from "@/lib/ip-copywriting-methodo
 import { buildBusinessDiagnosisMethodologyBlock } from "@/lib/business-diagnosis-methodology"
 import { buildAimKnowledgeContext, fireKnowledgeEmbedding } from "@/lib/aim-knowledge-context"
 import {
+  resolveAimRuntimeTask,
   resolveKnowledgeStrategy,
+  shouldUseKnowledgeContextForTask,
   type ResolvedKnowledgeStrategy,
+  type AimRuntimeTask,
 } from "@/lib/aim-knowledge-strategy"
 import { compressAimMessages } from "@/lib/aim-context-compressor"
 import { buildIpWikiBlock } from "@/lib/ip-wiki/context"
@@ -17,6 +20,14 @@ import {
   buildViralStructureBlock,
   parseMultiFormatResponse,
 } from "./aim-generator"
+import {
+  addAimTraceStep,
+  finishAimTrace,
+  runAimTraceStep,
+  summarizeText,
+  type AimTraceRecorder,
+} from "@/lib/aim-observability"
+import { buildScenarioPromptBlock, type ContentScenario } from "@/lib/content-scenario-config"
 
 // ─── 类型定义 ──────────────────────────────────────────────
 
@@ -37,6 +48,7 @@ export interface AimChatParams {
   businessDiagnosisBlock: string
   /** IP 定位维基（已编译定位底盘），无 projectId 或无维基页时为空串 */
   ipWikiBlock: string
+  trace?: AimTraceRecorder
 }
 
 export interface AimChatResponse {
@@ -56,6 +68,7 @@ export interface AimGenerateContext {
   hotTopic?: string
   polishInstruction?: string
   videoCopyExtractionId?: string
+  runtimeTask?: AimRuntimeTask
 
   // 共享数据上下文
   knowledgeBlock: string
@@ -68,6 +81,9 @@ export interface AimGenerateContext {
   retrievedSource: string
   /** 本次实际生效的知识调用策略（解析后回传，供 UI 反馈） */
   knowledgeStrategy: ResolvedKnowledgeStrategy
+  /** 内容场景模式（由前端或路由层传入，驱动提示块和知识策略差异化） */
+  contentScenario?: ContentScenario
+  trace?: AimTraceRecorder
 }
 
 export interface AimGenerateResponse {
@@ -92,6 +108,21 @@ export interface AimAgentHandler {
   streamChat(params: AimChatParams): AsyncIterable<string>
   generate(context: AimGenerateContext): Promise<AimGenerateResponse>
 }
+
+export const BENCHMARK_REWRITE_GUARDRAIL = [
+  "对标文案只能借选题、结构节奏和情绪推进，不能贴着原句改。",
+  "最终稿必须至少 30% 可感知重写：开头、案例、过渡句、行动引导至少两类要重写成当前 IP 的说法。",
+  "除专有名词和固定产品名外，不要连续沿用原文 12 个字以上。",
+].join("\n")
+
+export const PUBLISH_PACKAGE_CHAT_RULE = [
+  "如果用户在聊天框里要求发布文案、发布话题、发布标题、发布包、标签或话题标签，直接在当前聊天回复里给到，不新增卡片、不要求用户跳页面。",
+  "优先基于最近一版成稿生成发布信息；如果上下文里有对标标题、对标原文、爆款拆解或结构化拆解，要先给出对标发布信息，并让发布标题、发布文案和话题风格与对标基本一致，但不要照抄原标题、原句或原话题组合。",
+  "对标发布信息必须包含：对标标题、对标话题/标签风格；没有明确内容时写未提供/待补充。",
+  "发布话题必须至少包含 1 个账号名称、品牌名称、IP 名或项目名相关的话题；如果上下文没有明确名称，用当前 IP/公司/项目信息推断，仍无法判断时写 #品牌名待补充。",
+  "固定输出结构：## 对标发布信息、## 我的发布标题、## 我的发布文案、## 发布话题、## 发布前提醒。",
+  "对标发布信息里没有明确内容时写未提供/待补充，不要编造对标账号、对标标题或真实平台数据。",
+].join("\n")
 
 // ─── 格式指令常量 ──────────────────────────────────────────
 
@@ -286,6 +317,10 @@ ${params.ipWikiBlock ? `\n${params.ipWikiBlock}` : ""}
 4. 绝对不要说 AI 味的官腔、客套话（如"很高兴能与您碰撞"、"这是一个非常好的切入点"等）。
 5. 先保住人的位置、代价和手迹，再清理 AI 腔、宣传腔、整齐排比和万能结尾。
 6. 如果用户确实需要先做定位或诊断，只给一句简短建议引导去定位策划官或商业诊断官，不在内容生产官里追问。
+7. 如果涉及对标文案改写，必须遵守：
+${BENCHMARK_REWRITE_GUARDRAIL}
+8. 如果用户要求把成稿整理成发布文案/发布话题/发布包，必须遵守：
+${PUBLISH_PACKAGE_CHAT_RULE}
 
 请直接根据上文与用户的历史对话，产出下一轮内容。`
   }
@@ -300,16 +335,22 @@ ${params.ipWikiBlock ? `\n${params.ipWikiBlock}` : ""}
 
   async generate(context: AimGenerateContext): Promise<AimGenerateResponse> {
     const agentPrompt = `你是一个企业营销内容专家。根据用户提供的信息，结合企业知识库，生成高质量的营销内容。`
-    
+
     const formatBlocks = context.targetFormats
       .map((format) => FORMAT_INSTRUCTIONS[format])
       .join("\n\n---\n\n")
 
-    const systemPrompt = buildProducerSystemPrompt(agentPrompt, formatBlocks, context)
+    const scenarioBlock = buildScenarioPromptBlock(context.contentScenario)
+    const systemPrompt = buildProducerSystemPrompt(agentPrompt, formatBlocks, context) + scenarioBlock
     const userPrompt = buildUserPrompt(context, formatBlocks)
 
-    const completion = await executeGenerateLLM(this.agentId, systemPrompt, userPrompt)
-    const parsed = parseMultiFormatResponse(completion.content, context.targetFormats)
+    const { completion, parsed } = await executeGenerateLLMWithBenchmarkRetry(
+      this.agentId,
+      systemPrompt,
+      userPrompt,
+      context,
+      context.targetFormats,
+    )
 
     const record = await saveAimGenerationRecord(context, completion, parsed)
 
@@ -359,6 +400,10 @@ C. 选项内容
 10. 成稿前先保住人的位置、代价和手迹，再清理 AI 腔、宣传腔、整齐排比和万能结尾。
 11. 输出最终正文时，正文最后一句写完就停止，不要追加任何拆分方向、私域话术、平台改写版本、总结点评或"你看是否符合"这类确认尾句。
 12. 不暴露外部参考来源细节。
+13. 如果涉及对标文案改写，必须遵守：
+${BENCHMARK_REWRITE_GUARDRAIL}
+14. 如果用户要求把成稿整理成发布文案/发布话题/发布包，必须遵守：
+${PUBLISH_PACKAGE_CHAT_RULE}
 
 请直接根据上文与用户的历史对话，产出下一轮内容。`
   }
@@ -387,6 +432,7 @@ C. 选项内容
 - 文案框架必须包含：核心观点、目标读者、情绪入口、开篇进入方式、正文推进结构、可迁移的爆款结构。
 - 核心观点必须来自原视频/原选题；IP特色、知识库和产品信息只能融入案例、身份表达和承接动作，不能另起主题。
 - 开篇进入方式要重新创作，吸收原文开头的有效机制，但不要照搬原句。
+- ${BENCHMARK_REWRITE_GUARDRAIL}
 - 如果上下文里用户已经确认文案框架，再输出一篇完整深度长文正文，禁止输出以下任何内容：
   ✗ 观点确认卡
   ✗ 热点判断
@@ -416,6 +462,9 @@ ${context.ipWikiBlock ? `${context.ipWikiBlock}\n` : ""}
 3. 保持真实口语感、情绪共鸣与深刻洞察，杜绝公文宣传腔和万金油排比句。
 4. 未确认框架时先输出文案框架；已确认框架后，只输出一篇完整深度长文正文，不加任何附加结构标记，正文结束立刻停止。
 
+对标改写硬规则：
+${BENCHMARK_REWRITE_GUARDRAIL}
+
 请严格按照格式输出。不要添加任何附加的大纲、平台栏目、私域话术、拆分方向、解释、点评或确认尾句。`
 
     const workflowContext = buildWorkflowContext(context)
@@ -429,20 +478,15 @@ ${workflowContext}
 
 请根据上下文判断：如果还没有明确文案框架，先输出文案框架；如果已经确认框架，直接输出正文。正文最后一句写完就停止，不要包含解释性文字、拆分方向、私域话术或确认尾句。`
 
-    const completion = await executeGenerateLLM(this.agentId, systemPrompt, userPrompt)
+    const { completion, parsed } = await executeGenerateLLMWithBenchmarkRetry(
+      this.agentId,
+      systemPrompt,
+      userPrompt,
+      context,
+      safeTargets,
+    )
 
-    const rawText = completion.content.trim()
-
-    const parsed: Record<ContentFormat, string | undefined> = {
-      video_script: undefined,
-      wechat_article: undefined,
-      moments_post: undefined,
-      community_message: undefined,
-      shooting_brief: undefined,
-      koubo_script: undefined,
-      xiaohongshu_post: undefined,
-      raw_copy: safeTargets.includes("raw_copy") ? rawText : undefined,
-    }
+    const rawText = parsed.raw_copy || completion.content.trim()
 
     const record = await saveAimGenerationRecord(context, completion, parsed)
 
@@ -620,13 +664,15 @@ A. 选题策划路由（反复确认选题）
 4. 下一轮确认问题：只问一个最关键问题，帮助继续收窄选题。
 
 B. 完整 IP 策划路由
-1. 关键数据来源与依据：先列出本次实际使用的依据，至少区分用户输入、企业知识库/定位素材、对标账号或爆款样本、行业/平台数据；没有调用到的数据必须标明"未提供/待补充"，不得编造来源。
-2. 数据分析、数据来源、数据精选：只保留能影响定位判断的数据，说明每条数据支持了哪个结论；对标账号智慧可以做综合归纳，但必须标为"对标综合判断"，不能伪装成精确统计。
-3. IP定位主张：一句话的差异化定位口号（Slogan）及核心目标受众画像。
-4. 人设特点的真正挖掘：从经历、能力证据、表达气质、价值观、反差点、信任来源里提炼人设，不只堆"专家/老师/陪伴者"标签。
-5. 核心内容体系规划：梳理 3 大核心内容方向/选题专栏，并设计爆款选题示范。
-6. 初始成交路径设计：用户从刷到短视频、进粉丝群，到最终加私域成交的完整路线指引。
-7. 内容策略底盘：话题分布建议（含建议比例）、内容形式占比、钩子模式、发布频率与最佳时段、爆款公式。
+1. 关键数据来源与依据：先列出本次实际使用的依据，至少区分用户输入、企业知识库/定位素材、已分析对标账号/爆款样本、行业/平台数据；没有调用到的数据必须标明"未提供/待补充"，不得编造来源。
+2. 账号分析参考来源：必须把【市场洞察爆款作品上下文】或【对标账号监控数据】作为账号分析参考来源；至少归纳对标账号的内容母题、爆款钩子、受众假设、表达风格、可迁移点和不可迁移点。没有这类数据时写"已分析对标账号：未提供/待补充"。
+3. 数据分析、数据来源、数据精选：只保留能影响定位判断的数据，说明每条数据支持了哪个结论；对标账号智慧可以做综合归纳，但必须标为"对标综合判断"，不能伪装成精确统计。
+4. IP定位主张：一句话的差异化定位口号（Slogan）及核心目标受众画像。
+5. 人设特点的真正挖掘：从经历、能力证据、表达气质、价值观、反差点、信任来源里提炼人设，不只堆"专家/老师/陪伴者"标签。
+6. 核心点位设计：必须包含定位点位、人设点位、内容点位、信任点位、成交点位、差异化点位；每个点位说明"为什么成立"和"后续内容怎么体现"。
+7. 核心内容体系规划：梳理 3 大核心内容方向/选题专栏，并设计爆款选题示范。
+8. 初始成交路径设计：用户从刷到短视频、进粉丝群，到最终加私域成交的完整路线指引。
+9. 内容策略底盘：话题分布建议（含建议比例）、内容形式占比、钩子模式、发布频率与最佳时段、爆款公式。
 
 C. 人设卖点梳理路由（采访/人设素材）
 1. 人设素材摘要：只提炼事实，不美化、不补编。
@@ -679,28 +725,52 @@ ${workflowContext}
   }
 }
 
-// ─── 5. 数据复盘官 (ContentReviewHandler) ────────────────────
+export function buildContentReviewChatPrompt(knowledgeBlock: string): string {
+  return `你是「发布质检官」，负责对准备发布的口播、短视频脚本、公众号正文、朋友圈文案做发布前自查。
+
+企业已有核心知识库（只作背景，不要抢走用户当前稿子的主题）：
+${knowledgeBlock}
+
+你的对话原则：
+1. 只做质检和最小修改建议，不要整篇重写，除非用户明确要求重写。
+2. 优先检查：开头吸引力、逻辑顺畅、AI味/套话、文笔表达、平台风险、转化承接、流量潜力。
+3. 输出必须包含：总体结论、必改问题、风险等级、流量潜力评分（0-100分）、最小修改建议、复检清单。
+4. 如果发现疑似违规、绝对化、诱导私信、夸大承诺或平台敏感表达，明确标出原句和替换建议。
+5. 如果用户没有提供完整文案，直接提醒用户粘贴稿子或选择最近生成稿，不要凭空质检。
+
+请直接根据上文与用户的历史对话，输出发布前质检建议。`
+}
+
+export function buildContentReviewGeneratePrompt(knowledgeBlock: string): string {
+  return `你是「发布质检官」，负责对准备发布的文案做发布前自查。
+
+企业已有核心知识库（只作背景，不要抢走用户当前稿子的主题）：
+${knowledgeBlock}
+
+质检报告输出结构要求：
+1. 总体结论：可发 / 改完可发 / 暂不建议发，并说明一句理由。
+2. 必改问题：列出最影响发布的 1-5 个问题，指出原句或段落。
+3. 平台风险：检查违规、限流、绝对化、夸大承诺、诱导私信、AI标注提醒等风险。
+4. 表达质量：检查开头吸引力、逻辑、去AI味、文笔，不做空泛夸奖。
+5. 流量潜力评分：给 0-100 分，只看停留钩子、评论争议、收藏价值、转粉/转化承接，不做播放量预测。
+6. 最小修改建议：只给局部替换和删改建议，不要整篇重写。
+7. 复检清单：用 3-5 条短句告诉用户改完后再看什么。
+
+【禁止输出】新的营销文案、完整重写稿、播放量预测、发布后数据复盘。
+如果用户没有提供完整文案，提示用户粘贴稿子或选择最近生成稿。
+请直接输出质检报告，不写套话、黑话和前言。`
+}
+
+// ─── 5. 发布质检官 (ContentReviewHandler) ────────────────────
 
 class ContentReviewHandler implements AimAgentHandler {
   agentId = "content_review" as const
 
-  /** 数据复盘官仅产出复盘报告 */
+  /** 发布质检官仅产出 raw_copy 质检报告 */
   private static readonly ALLOWED_GENERATE_FORMATS = new Set<ContentFormat>(["raw_copy"])
 
   private buildChatPrompt(params: AimChatParams): string {
-    return `你是一个内容复盘官，负责根据已发布内容、播放互动数据、评论反馈和转化情况，判断内容表现，并给出下一轮优化和复用方向。
-
-企业已有核心知识库（参考背景）：
-${params.knowledgeBlock}
-
-你的对话原则：
-1. 先判断内容表现：选题、开头、结构、表达、承接动作分别哪里有效或失效。
-2. 不泛泛鼓励，不输出空话，必须给出明确判断和下一步动作。
-3. 如果用户给了评论或私信，把它们提炼成新选题、复用角度或私域承接话术。
-4. 如果信息不足，直接按已给信息做保守复盘，并说明还缺哪一类数据。
-5. 输出优先包含：表现判断、原因、下一轮优化、可复用资产、可延展新选题。
-
-请直接根据上文与用户的历史对话，产出下一轮内容。`
+    return buildContentReviewChatPrompt(params.knowledgeBlock)
   }
 
   async chat(params: AimChatParams): Promise<AimChatResponse> {
@@ -712,28 +782,16 @@ ${params.knowledgeBlock}
   }
 
   async generate(context: AimGenerateContext): Promise<AimGenerateResponse> {
-    // ── 输出边界：只产出 raw_copy 复盘报告 ──
+    // ── 输出边界：只产出 raw_copy 质检报告 ──
     const safeTargets = context.targetFormats.filter((f) =>
       ContentReviewHandler.ALLOWED_GENERATE_FORMATS.has(f)
     )
     const effectiveFormats = safeTargets.length > 0 ? safeTargets : ["raw_copy" as ContentFormat]
 
-    const systemPrompt = `你是一个内容数据复盘官，负责结合已发布视频/文章的实际播放表现、互动指标或用户反馈，进行深度剖析，输出调优建议。
-
-企业已有核心知识库（参考背景）：
-${context.knowledgeBlock}
-
-复盘报告输出结构要求：
-1. 表现多维度研判：诊断此前的选题、开头钩子、内容结构是否达到预期，哪些起效、哪些失效。
-2. 核心失效原因深挖（例如：痛点不痛、AI味过浓、表达拖沓、未针对精准画像、行动引导脱节等）。
-3. 爆款选题/内容资产的二次复用与延展建议。
-4. 下一轮迭代调优的具体行动单：包括怎么改开头、保留什么表达，如何调整私域转化动作。
-
-【禁止输出】短视频脚本、朋友圈文案、社群文案、拍摄交接单、公众号文章等任何新的营销分发内容。
-请直接输出复盘建议，不写套话、黑话和前言，直接输出复盘报告。`
+    const systemPrompt = buildContentReviewGeneratePrompt(context.knowledgeBlock)
 
     const workflowContext = buildWorkflowContext(context)
-    const userPrompt = `用户输入的内容表现与相关数据反馈：
+    const userPrompt = `用户输入的待质检文案或质检要求：
 "${context.rawInput}"
 
 ${workflowContext ? `工作流上下文：
@@ -741,7 +799,7 @@ ${workflowContext}
 
 ` : ""}
 
-请生成这份详细的"内容数据复盘报告"。`
+请生成这份"发布前质检报告"。`
 
     const completion = await executeGenerateLLM(this.agentId, systemPrompt, userPrompt)
     const rawText = completion.content.trim()
@@ -907,17 +965,38 @@ async function buildAimChatRuntime(
   agentId: string,
   params: Omit<AimChatParams, "methodologyBlock" | "businessDiagnosisBlock" | "ipWikiBlock">
 ): Promise<{ handler: AimAgentHandler; params: AimChatParams }> {
-  // 上下文压缩（对长对话保留最近轮次，早轮压缩成摘要）
-  const compressed = compressAimMessages(agentId, params.messages)
+  const compressed = await runAimTraceStep(
+    params.trace,
+    "compress_messages",
+    "上下文压缩",
+    () => compressAimMessages(agentId, params.messages),
+    (result) => ({
+      summary: result.didCompress ? "已压缩长对话" : "无需压缩",
+      metadata: { messageCount: params.messages.length, didCompress: result.didCompress },
+    }),
+  )
   const enrichedKnowledgeBlock = compressed.didCompress
     ? `【对话摘要】\n${compressed.summary}\n\n${params.knowledgeBlock}`
     : params.knowledgeBlock
 
-  const [methodologyBlock, businessDiagnosisBlock, ipWikiBlock] = await Promise.all([
-    buildIpCopywritingMethodologyBlock(),
-    agentId === "business_system_diagnosis" ? buildBusinessDiagnosisMethodologyBlock() : Promise.resolve(""),
-    params.projectId ? buildIpWikiBlock({ projectId: params.projectId }) : Promise.resolve(""),
-  ])
+  const [methodologyBlock, businessDiagnosisBlock, ipWikiBlock] = await runAimTraceStep(
+    params.trace,
+    "build_runtime_context",
+    "方法论/IP Wiki 上下文",
+    () => Promise.all([
+      buildIpCopywritingMethodologyBlock(),
+      agentId === "business_system_diagnosis" ? buildBusinessDiagnosisMethodologyBlock() : Promise.resolve(""),
+      params.projectId ? buildIpWikiBlock({ projectId: params.projectId }) : Promise.resolve(""),
+    ]),
+    ([methodology, businessDiagnosis, ipWiki]) => ({
+      summary: "运行上下文已构建",
+      metadata: {
+        methodologyChars: methodology.length,
+        businessDiagnosisChars: businessDiagnosis.length,
+        ipWikiChars: ipWiki.length,
+      },
+    }),
+  )
 
   return {
     handler: getAgentHandler(agentId),
@@ -933,7 +1012,13 @@ async function buildAimChatRuntime(
 
 export async function buildAimChatResponse(agentId: string, params: Omit<AimChatParams, "methodologyBlock" | "businessDiagnosisBlock" | "ipWikiBlock">): Promise<AimChatResponse> {
   const runtime = await buildAimChatRuntime(agentId, params)
-  return runtime.handler.chat(runtime.params)
+  return runAimTraceStep(
+    params.trace,
+    "llm_chat",
+    "LLM 聊天生成",
+    () => runtime.handler.chat(runtime.params),
+    (result) => ({ outputSummary: summarizeText(result.content) }),
+  )
 }
 
 export async function* buildAimChatResponseStream(
@@ -951,7 +1036,8 @@ export async function buildAimGeneration(agentId: string, params: Omit<AimGenera
   const handler = getAgentHandler(agentId)
 
   // 1. 项目校验
-  if (params.projectId) {
+  await runAimTraceStep(params.trace, "project_check", "项目权限校验", async () => {
+    if (!params.projectId) return { checked: false }
     const project = await prisma.clientProject.findFirst({
       where: {
         id: params.projectId,
@@ -960,54 +1046,104 @@ export async function buildAimGeneration(agentId: string, params: Omit<AimGenera
       },
       select: { id: true },
     })
-    if (!project) {
-      throw new Error("客户项目不存在或已归档")
-    }
-  }
+    if (!project) throw new Error("客户项目不存在或已归档")
+    return { checked: true }
+  }, (result) => ({
+    summary: result.checked ? "项目有效" : "无项目模式",
+    metadata: result,
+  }))
+
+  const runtimeTask = await runAimTraceStep(
+    params.trace,
+    "resolve_runtime_task",
+    "任务类型识别",
+    () => params.runtimeTask ?? resolveAimRuntimeTask({
+      agentId,
+      input: params.rawInput,
+      taskType: params.taskType,
+      polishInstruction: params.polishInstruction,
+      targetFormats: params.targetFormats,
+    }),
+    (task) => ({ summary: task, metadata: { runtimeTask: task } }),
+  )
 
   // 2. 解析知识调用策略（决定本次调多少知识、侧重哪类）
-  const knowledgeStrategy = resolveKnowledgeStrategy({
-    topicType: params.topicType,
-    hotTopic: params.hotTopic,
-    videoCopyExtractionId: params.videoCopyExtractionId,
-    taskType: params.taskType,
-    polishInstruction: params.polishInstruction,
-  })
+  const knowledgeStrategy = await runAimTraceStep(
+    params.trace,
+    "resolve_knowledge_strategy",
+    "知识调用策略解析",
+    () => resolveKnowledgeStrategy({
+      runtimeTask,
+      topicType: params.topicType,
+      hotTopic: params.hotTopic,
+      videoCopyExtractionId: params.videoCopyExtractionId,
+      taskType: params.taskType,
+      polishInstruction: params.polishInstruction,
+      contentScenario: params.contentScenario,
+    }),
+    (strategy) => ({ summary: strategy, metadata: { strategy } }),
+  )
 
   // 3. 并行读取通用背景资产（统一知识上下文，按策略画像调用）
-  const [knowledgeCtx, viralStructureBlock, methodologyBlock, businessDiagnosisBlock, ipWikiBlock] = await Promise.all([
-    params.projectId
-      ? buildAimKnowledgeContext({
-          userId: params.userId,
-          projectId: params.projectId,
-          agentId,
-          query: params.rawInput,
-          topicTitle: params.topicTitle,
-          topicRationale: params.topicRationale,
-          strategy: knowledgeStrategy,
-        })
-      : Promise.resolve({
-          knowledgeBlock: "",
-          entries: [],
-          source: "raw" as const,
-        }),
-    buildViralStructureBlock(),
-    buildIpCopywritingMethodologyBlock(),
-    agentId === "business_system_diagnosis" ? buildBusinessDiagnosisMethodologyBlock() : Promise.resolve(""),
-    params.projectId ? buildIpWikiBlock({ projectId: params.projectId }) : Promise.resolve(""),
-  ])
+  const [knowledgeCtx, viralStructureBlock, methodologyBlock, businessDiagnosisBlock, ipWikiBlock] = await runAimTraceStep(
+    params.trace,
+    "load_generation_context",
+    "知识/结构/方法论读取",
+    () => Promise.all([
+      params.projectId && shouldUseKnowledgeContextForTask(runtimeTask)
+        ? buildAimKnowledgeContext({
+            userId: params.userId,
+            projectId: params.projectId,
+            agentId,
+            query: params.rawInput,
+            topicTitle: params.topicTitle,
+            topicRationale: params.topicRationale,
+            strategy: knowledgeStrategy,
+          })
+        : Promise.resolve({
+            knowledgeBlock: "",
+            entries: [],
+            source: "raw" as const,
+          }),
+      buildViralStructureBlock(),
+      buildIpCopywritingMethodologyBlock(),
+      agentId === "business_system_diagnosis" ? buildBusinessDiagnosisMethodologyBlock() : Promise.resolve(""),
+      params.projectId ? buildIpWikiBlock({ projectId: params.projectId }) : Promise.resolve(""),
+    ]),
+    ([knowledge, viralStructure, methodology, businessDiagnosis, ipWiki]) => ({
+      summary: `命中 ${knowledge.entries.length} 条知识`,
+      metadata: {
+        knowledgeEntries: knowledge.entries.length,
+        knowledgeSource: knowledge.source,
+        viralStructureChars: viralStructure.length,
+        methodologyChars: methodology.length,
+        businessDiagnosisChars: businessDiagnosis.length,
+        ipWikiChars: ipWiki.length,
+      },
+    }),
+  )
 
   // 4. 调用具体的智能体 Handler
   //    加入压缩摘要（如有必要，将用户原始输入视为消息列表）
   const generateMessages = [{ role: "user" as const, content: params.rawInput }]
-  const compressed = compressAimMessages(agentId, generateMessages)
+  const compressed = await runAimTraceStep(
+    params.trace,
+    "compress_generation_input",
+    "生成输入压缩",
+    () => compressAimMessages(agentId, generateMessages),
+    (result) => ({
+      summary: result.didCompress ? "已压缩输入" : "无需压缩",
+      metadata: { didCompress: result.didCompress },
+    }),
+  )
   const knowledgeWithContext = compressed.didCompress
     ? `【对话摘要】\n${compressed.summary}\n\n${knowledgeCtx.knowledgeBlock}`
     : knowledgeCtx.knowledgeBlock
 
-  const response = await handler.generate({
+  const response = await runAimTraceStep(params.trace, "agent_generate", "智能体生成并保存", () => handler.generate({
     ...params,
     agentId,
+    runtimeTask,
     knowledgeBlock: knowledgeWithContext,
     methodologyBlock,
     businessDiagnosisBlock,
@@ -1016,10 +1152,32 @@ export async function buildAimGeneration(agentId: string, params: Omit<AimGenera
     retrievedEntries: knowledgeCtx.entries,
     retrievedSource: knowledgeCtx.source,
     knowledgeStrategy,
-  })
+  }), (result) => ({
+    summary: `生成 ${result.results.length} 个交付物`,
+    outputSummary: summarizeText(result.results.map((item) => `${item.format}: ${item.content}`).join("\n")),
+    metadata: { resultId: result.id, formats: result.results.map((item) => item.format) },
+  }))
 
   // 5. 后续处理 (Fire-and-forget 向量写入)
+  await addAimTraceStep(params.trace, {
+    key: "fire_knowledge_embedding",
+    label: "知识向量补写",
+    status: "success",
+    summary: "已触发后台补写",
+    metadata: { entries: knowledgeCtx.entries.length },
+  })
   fireKnowledgeEmbedding(knowledgeCtx.entries, knowledgeCtx.source)
+
+  const saved = await prisma.aimGeneration.findUnique({
+    where: { id: response.id },
+    select: { model: true, totalTokens: true },
+  }).catch(() => null)
+  await finishAimTrace(params.trace, {
+    aimGenerationId: response.id,
+    model: saved?.model || null,
+    totalTokens: saved?.totalTokens || null,
+    outputSummary: summarizeText(response.results.map((item) => item.content).join("\n\n")),
+  })
 
   return { ...response, knowledgeStrategy }
 }
@@ -1090,7 +1248,84 @@ function buildWorkflowContext(context: AimGenerateContext): string {
     .join("\n\n")
 }
 
+export function extractBenchmarkOriginalCopy(rawInput: string) {
+  const marker = rawInput.match(/对标原文[：:]\s*/)
+  if (marker?.index == null) return ""
+  const rest = rawInput.slice(marker.index + marker[0].length).trim()
+  const nextSection = rest.search(/\n(?:已有拆解|结构化拆解|改写原则|创作原则|来源链接|字数硬规则|硬规则|===)[：:：]?/)
+  return (nextSection >= 0 ? rest.slice(0, nextSection) : rest).trim()
+}
+
+function normalizeCopyForCompare(text: string) {
+  return text.replace(/\s+/g, "").replace(/[，。！？、；：,.!?;:"“”‘’'（）()《》【】\[\]{}]/g, "")
+}
+
+export function benchmarkCopyReuseRatio(benchmark: string, output: string, size = 12) {
+  const source = normalizeCopyForCompare(benchmark)
+  const target = normalizeCopyForCompare(output)
+  if (source.length < size || target.length < size) return source && target && source.includes(target) ? 1 : 0
+
+  const sourceChunks = new Set<string>()
+  for (let index = 0; index <= source.length - size; index += 1) {
+    sourceChunks.add(source.slice(index, index + size))
+  }
+
+  let reused = 0
+  const total = target.length - size + 1
+  for (let index = 0; index <= target.length - size; index += 1) {
+    if (sourceChunks.has(target.slice(index, index + size))) reused += 1
+  }
+
+  return total > 0 ? reused / total : 0
+}
+
+export function isBenchmarkCopyTooSimilar(rawInput: string, output: string) {
+  const benchmark = extractBenchmarkOriginalCopy(rawInput)
+  const source = normalizeCopyForCompare(benchmark)
+  const target = normalizeCopyForCompare(output)
+  if (source.length < 30 || target.length < 30) return false
+  if (source === target || source.includes(target) || target.includes(source)) return true
+  return benchmarkCopyReuseRatio(benchmark, output) >= 0.35
+}
+
+async function executeGenerateLLMWithBenchmarkRetry(
+  agentId: string,
+  systemPrompt: string,
+  userPrompt: string,
+  context: AimGenerateContext,
+  targetFormats: ContentFormat[],
+) {
+  const completion = await executeGenerateLLM(agentId, systemPrompt, userPrompt)
+  const parsed = parseMultiFormatResponse(completion.content, targetFormats)
+  const copiedFormats = targetFormats.filter((format) => isBenchmarkCopyTooSimilar(context.rawInput, parsed[format] || ""))
+
+  if (copiedFormats.length === 0) return { completion, parsed }
+
+  const previousOutput = targetFormats
+    .map((format) => `===FORMAT:${format}===\n${parsed[format] || ""}`)
+    .join("\n\n")
+  const retryPrompt = `${userPrompt}
+
+【自动质检结果】
+上一版 ${copiedFormats.join("、")} 与对标原文过于相似，判定为"几乎没改"。
+请重写全部请求格式：保留原选题、结构节奏和目标字数，但必须换成当前 IP 的开头、案例、过渡句、句式和行动引导。
+除专有名词和固定产品名外，不要连续沿用原文 12 个字以上；不要只替换少量词。
+
+上一版输出：
+${previousOutput}`
+
+  const retryCompletion = await executeGenerateLLM(agentId, systemPrompt, retryPrompt)
+  return {
+    completion: retryCompletion,
+    parsed: parseMultiFormatResponse(retryCompletion.content, targetFormats),
+  }
+}
+
 function buildProducerSystemPrompt(agentPrompt: string, formatBlocks: string, context: AimGenerateContext): string {
+  const knowledgeUseRule = context.runtimeTask === "light_edit"
+    ? "7. 轻改任务只按用户原文、选区和修改要求做局部优化；不要主动扩写客户背景、产品卖点或知识库素材。"
+    : "7. 必须结合企业知识库中的产品卖点、客户痛点、老板经验和项目案例，让内容适合当下企业，而不是生成通用文案。"
+
   return `${agentPrompt}
 
 ${context.knowledgeBlock}
@@ -1105,7 +1340,7 @@ ${context.ipWikiBlock ? `${context.ipWikiBlock}\n` : ""}
 4. 如果用户提供公众号长文，优先提炼其中最适合短视频传播的一个核心观点，不要把整篇文章压缩成流水账。
 5. 开头必须单独优化：用冲突、反差、痛点、利益或好奇心打开，避免平铺直叙。
 6. 正文必须单独优化结构：按问题、判断、案例、行动或反差递进组织，让用户能听懂、能拍摄、能转化。
-7. 必须结合企业知识库中的产品卖点、客户痛点、老板经验和项目案例，让内容适合当下企业，而不是生成通用文案。
+${knowledgeUseRule}
 8. 如果上下文包含垂类行业热点，只能自然融合和业务相关的部分，禁止硬蹭热点。
 
 创作规则：
@@ -1119,23 +1354,32 @@ ${context.ipWikiBlock ? `${context.ipWikiBlock}\n` : ""}
 - 保留必要的口语、停顿、重复和语气词；不要为了显得高级主动加金句、宏大比喻或整齐三段式。
 - 文案生成必须直接交付成稿，不要反问用户、不要让用户补充资料、不要输出开放式问题。
 - 如果信息不足，基于企业知识库、用户输入和现有上下文做合理假设，并在文案里自然处理。
+- 成稿前做内部质检：是否遵守用户修改意图、是否保留原文有效表达、是否过度调用背景导致跑题、是否有明显 AI 套话；除非用户要求，不要输出质检报告。
+
+对标改写硬规则：
+${BENCHMARK_REWRITE_GUARDRAIL}
 
 请严格按照下方每种格式的要求，生成对应的内容。每种格式用 ===FORMAT:格式名=== 作为分隔标记。`
 }
 
 function buildUserPrompt(context: AimGenerateContext, formatBlocks: string): string {
   const workflowContext = buildWorkflowContext(context)
+  const contextInstruction = context.runtimeTask === "light_edit"
+    ? "请只根据用户原文、选区和修改要求做局部优化，不要主动结合企业知识库扩写。"
+    : "请根据以上内容，结合企业知识库中的相关信息，生成以下格式的营销内容："
+
   return `用户输入的原始内容：
 "${context.rawInput}"
 
 ${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
 
-请根据以上内容，结合企业知识库中的相关信息，生成以下格式的营销内容：
+${contextInstruction}
 
 选题锁定要求：
 - 如果用户输入里有对标标题、对标原文、爆款拆解或明确选题，必须先锁定其核心选题。
 - 企业知识库和IP特色只能作为案例、身份、表达口吻和承接方式融入，不允许把主题改写成知识库里另一个更熟悉的话题。
 - 成稿必须让用户一眼看出：这仍然是在讲原视频/原选题，只是换成了本IP的表达和承接。
+- ${BENCHMARK_REWRITE_GUARDRAIL}
 
 ${formatBlocks}
 

@@ -5,12 +5,15 @@ import {
   extractAimEvolutionSuggestions,
   normalizeEvolutionMessages,
 } from "@/lib/aim-chat-evolution"
+import { persistAimMemories } from "@/lib/aim-memory"
 
 export async function POST(request: NextRequest) {
   try {
     const user = await authenticateRequest(request)
     const body = await request.json()
     const projectId = typeof body.projectId === "string" ? body.projectId.trim() : ""
+    const agentId = typeof body.agentId === "string" ? body.agentId : ""
+    const shouldPersist = body.persist === true
     const messages = normalizeEvolutionMessages(body.messages)
 
     if (!projectId) {
@@ -32,6 +35,14 @@ export async function POST(request: NextRequest) {
       messages,
       maxSuggestions: 5,
     })
+
+    // 可选：把偏好建议沉淀为 AimMemory（kind=preference），不破坏现有返回
+    if (shouldPersist && agentId && suggestions.length > 0) {
+      await persistAimMemories(
+        suggestions.map((s) => ({ kind: "preference" as const, content: `${s.title}：${s.content}` })),
+        { userId: user.id, projectId, agentId },
+      ).catch(() => {})
+    }
 
     return NextResponse.json({ suggestions })
   } catch (error) {

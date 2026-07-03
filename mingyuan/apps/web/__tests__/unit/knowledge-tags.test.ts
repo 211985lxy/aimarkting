@@ -36,6 +36,15 @@ describe("knowledge tags", () => {
     })
   })
 
+  it("parses strategy role tags", () => {
+    expect(parseKnowledgeTags(["kb_scope:project", "asset_role:strategy"])).toMatchObject({
+      scope: "project",
+      assetRole: "strategy",
+      otherTags: [],
+      isCleaned: true,
+    })
+  })
+
   it("builds default tags for topic pool sources", () => {
     expect(buildDefaultKnowledgeTags("daily_inspiration")).toEqual([
       "kb_scope:project",

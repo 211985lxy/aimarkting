@@ -20,6 +20,7 @@ import {
 import { ShanjianError } from "@/lib/shanjian";
 import { acquireSlot } from "@/lib/shanjian-semaphore";
 import { submitToShanjian } from "@/lib/shanjian-submit";
+import { enforceDailyBetaLimit } from "@/lib/internal-beta-limits";
 import type { MaterialItem, PackRules, ProcessRules, SpeakerExtra } from "@/types/shanjian";
 import type { MaterialAssignment } from "@/types/api";
 import { Prisma } from "@/generated/prisma/client";
@@ -167,6 +168,9 @@ export const POST = withUserAuth(async (request, { user }) => {
     productionPlanId,
     ...rest
   } = body;
+
+  const videoLimitResponse = await enforceDailyBetaLimit(user.id, "video_task");
+  if (videoLimitResponse) return videoLimitResponse;
 
   // ─── Load production plan if provided ───────────────────
   let plan: ResolvedPlan | null = null;

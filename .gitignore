@@ -16,6 +16,11 @@ build/
 .env.production
 .env.development
 
+# AI news radar private source inputs
+feeds/follow.opml
+data/email-digest.json
+data/customer-*.json
+
 # Database
 *.db
 *.db-journal

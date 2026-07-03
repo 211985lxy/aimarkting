@@ -12,6 +12,8 @@ import {
   Settings,
   BookOpen,
   LogOut,
+  Bot,
+  Target,
 } from "lucide-react"
 import {
   Sidebar,
@@ -32,9 +34,11 @@ import { useAdminStore } from "@/lib/admin-store"
 
 const navItems = [
   { title: "仪表盘", titleEn: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  { title: "智能体管理", titleEn: "Agents", href: "/admin/agents", icon: Bot },
   { title: "用户管理", titleEn: "Users", href: "/admin/users", icon: Users },
   { title: "激活码", titleEn: "Activation Codes", href: "/admin/activation-codes", icon: KeyRound },
   { title: "知识库", titleEn: "Knowledge", href: "/admin/knowledge", icon: BookOpen },
+  { title: "对标档案", titleEn: "Benchmark", href: "/admin/benchmark-profiles", icon: Target },
   { title: "内容模板", titleEn: "Templates", href: "/admin/templates", icon: FileText },
   { title: "系统设置", titleEn: "Settings", href: "/admin/settings", icon: Settings },
 ]

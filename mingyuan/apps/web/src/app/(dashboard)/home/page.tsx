@@ -8,7 +8,7 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   FilePenLine,
-  RefreshCw,
+  ShieldCheck,
   Sparkles,
 } from "lucide-react"
 
@@ -179,16 +179,16 @@ export default function DashboardPage() {
         <Card className="border-primary/20 bg-gradient-to-br from-primary/[0.05] to-amber-500/[0.02]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <RefreshCw className="h-4 w-4 text-primary" />
-              内容复盘官
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              发布质检官
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              发布后复盘表现，提炼优化动作、复用资产和下一轮选题。
+              发布前检查成稿质量、平台风险和最小修改建议。
             </p>
             <Button className="w-full" nativeButton={false} render={<Link href="/aim?agent=content_review" />}>
-              去做复盘
+              去做质检
               <ArrowRight className="h-4 w-4" />
             </Button>
           </CardContent>

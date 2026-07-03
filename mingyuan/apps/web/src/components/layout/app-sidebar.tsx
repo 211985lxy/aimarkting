@@ -13,7 +13,10 @@ import {
   Target,
   Flame,
   ChevronRight,
+  MoreHorizontal,
+  Trash2,
 } from "lucide-react"
+import { toast } from "sonner"
 import {
   Sidebar,
   SidebarContent,
@@ -27,6 +30,12 @@ import {
   SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import {
   DEFAULT_AIM_AGENT,
@@ -75,6 +84,64 @@ const coreAimAgentIds: AimAgentId[] = [
 
 const RECENT_ITEMS_PER_AGENT = 4
 
+function formatHistoryDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toISOString().slice(5, 10)
+}
+
+function extractHistoryTheme(input: string) {
+  const lines = input.split("\n").map((line) => line.trim()).filter(Boolean)
+  const labeled = lines.find((line) => /^(对标标题|选题|主题|标题)[:：]/.test(line))
+  if (labeled) return compactHistoryTheme(labeled.replace(/^(对标标题|选题|主题|标题)[:：]\s*/, ""))
+
+  const content = lines
+    .filter((line) => !/^请基于|^创作原则|^改写原则|^\d+[.、]/.test(line))
+    .find((line) => line.length > 8)
+  return compactHistoryTheme(content || input)
+}
+
+function compactHistoryTheme(text: string) {
+  const clean = text
+    .replace(/#\S+/g, "")
+    .replace(/[《》"“”]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+  const firstClause = clean.split(/[。；;，,]/).find((part) => part.trim().length >= 4)?.trim() || clean
+  if (/AI/.test(firstClause) && /提升认知|认知/.test(firstClause) && /心法|方法/.test(firstClause)) {
+    return "AI提升认知三心法"
+  }
+  if (/Codex|AI变现工作台/.test(firstClause) && /工作台|变现/.test(firstClause)) {
+    return "Codex AI变现工作台"
+  }
+  return firstClause.slice(0, 18)
+}
+
+function getHistoryFormatLabel(item: { videoScript: string | null; rawCopy: string | null; wechatArticle: string | null; momentsPost: string | null; communityMessage: string | null }) {
+  if (item.videoScript) return "口播"
+  if (item.wechatArticle) return "公众号"
+  if (item.momentsPost) return "朋友圈"
+  if (item.communityMessage) return "社群"
+  if (item.rawCopy) return "文案"
+  return ""
+}
+
+function formatHistoryTitle(item: {
+  topicTitle?: string | null
+  rawInput: string
+  createdAt: string
+  videoScript: string | null
+  rawCopy: string | null
+  wechatArticle: string | null
+  momentsPost: string | null
+  communityMessage: string | null
+}) {
+  const date = formatHistoryDate(item.createdAt)
+  const theme = compactHistoryTheme(item.topicTitle || extractHistoryTheme(item.rawInput))
+  const format = getHistoryFormatLabel(item)
+  return [`${format ? `${format}｜` : ""}${theme}`, date].filter(Boolean).join(" ")
+}
+
 export function AppSidebar() {
   const [collapsedAgents, setCollapsedAgents] = useState<Set<AimAgentId>>(new Set())
   const [showAllAgents, setShowAllAgents] = useState<Set<AimAgentId>>(new Set())
@@ -89,6 +156,7 @@ export function AppSidebar() {
 
   const history = useAimWorkspaceStore((s) => s.history)
   const fetchHistory = useAimWorkspaceStore((s) => s.fetchHistory)
+  const deleteHistory = useAimWorkspaceStore((s) => s.deleteHistory)
   const requestLoad = useAimWorkspaceStore((s) => s.requestLoad)
 
   // 进入 /aim 时拉取最近生成记录
@@ -97,6 +165,16 @@ export function AppSidebar() {
   }, [isAim, fetchHistory])
 
   const closeMobile = () => setOpenMobile(false)
+
+  async function handleDeleteHistory(id: string, title: string) {
+    if (!window.confirm(`删除这条内容？\n${title}`)) return
+    try {
+      await deleteHistory(id)
+      toast.success("已删除")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "删除失败")
+    }
+  }
 
   const historyGroups = coreAimAgentIds
     .map((agentId) => {
@@ -203,20 +281,44 @@ export function AppSidebar() {
 
                       {isAim && items.length > 0 && !collapsed && (
                         <div className="space-y-0.5 pl-8">
-                          {visibleItems.map((item) => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => {
-                                requestLoad(item.id)
-                                closeMobile()
-                              }}
-                              className="block h-8 w-full rounded-md px-1.5 text-left text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                              title={item.topicTitle || item.rawInput}
-                            >
-                              <span className="block truncate">{item.topicTitle || item.rawInput}</span>
-                            </button>
-                          ))}
+                          {visibleItems.map((item) => {
+                            const title = formatHistoryTitle(item)
+                            return (
+                              <div
+                                key={item.id}
+                                className="group/item flex h-8 items-center rounded-md text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    requestLoad(item.id)
+                                    closeMobile()
+                                  }}
+                                  className="min-w-0 flex-1 px-1.5 text-left"
+                                  title={title}
+                                >
+                                  <span className="block truncate">{title}</span>
+                                </button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    className="mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm opacity-0 hover:bg-muted group-hover/item:opacity-100"
+                                    aria-label="更多操作"
+                                  >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-28">
+                                    <DropdownMenuItem
+                                      variant="destructive"
+                                      onClick={() => void handleDeleteHistory(item.id, title)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      删除
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            )
+                          })}
 
                           {items.length > RECENT_ITEMS_PER_AGENT && (
                             <button

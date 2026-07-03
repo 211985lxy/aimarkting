@@ -8,6 +8,7 @@ export type KnowledgeAssetRole =
   | "case"
   | "benchmark"
   | "inspiration"
+  | "strategy"
 export type KnowledgeUsableFor = "xhs" | "wechat" | "video" | "sales" | "topic"
 export type KnowledgeConfidence = "confirmed" | "user_claim" | "pending_verify"
 
@@ -45,6 +46,7 @@ const ROLES = new Set<KnowledgeAssetRole>([
   "case",
   "benchmark",
   "inspiration",
+  "strategy",
 ])
 const USABLE_FOR = new Set<KnowledgeUsableFor>(["xhs", "wechat", "video", "sales", "topic"])
 const CONFIDENCES = new Set<KnowledgeConfidence>(["confirmed", "user_claim", "pending_verify"])

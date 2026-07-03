@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { withUserAuth } from "@/lib/user-auth"
 import { collectDouyinCompetitorData } from "@/lib/competitor-analysis/collector"
 import { logger } from "@/lib/logger"
+import { enforceWatchRefreshBetaLimit } from "@/lib/internal-beta-limits"
 
 type RefreshLog = Pick<typeof logger, "info" | "error">
 
@@ -113,6 +114,9 @@ export const POST = withUserAuth(async (request, { user }) => {
   if (accounts.length === 0) {
     return NextResponse.json({ error: "没有待刷新的账号" }, { status: 400 })
   }
+
+  const quotaResponse = await enforceWatchRefreshBetaLimit(user.id, accounts.length)
+  if (quotaResponse) return quotaResponse
 
   const log = logger.child({ userId: user.id, accountIds: accounts.map((a) => a.id) })
   log.info(`Starting refresh for ${accounts.length} watch accounts`)

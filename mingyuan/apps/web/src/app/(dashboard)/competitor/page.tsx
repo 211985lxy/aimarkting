@@ -39,6 +39,7 @@ import {
 } from "@/lib/api/client"
 import { extractPureUrl, checkUrlType } from "@/lib/tikhub/url-parser"
 import { shouldOpenDeepCopywriter } from "@/lib/video-copy-routing"
+import { cleanVideoCopyAnalysisMarkdown } from "@/lib/video-copy-display"
 import type { ApiCompetitorReport, ApiVideoCopyExtraction } from "@/types/api"
 
 // ─── Helpers ────────────────────────────────────────────
@@ -422,7 +423,7 @@ export default function CompetitorWatchPage() {
         className="rounded-lg"
         flat
       >
-        <p className="mt-1 line-clamp-4 text-muted-foreground">{analysis.markdown.slice(0, 200)}...</p>
+        <p className="mt-1 line-clamp-4 text-muted-foreground">{cleanVideoCopyAnalysisMarkdown(analysis.markdown).slice(0, 200)}...</p>
         {record.transcript ? (
           <p className="mt-2 line-clamp-2 text-muted-foreground">原文案：{record.transcript}</p>
         ) : null}

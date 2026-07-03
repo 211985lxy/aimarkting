@@ -191,6 +191,41 @@ describe("POST /api/scripts/quality-check", () => {
     })
   })
 
+  it("returns douyin publish check when publishPlatform=douyin", async () => {
+    const mockReport = {
+      editorial: { score: 8, passed: true, feedback: "good", details: "" },
+      aiTaste: { score: 9, passed: true, feedback: "ok", details: "" },
+      attraction: { score: 7, passed: true, feedback: "good", details: "" },
+      logic: { score: 8, passed: true, feedback: "good", details: "" },
+      overall: { score: 8, passed: true, needsRewrite: false },
+      rewriteCount: 0,
+    }
+
+    mockRunQualityCheck.mockResolvedValue(mockReport)
+
+    const res = await POST(
+      req("/api/scripts/quality-check", {
+        method: "POST",
+        body: {
+          content: "这是全网第一的 AI 神器，私信我领取，100%有效。",
+          publishPlatform: "douyin",
+        },
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      undefined as never
+    )
+
+    expect(res.status).toBe(200)
+    const body = await json(res)
+    expect(body.data.report).toEqual(mockReport)
+    expect(body.data.publishCheck.verdict).toMatch(/高风险勿发|改完可发/)
+    expect(body.data.publishCheck.violations.map((item: { text: string }) => item.text)).toEqual(
+      expect.arrayContaining(["全网第一", "私信我", "100%有效"])
+    )
+    expect(body.data.publishCheck.trafficScore.score).toBeLessThan(80)
+    expect(body.data.publishCheck.trafficScore.reasons.length).toBeGreaterThan(0)
+  })
+
   it("accepts string persona and maps it into quality check input", async () => {
     const mockReport = {
       editorial: { score: 8, passed: true, feedback: "good", details: "" },

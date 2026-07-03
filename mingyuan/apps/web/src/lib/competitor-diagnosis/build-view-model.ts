@@ -3,8 +3,6 @@ import type {
   CompetitorDiagnosisViewModel,
   ConfidenceLevel,
   DiagnosisQuestion,
-  FalsificationRow,
-  StrategicBet,
   VerdictData,
   ContentStrategyData,
   EvidenceData,
@@ -273,55 +271,7 @@ function buildDiagnosisQuestions(analysis: ApiCompetitorAnalysis): DiagnosisQues
       ],
       actionSuggestion: "增加低门槛转化动作（资料领取、社群、咨询入口），验证付费意愿。",
     },
-    {
-      questionNo: 5,
-      layerName: "战略反证层",
-      coreQuestion: "下一步押什么？这个判断可能错在哪里？",
-      oneLineConclusion: buildStrategicSummary(analysis),
-      confidence: "中",
-      evidenceSource: [
-        "六维评分",
-        "分析建议",
-        "前四层诊断结论",
-      ],
-      bodySections: [
-        "本层综合前四层诊断结果，给出战略下注方向。",
-        "所有下注建议都需要 30 天小实验验证，不直接全量转型。",
-        "战略判断置信度标为中，因为缺少私域和成交数据。",
-      ],
-      keyCharts: ["六维评分雷达图", "战略下注卡"],
-      falsificationTable: [
-        {
-          claim: "当前内容方向值得继续押注",
-          couldBeWrongIf: "用户需求变化、平台推荐变化、竞品跟进",
-          verifyBy: "30 天新增内容表现对比历史均值",
-          correctionSignal: "新内容互动持续低于历史均值",
-          misjudgeCost: "浪费 30-90 天内容产能",
-        },
-        {
-          claim: "可以按建议方向转型",
-          couldBeWrongIf: "新方向和现有粉丝画像不匹配",
-          verifyBy: "小批量测试新方向，观察粉丝反馈",
-          correctionSignal: "新方向带来低质量粉丝或负反馈",
-          misjudgeCost: "稀释现有心智，两头不到岸",
-        },
-      ],
-      actionSuggestion: "用 30 天小实验验证下注方向，设置明确止损信号。",
-    },
   ]
-}
-
-function buildStrategicSummary(analysis: ApiCompetitorAnalysis): string {
-  const scores = analysis.analysisResult?.scores
-  if (!scores) return "数据不足，无法给出战略判断。"
-
-  const parts: string[] = []
-  if (scores.content_power >= 70) parts.push("内容力是核心资产，应继续深耕")
-  if (scores.engagement_power >= 70) parts.push("互动率高，可押信任内容和社群承接")
-  if (scores.monetization_power < 50) parts.push("变现力不足，需先补转化链路")
-  if (scores.growth_power < 50) parts.push("增长力偏弱，需优化发布策略或内容形式")
-
-  return parts.length > 0 ? parts.join("；") + "。" : "各维度表现均衡，需进一步验证核心优势方向。"
 }
 
 // ─── Content Strategy Builder ────────────────────────────
@@ -364,115 +314,6 @@ function buildEvidence(analysis: ApiCompetitorAnalysis): EvidenceData {
   }
 }
 
-// ─── Strategic Bets Builder ──────────────────────────────
-
-function buildStrategicBets(analysis: ApiCompetitorAnalysis): StrategicBet[] {
-  const scores = analysis.analysisResult?.scores
-  const cs = analysis.analysisResult?.sections?.content_strategy
-  const bets: StrategicBet[] = []
-
-  if (scores && scores.content_power >= 60) {
-    bets.push({
-      type: "主推",
-      title: "继续押高价值教程/分析 + 商业化场景",
-      reason: `内容力评分 ${Math.round(scores.content_power)}，${cs?.viral_formula ? `爆款公式已验证：${cs.viral_formula}` : "内容质量有数据支撑"}`,
-      successCondition: "30 天内高价值教程类内容继续贡献最高互动和收藏",
-      risk: "内容生产成本高，容易疲劳",
-      resourceRequired: "稳定选题库、案例素材、教程结构模板",
-      stopLossSignal: "连续 4 条深度教程互动低于账号均值",
-      action30d: "发布 6-8 条深度教程/分析，统一钩子和 CTA",
-      action90d: "沉淀系列栏目，接产品/社群/咨询入口",
-    })
-  } else if (scores && scores.engagement_power >= 60) {
-    bets.push({
-      type: "主推",
-      title: "押高互动内容 + 社群承接",
-      reason: `互动力评分 ${Math.round(scores.engagement_power)}，粉丝活跃度高`,
-      successCondition: "30 天内社群或私域线索增长",
-      risk: "互动不等于付费意愿",
-      resourceRequired: "社群运营工具、低门槛转化钩子",
-      stopLossSignal: "互动高但无任何私域转化",
-      action30d: "在内容中加入社群/资料领取 CTA，观察转化",
-      action90d: "建立社群运营 SOP，跑通转化路径",
-    })
-  } else {
-    bets.push({
-      type: "主推",
-      title: "先验证内容方向，再决定下注",
-      reason: "各维度评分未出现明显优势，需先测试",
-      successCondition: "30 天内找到 1-2 个互动明显高于均值的内容方向",
-      risk: "测试周期可能较长",
-      resourceRequired: "3-5 个不同方向的内容测试",
-      stopLossSignal: "所有方向互动都低于预期",
-      action30d: "每个方向各发 2-3 条，记录数据",
-      action90d: "基于数据选择最强方向集中发力",
-    })
-  }
-
-  const monetizationTopics = cs?.topic_distribution?.find(t =>
-    t.topic.includes("商业") || t.topic.includes("变现") || t.topic.includes("赚钱"),
-  )
-  if (monetizationTopics && monetizationTopics.percentage >= 20) {
-    bets.push({
-      type: "备选",
-      title: "押商业变现案例拆解",
-      reason: `${monetizationTopics.topic}占比 ${monetizationTopics.percentage}%，适合承接高价值用户`,
-      successCondition: "评论区出现咨询、收藏、转发、私信增长",
-      risk: "容易变成泛泛讲趋势，缺乏实操",
-      resourceRequired: "真实案例、成本收益数据、落地流程",
-      stopLossSignal: "播放高但咨询弱",
-      action30d: "做 3 个案例拆解",
-      action90d: "形成案例库和客户转化路径",
-    })
-  } else {
-    bets.push({
-      type: "备选",
-      title: "押个人经验/故事类内容",
-      reason: "人设内容有助于建立信任，降低商业化阻力",
-      successCondition: "故事类内容收藏率和评论深度提升",
-      risk: "和现有内容风格可能不搭",
-      resourceRequired: "真实经历素材、叙事结构",
-      stopLossSignal: "故事类内容互动明显低于干货类",
-      action30d: "尝试 2-3 条个人经验分享",
-      action90d: "如果有效，形成固定栏目",
-    })
-  }
-
-  bets.push({
-    type: "不建议",
-    title: "不建议押泛娱乐热点",
-    reason: "和账号资产心智弱相关，短期播放不等于长期资产",
-    successCondition: "-",
-    risk: "稀释专业心智，吸引低质量粉丝",
-    resourceRequired: "-",
-    stopLossSignal: "娱乐热点带来粉丝但不带来咨询和复购",
-    action30d: "-",
-    action90d: "-",
-  })
-
-  if (scores && scores.monetization_power < 50) {
-    bets.push({
-      type: "不建议",
-      title: "不建议直接重商业化",
-      reason: `变现力评分仅 ${Math.round(scores.monetization_power)}，转化链路未验证`,
-      successCondition: "-",
-      risk: "粉丝未建立足够信任时强推产品，导致取关",
-      resourceRequired: "-",
-      stopLossSignal: "商业化内容播放明显低于非商业内容",
-      action30d: "-",
-      action90d: "-",
-    })
-  }
-
-  return bets
-}
-
-// ─── Falsification Summary Builder ───────────────────────
-
-function buildFalsificationSummary(questions: DiagnosisQuestion[]): FalsificationRow[] {
-  return questions.flatMap(q => q.falsificationTable)
-}
-
 // ─── Main Builder ────────────────────────────────────────
 
 export function buildCompetitorDiagnosisViewModel(
@@ -505,8 +346,6 @@ export function buildCompetitorDiagnosisViewModel(
     diagnosisQuestions,
     contentStrategy: buildContentStrategy(analysis),
     evidence: buildEvidence(analysis),
-    bets: buildStrategicBets(analysis),
-    falsificationSummary: buildFalsificationSummary(diagnosisQuestions),
     rawAnalysis: analysis,
   }
 }

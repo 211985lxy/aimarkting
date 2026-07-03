@@ -20,10 +20,10 @@ import {
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
-import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import { VideoCopyAnalysisCards } from "@/components/video-copy-analysis-cards"
 import { AiResultPanel } from "@/components/workbench/ai-result-panel"
 import { WorkbenchHero } from "@/components/workbench/workbench-hero"
 import {
@@ -32,6 +32,7 @@ import {
   syncVideoCopyExtraction,
 } from "@/lib/api/client"
 import { shouldOpenDeepCopywriter } from "@/lib/video-copy-routing"
+import { cleanVideoCopyAnalysisMarkdown } from "@/lib/video-copy-display"
 import type { ApiVideoCopyExtraction } from "@/types/api"
 
 const ACTIVE_STATUSES = new Set(["queued", "extracting", "analyzing"])
@@ -155,6 +156,8 @@ const topComments = analysis?.topComments ?? []
         title="爆款文案拆解"
         subtitle="粘贴对标视频链接，提取原文案并拆解结构、心理、商业和可迁移打法，沉淀到选题中心作为参考。"
         badge={<Badge variant="secondary">{statusLabel(record)}</Badge>}
+        backHref="/competitor"
+        backLabel="返回优质账号分析"
         actions={record ? (
             <Button
               variant="outline"
@@ -306,14 +309,14 @@ const topComments = analysis?.topComments ?? []
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void copyText(analysis.markdown, "分析报告已复制")}
+              onClick={() => void copyText(cleanVideoCopyAnalysisMarkdown(analysis.markdown), "分析报告已复制")}
             >
               <Clipboard className="h-4 w-4" />
               复制分析报告
             </Button>
           }
         >
-          <MarkdownRenderer content={analysis.markdown} />
+          <VideoCopyAnalysisCards markdown={analysis.markdown} />
         </AiResultPanel>
       ) : record?.analysisError ? (
         <Card className="border-amber-200">
@@ -352,9 +355,9 @@ const topComments = analysis?.topComments ?? []
 
       {record?.status === "completed" && record.transcript ? (
         <AiResultPanel
-          title="改写成我的文案"
+          title="再创作成我的文案"
           icon={<Wand2 className="h-4 w-4 text-primary" />}
-          meta={<span>带入原文案、拆解结果和保留结构原则</span>}
+          meta={<span>带入原文案、拆解结果和爆款选题再创作原则</span>}
           flat
           actions={
             <Link
@@ -362,14 +365,14 @@ const topComments = analysis?.topComments ?? []
               className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               <Wand2 className="h-4 w-4" />
-              {shouldOpenDeepCopywriter(record) ? "进入深度文案创作" : "改写成内容资产包"}
+              {shouldOpenDeepCopywriter(record) ? "进入深度再创作" : "再创作内容资产包"}
             </Link>
           }
         >
           <p className="text-sm leading-6 text-muted-foreground">
             {shouldOpenDeepCopywriter(record)
-              ? "长文案会进入深度文案官，先沉淀观点和结构，再改写成可拆分复用的深度母稿。"
-              : "改写会在内容生产官里进行，基于本参考文案、拆解结果和改写原则，为您一键生成全套内容资产包。"}
+              ? "长文案会进入深度文案官，先锁定爆款选题逻辑，再用你的立场、人设和业务场景重构成深度母稿。"
+              : "再创作会在内容生产官里进行，基于本参考文案、拆解结果和爆款选题再创作原则，生成全套内容资产包。"}
           </p>
         </AiResultPanel>
       ) : null}

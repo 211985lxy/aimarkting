@@ -269,7 +269,7 @@ export function KnowledgeMap({ projects, onDrillDown }: KnowledgeMapProps) {
                   <Bar
                     dataKey="count"
                     fill="hsl(var(--primary))"
-                    radius={[0, 4]}
+                    radius={[0, 4, 4, 0]}
                     cursor="pointer"
                     onClick={(data) => {
                       if (data?.category && onDrillDown) onDrillDown({ category: data.category })
@@ -303,7 +303,7 @@ export function KnowledgeMap({ projects, onDrillDown }: KnowledgeMapProps) {
                   </Pie>
                   <Tooltip formatter={(v: number, name: string) => `${name}: ${v} 条`} />
                   <Legend
-                    formatter={(value: string, entry) => `${entry.name}`}
+                    formatter={(value: string) => value}
                     iconType="circle"
                     wrapperStyle={{ fontSize: 12 }}
                   />
@@ -324,7 +324,7 @@ export function KnowledgeMap({ projects, onDrillDown }: KnowledgeMapProps) {
                   <XAxis type="number" tick={{ fontSize: 12 }} />
                   <YAxis dataKey="label" type="category" width={120} tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v: number) => `${v} 条`} />
-                  <Bar dataKey="entryCount" fill="hsl(var(--primary))" radius={[0, 3]} name="知识条目" />
+                  <Bar dataKey="entryCount" fill="hsl(var(--primary))" radius={[0, 3, 3, 0]} name="知识条目" />
                 </BarChart>
               </ResponsiveContainer>
               <p className="text-[10px] text-muted-foreground mt-2">

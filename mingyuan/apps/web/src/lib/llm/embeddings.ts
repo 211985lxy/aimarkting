@@ -193,6 +193,17 @@ export interface ScoredKnowledgeEntry {
 }
 
 /**
+ * 预过滤条件：在算余弦前用 SQL 把候选缩到高价值子集，缓解「全量 200 条进内存」的瓶颈。
+ * - categories：限定类别白名单（由策略 categoryBoost 的 key 转换而来）
+ * - valueGrades：限定价值分级白名单（通常含 S/A，避免低价值条目进算）
+ * 传空对象或 undefined 时退化为原行为（全量）。
+ */
+export interface KnowledgePrefilter {
+  categories?: string[]
+  valueGrades?: string[]
+}
+
+/**
  * Retrieve top-K relevant knowledge entries by cosine similarity.
  * Falls back to entry-only (no embedding) when embedding is disabled or empty.
  */
@@ -203,12 +214,14 @@ export async function retrieveRelevantKnowledge(input: {
   topicTitle?: string
   topicRationale?: string
   topK?: number
+  prefilter?: KnowledgePrefilter
 }): Promise<{
   entries: ScoredKnowledgeEntry[]
   source: "embedding" | "raw"
 }> {
   const config = readConfig()
   const topK = input.topK ?? 12
+  const prefilter = input.prefilter
 
   // Build the query text: combine input + topic context for richer embedding
   const queryParts = [input.query]
@@ -220,8 +233,10 @@ export async function retrieveRelevantKnowledge(input: {
   if (config.enabled) {
     const queryVector = await generateEmbedding(queryText)
     if (queryVector) {
-      // Fetch top active embeddings for this project
-      // 加 take 上限,防止知识库膨胀后全量加载到内存算余弦导致 OOM/事件循环阻塞
+      // 预过滤：把策略侧的 category/valueGrade 偏好下推到 SQL where，
+      // 候选缩窄后再进内存算余弦。无 prefilter 时退化为全量（原行为）。
+      const hasCategoryFilter = !!prefilter?.categories?.length
+      const hasGradeFilter = !!prefilter?.valueGrades?.length
       const rows = await prisma.knowledgeEmbedding.findMany({
         where: {
           status: "completed",
@@ -229,6 +244,8 @@ export async function retrieveRelevantKnowledge(input: {
             userId: input.userId,
             projectId: input.projectId,
             status: "active",
+            ...(hasCategoryFilter ? { category: { in: prefilter!.categories } } : {}),
+            ...(hasGradeFilter ? { valueGrade: { in: prefilter!.valueGrades } } : {}),
           },
         },
         select: {
@@ -237,7 +254,9 @@ export async function retrieveRelevantKnowledge(input: {
             select: { id: true, title: true, content: true, category: true, tags: true, valueGrade: true },
           },
         },
-        take: 200,
+        // 加 take 上限,防止知识库膨胀后全量加载到内存算余弦导致 OOM/事件循环阻塞。
+        // 预过滤已缩窄候选，这里给足 topK * 6 的余量保证召回质量。
+        take: hasCategoryFilter || hasGradeFilter ? Math.max(topK * 6, 60) : 200,
       })
 
       if (rows.length > 0) {
@@ -256,6 +275,11 @@ export async function retrieveRelevantKnowledge(input: {
           })
           .sort((a, b) => b.score - a.score)
           .slice(0, topK)
+
+        // 预过滤可能把候选筛空，此时回退一次全量检索，避免漏召回
+        if (scored.length === 0 && (hasCategoryFilter || hasGradeFilter)) {
+          return retrieveRelevantKnowledge({ ...input, prefilter: undefined })
+        }
 
         return { entries: scored, source: "embedding" }
       }

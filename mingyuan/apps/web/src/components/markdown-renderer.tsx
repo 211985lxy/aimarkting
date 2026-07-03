@@ -18,7 +18,7 @@ interface MarkdownRendererProps {
  *   分隔符 ---
  */
 export function MarkdownRenderer({ content, className = "" }: MarkdownRendererProps) {
-  if (!content) return <p className="text-sm text-muted-foreground">暂无</p>
+  if (!content.trim()) return null
 
   const lines = content.split("\n")
   const elements: React.ReactNode[] = []
@@ -99,9 +99,7 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
     )
   }
 
-  if (elements.length === 0) {
-    return <p className="text-sm sm:text-[15px] text-muted-foreground">暂无</p>
-  }
+  if (elements.length === 0) return null
 
   return <div className={`space-y-2 ${className}`}>{elements}</div>
 }

@@ -19,6 +19,9 @@ export const GET = withAdminAuth(async (request: NextRequest) => {
       companyName: true,
       industry: true,
       status: true,
+      _count: {
+        select: { knowledgeEntries: true },
+      },
       user: {
         select: {
           id: true,
@@ -29,5 +32,15 @@ export const GET = withAdminAuth(async (request: NextRequest) => {
     },
   })
 
-  return NextResponse.json({ data: projects })
+  return NextResponse.json({
+    data: projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      companyName: project.companyName,
+      industry: project.industry,
+      status: project.status,
+      knowledgeCount: project._count.knowledgeEntries,
+      user: project.user,
+    })),
+  })
 })

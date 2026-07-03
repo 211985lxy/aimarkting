@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { runQualityCheck, runQualityGateWithRewrite } from "@/lib/quality-gate"
 import { withUserAuth } from "@/lib/user-auth"
+import { runDouyinPublishCheck } from "@/lib/douyin-publish-check"
 
 /**
  * POST /api/scripts/quality-check
@@ -17,6 +18,7 @@ export const POST = withUserAuth(async (request: NextRequest) => {
       endingType,
       persona,
       autoRewrite = false,
+      publishPlatform,
     } = body ?? {}
 
     if (!content || typeof content !== "string") {
@@ -68,6 +70,13 @@ export const POST = withUserAuth(async (request: NextRequest) => {
       )
     }
 
+    if (publishPlatform != null && publishPlatform !== "douyin") {
+      return NextResponse.json(
+        { error: "publishPlatform 暂只支持 douyin" },
+        { status: 400 }
+      )
+    }
+
     const input = {
       content,
       topicTitle,
@@ -92,6 +101,9 @@ export const POST = withUserAuth(async (request: NextRequest) => {
 
     if (autoRewrite) {
       const { content: finalContent, report } = await runQualityGateWithRewrite(input)
+      const publishCheck = publishPlatform === "douyin"
+        ? runDouyinPublishCheck(finalContent)
+        : undefined
       return NextResponse.json({
         success: true,
         data: {
@@ -99,13 +111,17 @@ export const POST = withUserAuth(async (request: NextRequest) => {
           content: finalContent,
           rewritten: finalContent !== content,
           report,
+          publishCheck,
         },
       })
     } else {
       const report = await runQualityCheck(input)
+      const publishCheck = publishPlatform === "douyin"
+        ? runDouyinPublishCheck(content)
+        : undefined
       return NextResponse.json({
         success: true,
-        data: { content, report },
+        data: { content, report, publishCheck },
       })
     }
   } catch (error) {

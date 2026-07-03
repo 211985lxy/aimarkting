@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { parseDocument } from "@/lib/document-parser"
 import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
 import { buildDefaultKnowledgeTags } from "@/lib/knowledge-tags"
+import { enforceKnowledgeBetaLimit, enforceUploadSizeLimit } from "@/lib/internal-beta-limits"
 
 export const POST = withAdminAuth(async (request, { admin }) => {
   const formData = await request.formData()
@@ -17,6 +18,9 @@ export const POST = withAdminAuth(async (request, { admin }) => {
   if (!file) {
     return NextResponse.json({ error: "请上传文件" }, { status: 400 })
   }
+
+  const uploadLimitResponse = enforceUploadSizeLimit([file])
+  if (uploadLimitResponse) return uploadLimitResponse
 
   const project = projectId
     ? await prisma.clientProject.findUnique({
@@ -42,6 +46,13 @@ export const POST = withAdminAuth(async (request, { admin }) => {
 
   const buffer = Buffer.from(await file.arrayBuffer())
   const chunks = await parseDocument(buffer, file.name)
+
+  const knowledgeLimitResponse = await enforceKnowledgeBetaLimit({
+    userId: user.id,
+    projectId: project?.id ?? null,
+    incoming: chunks.length,
+  })
+  if (knowledgeLimitResponse) return knowledgeLimitResponse
 
   const entries: unknown[] = []
   for (const content of chunks) {

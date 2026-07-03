@@ -13,6 +13,12 @@ const SYSTEM_PROMPT = `你是专业的短视频账号分析师，擅长分析中
 你会基于账号数据生成结构化的竞品分析报告，包含6维评分和可操作建议。
 所有分析必须基于数据，不可臆测。输出严格按照 JSON Schema 格式。`
 
+export function buildPublicVideoUrl(video: Pick<NormalizedVideo, 'videoId' | 'videoUrl'>): string {
+  if (video.videoUrl.includes('/video/')) return video.videoUrl
+  if (video.videoId) return `https://www.douyin.com/video/${video.videoId}`
+  return video.videoUrl
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function analyzeCompetitor(
@@ -43,7 +49,7 @@ export async function analyzeCompetitor(
         views: v.views,
         likes: v.likes,
         engagement_rate: Math.round(((v.likes + v.comments + v.shares) / denominator) * 10000) / 100,
-        url: v.videoUrl,
+        url: buildPublicVideoUrl(v),
       }
     })
 

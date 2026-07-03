@@ -7,6 +7,7 @@ import {
   parseVideoCopyAnalysis,
   type VideoCopyAnalysis,
 } from "@/lib/video-copy-analysis"
+import { parseVideoCopyAnalysisDisplay } from "@/lib/video-copy-display"
 import type { LLMProvider } from "@/lib/llm"
 
 function provider(content: string): LLMProvider {
@@ -30,6 +31,13 @@ describe("video copy analysis", () => {
     })
 
     expect(messages[0].content).toContain("纯 Markdown")
+    expect(messages[0].content).toContain("只挑最关键的 2-3 个独立节点")
+    expect(messages[0].content).toContain("每个结构子节点只保留两项")
+    expect(messages[0].content).toContain("核心选题、开头机制、观点冲突和情绪触发点")
+    expect(messages[0].content).toContain("完成爆款选题再创作")
+    expect(messages[0].content).toContain("可借什么、必须重构什么、原创风险是什么")
+    expect(messages[0].content).toContain("禁止输出\"心理作用：\"、\"迁移保留点：\"")
+    expect(messages[0].content).toContain("不要使用 ** 星号加粗")
     expect(messages[1].content).toContain("视频标题")
     expect(messages[1].content).toContain("bilibili")
     expect(messages[1].content).toContain("这是视频文案。")
@@ -62,6 +70,55 @@ describe("video copy analysis", () => {
     expect(analysis.markdown).toContain("用强冲突开头")
     expect(analysis.markdown).toContain("先指出问题，再给方案")
     expect(analysis.markdown).toContain("## 结构拆解")
+  })
+
+  it("strips bold stars and removes extra field labels from model output", () => {
+    const md = [
+      "## 结构拆解",
+      "### 正文-1：方法一",
+      "**原文片段**：第一段。",
+      "**结构作用**：承接判断。",
+      "**心理作用**：制造好奇。",
+      "**迁移保留点**：保留结构。",
+      "## 心理拆解",
+      "制造期待。",
+    ].join("\n")
+
+    const analysis = parseVideoCopyAnalysis(md)
+
+    expect(analysis.markdown).toContain("原文片段：第一段。")
+    expect(analysis.markdown).toContain("结构作用：承接判断。")
+    expect(analysis.markdown).toContain("### 方法一")
+    expect(analysis.markdown).not.toContain("正文-1")
+    expect(analysis.markdown).not.toContain("心理作用：")
+    expect(analysis.markdown).not.toContain("迁移保留点：")
+    expect(analysis.markdown).not.toContain("**")
+  })
+
+  it("parses analysis markdown into display cards", () => {
+    const display = parseVideoCopyAnalysisDisplay([
+      "## 结构拆解",
+      "### 正文-1：开头冲突",
+      "原文片段：我深度使用 code 有两个多月了。",
+      "现在有一个特别强烈的感受。",
+      "结构作用：用个人体验建立可信度。",
+      "同时制造继续看下去的理由。",
+      "心理作用：制造好奇。",
+      "迁移保留点：保留开头。",
+      "## 商业拆解",
+      "适合引导关注。",
+    ].join("\n"))
+
+    expect(display.nodes).toEqual([
+      {
+        title: "开头冲突",
+        original: "我深度使用 code 有两个多月了。\n现在有一个特别强烈的感受。",
+        structureEffect: "用个人体验建立可信度。\n同时制造继续看下去的理由。",
+      },
+    ])
+    expect(display.supplementalMarkdown).toContain("## 商业拆解")
+    expect(display.supplementalMarkdown).not.toContain("心理作用")
+    expect(display.supplementalMarkdown).not.toContain("迁移保留点")
   })
 
   it("runs analysis through an injected LLM provider", async () => {
@@ -121,5 +178,27 @@ describe("video copy analysis", () => {
     expect(analysis.markdown).toContain("## 心理拆解")
     expect(analysis.markdown).toContain("## 商业拆解")
     expect(analysis.markdown).toContain("## 迁移应用")
+    expect(analysis.markdown).toContain("### 再创作建议")
+    expect(analysis.markdown).toContain("必须重构")
+    expect(analysis.markdown).toContain("原创风险")
+  })
+
+  it("fallback splits three-method body structures into separate nodes", () => {
+    const analysis = buildFallbackVideoCopyAnalysis({
+      transcript: [
+        "开头先制造冲突。",
+        "第一个狩猎法，带着问题进去找答案。",
+        "第二，反推法，让AI审问你。",
+        "第三招，辩论法，让不同观点打一架。",
+        "最后做价值升华。",
+      ].join(""),
+    })
+
+    expect(analysis.markdown).toContain("### 第一个狩猎法")
+    expect(analysis.markdown).toContain("### 第二，反推法")
+    expect(analysis.markdown).toContain("### 第三招，辩论法")
+    expect(analysis.markdown).toContain("原文片段")
+    expect(analysis.markdown).toContain("结构作用")
+    expect(analysis.markdown).not.toContain("迁移保留点")
   })
 })

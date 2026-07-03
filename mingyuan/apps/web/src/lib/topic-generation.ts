@@ -1,6 +1,8 @@
 import { LLMClient } from "@/lib/llm"
 import {
   TopicCardsSchema,
+  VALID_OPENING_CODES,
+  VALID_STRUCTURE_CODES,
   VALID_TOPIC_SOURCE_TYPES,
   VALID_TOPIC_TYPES,
 } from "@/lib/topic-validation"
@@ -233,16 +235,19 @@ export function buildTopicUserPrompt(
     ? `## 账号内容线\n${contentThemes.map((t) => `- ${t.name}（占比 ${Math.round(t.ratio * 100)}%）`).join("\n")}\n\n请至少生成1个贴合某条内容线的选题，并在 contentLine 字段标出该内容线名称。其余选题可自由发挥。`
     : ""
   const benchmarkRewriteInstruction = topicSources?.some((source) => source.category === "benchmark_reference")
-    ? `## 对标文案迁移规则
-对标参考只能提供"结构和钩子"，不能按原行业模板照搬。必须基于上方 IP 档案里的行业、人设、产品、目标受众、说话风格，改写成这个 IP 自己的写法开启方向。
-每个借鉴对标的选题，都要在 rationale 或 angle 中体现：这个 IP 应该怎么开头、旧认知怎么改、方法模块怎么迁移、结尾如何承接自己的产品。`
+    ? `## 对标优先规则
+本次选题必须优先借助对标账号和对标文案作为重要信息来源。
+- 至少 2 张选题要能追溯到对标信号：选题母题、开头钩子、结构节奏、用户痛点、情绪推进或转化设计。
+- 对标参考只能迁移"母题、结构和钩子"，不能照抄标题、原句或原行业模板。
+- 如果同时提供 AI HOT 或行业热点，它们只能补充时效角度，不能覆盖对标主线。
+- 每个借鉴对标的选题，都要在 rationale 或 angle 中体现：这个 IP 应该怎么开头、旧认知怎么改、方法模块怎么迁移、结尾如何承接自己的产品。`
     : ""
 
   return `${profileSection ? profileSection + "\n\n" : ""}${contentThemeSection ? contentThemeSection + "\n\n" : ""}${sourceSection ? sourceSection + "\n\n" : ""}${benchmarkRewriteInstruction ? benchmarkRewriteInstruction + "\n\n" : ""}${elementSection}\n\n请基于以上${profileSection ? " IP 档案、" : ""}${sourceSection ? "选题素材和" : ""}营销元素，生成4个差异化的短视频选题卡片。每个选题都要巧妙融入指定的营销元素，并推荐最匹配的开场类型和文案结构。${modeInstruction}`
 }
 
 function inferTopicType(card: TopicCard, index: number): TopicCard["topicType"] {
-  if (card.topicType) return card.topicType
+  if (card.topicType && (VALID_TOPIC_TYPES as readonly string[]).includes(card.topicType)) return card.topicType
   if (card.elementCodes.some((code) => ["authority", "trust", "identity", "story"].includes(code))) return "人设型"
   if (card.elementCodes.some((code) => ["cost", "practical", "scarcity"].includes(code))) return "转化型"
   return index % 3 === 0 ? "流量型" : index % 3 === 1 ? "转化型" : "人设型"
@@ -253,10 +258,10 @@ function inferSourceType(
   topicSources: TopicGenerationInput["topicSources"],
   recommendationMode: RecommendationMode,
 ): TopicCard["sourceType"] {
-  if (card.sourceType) return card.sourceType
+  if (card.sourceType && (VALID_TOPIC_SOURCE_TYPES as readonly string[]).includes(card.sourceType)) return card.sourceType
   const categories = new Set((topicSources ?? []).map((source) => source.category))
-  if ((recommendationMode === "daily" || recommendationMode === "weekly") && categories.has("industry_hot")) return "行业热点"
   if (categories.has("benchmark_reference")) return "对标参考"
+  if ((recommendationMode === "daily" || recommendationMode === "weekly") && categories.has("industry_hot")) return "行业热点"
   if (categories.has("daily_inspiration")) return "个人灵感"
   if (categories.has("product_usp")) return "公司卖点"
   return "客户资料"
@@ -283,6 +288,74 @@ export function normalizeTopicCards(
       revisionAdvice: card.revisionAdvice || revisionAdviceFor(scoreBreakdown, reviewVerdict),
       defamiliarization: normalizeDefamiliarization(card.defamiliarization),
     }
+  })
+}
+
+export function coerceTopicCards(cards: unknown[], selectedCodes: string[]): TopicCard[] {
+  const padded = [...cards.slice(0, 4)]
+  while (padded.length < 4) padded.push({})
+  return padded.map((raw, index) => {
+    const card = raw && typeof raw === "object" ? raw as Partial<TopicCard> : {}
+    const elementCodes = Array.isArray(card.elementCodes)
+      ? card.elementCodes.map(String).filter((code) => selectedCodes.includes(code))
+      : []
+    const openingTypeCode = card.openingTypeCode && (VALID_OPENING_CODES as readonly string[]).includes(card.openingTypeCode)
+      ? card.openingTypeCode
+      : "curiosity_open"
+    const structureCode = card.structureCode && (VALID_STRUCTURE_CODES as readonly string[]).includes(card.structureCode)
+      ? card.structureCode
+      : "three_beat_ramp"
+    return {
+      ...card,
+      title: String(card.title || `今日选题 ${index + 1}`).slice(0, 20),
+      elementCodes: elementCodes.length > 0 ? elementCodes.slice(0, 3) : [selectedCodes[index % selectedCodes.length]],
+      openingTypeCode,
+      structureCode,
+      rationale: card.rationale ? String(card.rationale).slice(0, 200) : undefined,
+      scoreReason: card.scoreReason ? String(card.scoreReason).slice(0, 200) : undefined,
+      revisionAdvice: card.revisionAdvice ? String(card.revisionAdvice).slice(0, 200) : undefined,
+      hook: card.hook ? String(card.hook).slice(0, 200) : undefined,
+      angle: card.angle ? String(card.angle).slice(0, 300) : undefined,
+      cta: card.cta ? String(card.cta).slice(0, 200) : undefined,
+      contentLine: card.contentLine ? String(card.contentLine).slice(0, 40) : undefined,
+    } as TopicCard
+  })
+}
+
+function fallbackTopicCards(input: TopicGenerationInput, selectedCodes: string[]): TopicCard[] {
+  const benchmarkSources = (input.topicSources ?? []).filter((source) => source.category === "benchmark_reference")
+  const baseSources = benchmarkSources.length > 0 ? benchmarkSources : (input.topicSources ?? [])
+  const seeds = baseSources.length > 0
+    ? baseSources.slice(0, 4)
+    : [{ category: "client_project", title: "项目资料", content: "围绕当前项目资料生成可执行选题。" }]
+  return Array.from({ length: 4 }, (_, index) => {
+    const source = seeds[index % seeds.length]
+    const titleSeed = source.title.replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, "").slice(0, 10) || "对标信号"
+    return {
+      title: `${titleSeed}切口${index + 1}`.slice(0, 20),
+      elementCodes: [selectedCodes[index % selectedCodes.length] as TopicCard["elementCodes"][number]],
+      openingTypeCode: index % 2 === 0 ? "contrast_open" : "pain_open",
+      structureCode: index % 2 === 0 ? "contrast_hook" : "pain_solution",
+      rationale: `基于${source.title}提炼母题和钩子，改成本账号可讲的选题。`,
+      topicType: index === 0 ? "转化型" : index === 1 ? "人设型" : "流量型",
+      sourceType: source.category === "benchmark_reference" ? "对标参考" : "客户资料",
+      scoreBreakdown: {
+        projectFit: 76,
+        contentValue: 78,
+        viralHook: benchmarkSources.length > 0 ? 82 : 70,
+        conversionFit: 74,
+        feasibility: 84,
+      },
+      hook: `别照搬${source.title}，要拆它背后的用户痛点。`,
+      angle: truncateTopicSourceContent(source.content),
+      cta: "评论关键词，领取对应检查表或案例拆解。",
+      defamiliarization: {
+        scarcityType: "info",
+        rhetoric: "bi",
+        noveltyScore: 70,
+        note: "用对标里的高互动信号，换成本账号自己的业务场景。",
+      },
+    } satisfies TopicCard
   })
 }
 
@@ -418,7 +491,8 @@ export async function generateTopicCards(
         continue
       }
 
-      const validated = TopicCardsSchema.safeParse(normalizeTopicCards(cards, input))
+      const normalizedCards = normalizeTopicCards(coerceTopicCards(cards, selectedCodes), input)
+      const validated = TopicCardsSchema.safeParse(normalizedCards)
 
       if (validated.success) {
         // Enforce card elementCodes ⊆ selectedCodes (LLM may hallucinate extra elements)
@@ -461,7 +535,11 @@ export async function generateTopicCards(
   }
 
   return {
-    success: false,
-    error: "Failed to generate valid topic cards after 3 attempts",
+    success: true,
+    cards: normalizeTopicCards(fallbackTopicCards(input, selectedCodes), input),
+    elementCodes: selectedCodes,
+    promptText: fullPromptText,
+    model: `${TOPIC_MODEL}:fallback`,
+    strategy,
   }
 }

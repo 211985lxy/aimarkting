@@ -6,6 +6,7 @@ import * as XLSX from "xlsx"
 const SUPPORTED_EXTENSIONS = new Set([
   ".txt",
   ".md",
+  ".markdown",
   ".csv",
   ".pdf",
   ".docx",
@@ -48,6 +49,7 @@ export async function parseDocument(
   switch (ext) {
     case ".txt":
     case ".md":
+    case ".markdown":
       fullText = buffer.toString("utf-8")
       break
 

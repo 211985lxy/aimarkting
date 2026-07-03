@@ -17,8 +17,6 @@ import { QuestionCard } from "@/components/competitor-diagnosis/question-card"
 import { SectionTitle } from "@/components/competitor-diagnosis/section-title"
 import { ContentStrategyEvidence } from "@/components/competitor-diagnosis/content-strategy-evidence"
 import { EvidenceDashboard } from "@/components/competitor-diagnosis/evidence-dashboard"
-import { StrategicBetSection } from "@/components/competitor-diagnosis/strategic-bet-section"
-import { FalsificationSection } from "@/components/competitor-diagnosis/falsification-section"
 import { RawReportAppendix } from "@/components/competitor-diagnosis/raw-report-appendix"
 
 // ─── Constants ──────────────────────────────────────────
@@ -180,11 +178,14 @@ function ReportView({ analysis }: { analysis: ApiCompetitorAnalysis }) {
       {/* 2. 总判断条 */}
       <VerdictBanner verdict={vm.verdict} />
 
-      {/* 3. 五层诊断 */}
+      {/* 3. 内容策略证据 */}
+      <ContentStrategyEvidence data={vm.contentStrategy} />
+
+      {/* 4. 账号诊断 */}
       <section className="space-y-4">
         <SectionTitle
-          title="五层诊断"
-          subtitle="账号资产价值由五个层面共同决定——逐层拆解强弱、证据与反证。"
+          title="账号诊断"
+          subtitle="保留关键判断和证据，少做延展推演。"
           anchor="diagnosis"
         />
         <div className="space-y-4">
@@ -194,19 +195,10 @@ function ReportView({ analysis }: { analysis: ApiCompetitorAnalysis }) {
         </div>
       </section>
 
-      {/* 4. 内容策略证据 */}
-      <ContentStrategyEvidence data={vm.contentStrategy} />
-
       {/* 5. 数据证据 */}
-      <EvidenceDashboard evidence={vm.evidence} targetUrl={analysis.targetUrl} />
+      <EvidenceDashboard evidence={vm.evidence} />
 
-      {/* 6. 战略下注 */}
-      <StrategicBetSection bets={vm.bets} />
-
-      {/* 7. 反证条件汇总 */}
-      <FalsificationSection rows={vm.falsificationSummary} />
-
-      {/* 8. 原始报告附录（折叠）*/}
+      {/* 6. 原始报告附录（折叠）*/}
       <RawReportAppendix vm={vm} />
     </div>
   )

@@ -7,7 +7,7 @@ import {
   Check,
   Clipboard,
   FileText,
-  Image,
+  Image as ImageIcon,
   Loader2,
   MessageCircle,
   Mic,
@@ -34,6 +34,7 @@ import {
   generateAimContent,
   getVideoCopyExtraction,
   checkScriptQuality,
+  polishScript,
   chatAim,
   chatAimStream,
   createKnowledge,
@@ -59,85 +60,35 @@ import {
   type AimAgentId,
   type AimAgentMeta,
 } from "@/lib/aim-ui-config"
+import {
+  buildAimGuideTemplate,
+  buildAimNextActionPrompt,
+  getAimAgentGuide,
+  type AimAgentGuide,
+  type AimNextAction,
+} from "@/lib/aim-agent-guides"
 import { useAimWorkspaceStore } from "@/lib/aim-workspace-store"
+import { buildBenchmarkLengthRule, buildBenchmarkRecreationSopBlock } from "@/lib/aim-benchmark-length"
+import { assessBenchmarkRewrite } from "@/lib/aim-benchmark-quality"
 import { shouldOpenDeepCopywriter } from "@/lib/video-copy-routing"
+import { cleanVideoCopyAnalysisMarkdown } from "@/lib/video-copy-display"
+import { detectAimWorkbenchCommand, type AimWorkbenchCommand } from "@/lib/aim-workbench-commands"
+import {
+  EDITOR_PANEL_DEFAULT_WIDTH,
+  applyFirstMatchingStructureToReference,
+  applySelectionReplacement,
+  clampEditorPanelWidth,
+  extractEditorDraftFromAssistantText,
+  extractReplacementDraft,
+  type AimEditorContext,
+  type TextSelectionRange,
+} from "@/lib/aim-editor"
 
-interface AimAgentOption extends AimAgentMeta {
-  intro: string
-  placeholder: string
-  defaultInstruction: string
-  quickPrompts: string[]
-  primaryActionLabel: string
-}
-
-/** 各智能体的运行时扩展字段（id/title/description/icon/defaultFormats 来自共享配置 aim-ui-config） */
-const AGENT_EXTRAS: Record<AimAgentId, Omit<AimAgentOption, keyof AimAgentMeta>> = {
-  ip_video: {
-    intro: "我是你的内容生产官。选题、脚本、朋友圈、长文和发布前质检都在这里处理，先把素材、主题或老板口述丢进来。",
-    placeholder: "说说今天要生产什么内容：选题、原始想法、老板口述、客户问题都可以…",
-    defaultInstruction: "去 AI 味，保留真人表达的犹豫、判断和具体细节，少用套话。先判断内容类型，再输出适合发布的内容交付物。",
-    quickPrompts: [
-      "把这个选题写成短视频口播，并顺手给一版朋友圈承接。",
-      "粘贴老板在会上的金句片段，整理成可拍脚本和拍摄交接单。",
-    ],
-    primaryActionLabel: "生成内容",
-  },
-  deep_copywriter: {
-    intro: "我是你的深度文案官。把想法、视频原文、老板口述或对标文案给我，我只做纯粹的长篇文案创作，先搭框架，再写成一篇完整长文。",
-    placeholder: "粘贴想法、视频原文、老板口述、对标文案或想借势的热点，我先帮你搭文案框架…",
-    defaultInstruction: "只做长篇文案创作。先输出文案框架，包含核心观点、目标读者、情绪入口、正文推进结构、开头方向；再用2-3个半开放选择题挖出用户真实观点。每题选项必须按 A. / B. / C. / D. 独立成行输出，方便用户点击。用户确认框架后，只输出一篇完整长文正文，正文结束立刻停止；不输出拆分方向、私域话术、任何平台分发内容或“你看是否符合”这类确认尾句。热点只能自然融合，禁止硬蹭或编造。",
-    quickPrompts: [
-      "根据这段视频原文，先搭文案框架，再打磨成适合我表达的一篇长文。",
-      "我有一个观点，先帮我挖出真实态度，再写成开头有力量、结构完整的一篇长文。",
-    ],
-    primaryActionLabel: "生成长篇文案",
-  },
-  business_diagnosis: {
-    intro: "我是你的定位策划官。告诉我你的产品、卖给谁、目前怎么获客、卡在哪，我会输出 IP 定位、内容定位和成交路径建议。",
-    placeholder: "说说你的主营业务、目标客户，以及当前获卡在哪…",
-    defaultInstruction: "从定位清晰度、痛点匹配度、成交链路顺畅度三个维度进行诊断，给出具体且可落地的改进建议，采用诊断报告格式。",
-    quickPrompts: [
-      "ERP 软件定位诊断：客单价 5 万，目前依赖熟人转介绍，怎么开启线上精准获客？",
-      "社区宠物店引流：周边有竞品竞争，客单价和复购率双低，如何破局？",
-    ],
-    primaryActionLabel: "生成诊断报告",
-  },
-  business_system_diagnosis: {
-    intro: "我是你的商业诊断官。告诉我业务类型、现状数据、卡点和目标，我会诊断商业模式、流量转化、交付结构和核心矛盾。",
-    placeholder: "说说你的业务、目前数据、卡在哪、想达到什么结果…",
-    defaultInstruction: "按商业诊断官结构输出：业务现状说明、模糊概念澄清、生意系统四层诊断、核心矛盾判断、行业参照校验、多视角复核、三条调整路径、本周最小动作。",
-    quickPrompts: [
-      "老板 IP 做了三个月没成交，帮我诊断问题。",
-      "工程服务账号有播放但没客户，帮我找核心矛盾。",
-      "我有产品但不知道怎么获客和成交，帮我做生意体检。",
-    ],
-    primaryActionLabel: "生成诊断报告",
-  },
-  content_review: {
-    intro: "我是你的数据复盘官。把已发布内容、播放互动数据、评论和转化情况发给我，我会判断这条内容为什么有效或失效，并给出下一轮优化和复用方向。",
-    placeholder: "贴一条已发布内容的数据、评论、脚本或链接复盘记录…",
-    defaultInstruction: "按发布后复盘结构输出：表现判断、成功或失败原因、下一轮优化动作、可复用资产、可延展新选题、是否沉淀进知识库。不要泛泛夸奖，必须给明确判断。",
-    quickPrompts: [
-      "这条视频播放高但咨询少，帮我复盘问题并给下一条优化方向。",
-      "这条内容评论区反馈不错，帮我拆成可复用选题和朋友圈文案方向。",
-    ],
-    primaryActionLabel: "生成复盘报告",
-  },
-  persona: {
-    intro: "我来一步步帮你梳理来时路：经历成就 → 低谷转折 → 顿悟 → 现在的产品 → 目标用户 → 标志案例。聊完直接给你置顶视频脚本，还能逐句改。",
-    placeholder: "想到什么说什么，乱也没关系。从『某年某月，我…』开始最省事…",
-    defaultInstruction: "引导式：每轮只追问一个最关键的缺口并给回答示例，回复必须以【进度 XX%】开头；6 维收齐（100%）后产出『来时路总结 + 逐句口播与配图的置顶视频脚本』；用户说『第N句改X』时只改对应句。口语真诚，避免 AI 腔和过时热点。",
-    quickPrompts: [
-      "从『某年某月，我出生在…』开始讲我的来时路",
-      "我想做一条置顶视频讲清楚我是谁、为什么做现在这件事",
-    ],
-    primaryActionLabel: "梳理来时路",
-  },
-}
+interface AimAgentOption extends AimAgentMeta, AimAgentGuide {}
 
 const AGENT_OPTIONS: AimAgentOption[] = AIM_AGENT_OPTIONS.map((meta) => ({
   ...meta,
-  ...AGENT_EXTRAS[meta.id],
+  ...getAimAgentGuide(meta.id),
 }))
 
 const FORMAT_LABELS: Record<ContentFormat, string> = {
@@ -152,6 +103,90 @@ const FORMAT_LABELS: Record<ContentFormat, string> = {
 }
 
 const LOADING_MESSAGES = ["分析输入...", "检索知识库...", "生成内容..."]
+const SOFT_ACTION_CLASS = "h-7 rounded-md border-0 bg-muted/45 px-2 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
+const ACTIVE_SOFT_ACTION_CLASS = "h-7 rounded-md border-0 bg-primary/10 px-2 text-xs text-primary shadow-none hover:bg-primary/15"
+
+interface EditorPanelLabels {
+  title: string
+  collapsedTitle: string
+  referenceTitle: string
+  referencePlaceholder: string
+  draftTitle: string
+  draftPlaceholder: string
+  currentLabel: string
+  selectActionLabel: string
+  documentType: "copy" | "plan"
+}
+
+const COPY_EDITOR_LABELS: EditorPanelLabels = {
+  title: "文案编辑",
+  collapsedTitle: "展开文案编辑",
+  referenceTitle: "对标文案",
+  referencePlaceholder: "暂无对标原文案",
+  draftTitle: "我的稿子",
+  draftPlaceholder: "AI 生成的稿子会出现在这里，也可以直接粘贴/编辑。",
+  currentLabel: "当前稿",
+  selectActionLabel: "修改选中文案",
+  documentType: "copy",
+}
+
+function getEditorPanelLabels(agentId: AimAgentId): EditorPanelLabels {
+  if (agentId === "ip_video" || agentId === "deep_copywriter") return COPY_EDITOR_LABELS
+
+  if (agentId === "business_system_diagnosis") {
+    return {
+      title: "诊断案编辑",
+      collapsedTitle: "展开诊断案编辑",
+      referenceTitle: "业务材料",
+      referencePlaceholder: "暂无业务材料",
+      draftTitle: "我的诊断案",
+      draftPlaceholder: "AI 生成的诊断案会出现在这里，也可以直接粘贴/编辑。",
+      currentLabel: "当前诊断案",
+      selectActionLabel: "修改选中诊断案",
+      documentType: "plan",
+    }
+  }
+
+  if (agentId === "persona") {
+    return {
+      title: "人设策划案编辑",
+      collapsedTitle: "展开人设策划案编辑",
+      referenceTitle: "人物材料",
+      referencePlaceholder: "暂无人物材料",
+      draftTitle: "我的人设策划案",
+      draftPlaceholder: "AI 生成的人设策划案会出现在这里，也可以直接粘贴/编辑。",
+      currentLabel: "当前人设策划案",
+      selectActionLabel: "修改选中策划案",
+      documentType: "plan",
+    }
+  }
+
+  if (agentId === "business_diagnosis") {
+    return {
+      title: "策划案编辑",
+      collapsedTitle: "展开策划案编辑",
+      referenceTitle: "参考材料",
+      referencePlaceholder: "暂无参考材料",
+      draftTitle: "我的策划案",
+      draftPlaceholder: "AI 生成的定位策划案会出现在这里，也可以直接粘贴/编辑。",
+      currentLabel: "当前策划案",
+      selectActionLabel: "修改选中策划案",
+      documentType: "plan",
+    }
+  }
+
+  return {
+    title: "策划案编辑",
+    collapsedTitle: "展开策划案编辑",
+    referenceTitle: "参考材料",
+    referencePlaceholder: "暂无参考材料",
+    draftTitle: "我的策划案",
+    draftPlaceholder: "AI 生成的策划案会出现在这里，也可以直接粘贴/编辑。",
+    currentLabel: "当前策划案",
+    selectActionLabel: "修改选中策划案",
+    documentType: "plan",
+  }
+}
 
 const WORKFLOW_STATUS_OPTIONS = [
   { value: "draft", label: "草稿" },
@@ -230,6 +265,7 @@ interface ChatMessage {
   agentId?: string | null
   deliverables?: AimGenerateResponse | null
   qualityReport?: QualityCheckReport | null
+  editorApply?: { range: TextSelectionRange } | null
 }
 
 function ChoiceStepper({
@@ -290,6 +326,66 @@ function ChoiceStepper({
   )
 }
 
+function AgentGuidePanel({
+  agent,
+  onUseTemplate,
+  onUseVariant,
+}: {
+  agent: AimAgentOption
+  onUseTemplate: () => void
+  onUseVariant: (prompt: string) => void
+}) {
+  return (
+    <div className="w-full space-y-3 rounded-xl border bg-card/50 p-3 text-left">
+      <div>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">适合场景</p>
+        <div className="flex flex-wrap gap-1.5">
+          {agent.scenarios.map((item) => (
+            <Badge key={item} variant="secondary" className="text-[10px]">{item}</Badge>
+          ))}
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="text-xs font-medium text-muted-foreground">输入模板</p>
+            <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={onUseTemplate}>
+              填入
+            </Button>
+          </div>
+          <div className="space-y-1 text-xs text-muted-foreground">
+            {agent.inputTemplate.map((field) => (
+              <p key={field.label}><span className="text-foreground/80">{field.label}</span>：{field.placeholder}</p>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-medium text-muted-foreground">输出资产</p>
+          <div className="space-y-1 text-xs text-muted-foreground">
+            {agent.outputAssets.map((item) => <p key={item}>- {item}</p>)}
+          </div>
+          {agent.copyVariants && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {agent.copyVariants.map((variant) => (
+                <Button
+                  key={variant.id}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => onUseVariant(variant.prompt)}
+                >
+                  {variant.label}
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const AIM_DRAFT_STORAGE_KEY = "aim-workbench-draft-v1"
 
 interface AimDraft {
@@ -298,6 +394,13 @@ interface AimDraft {
   input: string
   messages: ChatMessage[]
   videoCopyExtractionId?: string
+  sourceOriginalText?: string
+  sourceAnalysisText?: string
+  editorText?: string
+  editorFormat?: ContentFormat
+  editorSourceMessageId?: string
+  editorPanelWidth?: number
+  editorPanelOpen?: boolean
 }
 
 function loadAimDraft(): AimDraft | null {
@@ -313,6 +416,13 @@ function loadAimDraft(): AimDraft | null {
       input: typeof draft.input === "string" ? draft.input : "",
       messages: draft.messages,
       videoCopyExtractionId: typeof draft.videoCopyExtractionId === "string" ? draft.videoCopyExtractionId : undefined,
+      sourceOriginalText: typeof draft.sourceOriginalText === "string" ? draft.sourceOriginalText : undefined,
+      sourceAnalysisText: typeof draft.sourceAnalysisText === "string" ? draft.sourceAnalysisText : undefined,
+      editorText: typeof draft.editorText === "string" ? draft.editorText : undefined,
+      editorFormat: typeof draft.editorFormat === "string" ? draft.editorFormat as ContentFormat : undefined,
+      editorSourceMessageId: typeof draft.editorSourceMessageId === "string" ? draft.editorSourceMessageId : undefined,
+      editorPanelWidth: typeof draft.editorPanelWidth === "number" ? clampEditorPanelWidth(draft.editorPanelWidth) : undefined,
+      editorPanelOpen: typeof draft.editorPanelOpen === "boolean" ? draft.editorPanelOpen : undefined,
     }
   } catch {
     return null
@@ -322,7 +432,13 @@ function loadAimDraft(): AimDraft | null {
 function saveAimDraft(draft: AimDraft) {
   if (typeof window === "undefined") return
   try {
-    if (!draft.input.trim() && draft.messages.length === 0) {
+    if (
+      !draft.input.trim()
+      && draft.messages.length === 0
+      && !draft.editorText?.trim()
+      && !draft.sourceOriginalText?.trim()
+      && !draft.sourceAnalysisText?.trim()
+    ) {
       window.sessionStorage.removeItem(AIM_DRAFT_STORAGE_KEY)
       return
     }
@@ -330,6 +446,31 @@ function saveAimDraft(draft: AimDraft) {
   } catch {
     // ponytail: losing a browser draft is better than breaking the editor.
   }
+}
+
+function formatAnalysisResultForPrompt(analysisResult: unknown) {
+  if (!analysisResult) return null
+  if (typeof analysisResult === "object" && "markdown" in analysisResult) {
+    const markdown = (analysisResult as { markdown?: unknown }).markdown
+    if (typeof markdown === "string" && markdown.trim()) return cleanVideoCopyAnalysisMarkdown(markdown)
+  }
+  return JSON.stringify(analysisResult, null, 2)
+}
+
+function extractBenchmarkOriginalText(text: string) {
+  const marker = text.match(/对标原文[：:]/)
+  if (marker?.index == null) return ""
+  const start = marker.index + marker[0].length
+  const rest = text.slice(start).trim()
+  const nextSection = rest.search(/\n(?:已有拆解|结构化拆解|改写原则|创作原则|===|来源链接|硬规则)[：:：]?/)
+  return (nextSection >= 0 ? rest.slice(0, nextSection) : rest).trim()
+}
+
+function extractBenchmarkAnalysisText(text: string) {
+  const marker = text.match(/(?:已有拆解|结构化拆解)[：:]/)
+  if (marker?.index != null) return text.slice(marker.index + marker[0].length).trim()
+  const numberedStructure = text.match(/(?:^|\n)\d+[.、]\s*.+\n内容[：:]/)
+  return numberedStructure?.index == null ? "" : text.slice(numberedStructure.index).trim()
 }
 
 function getHistoryContents(item: AimGeneration) {
@@ -341,6 +482,155 @@ function getHistoryContents(item: AimGeneration) {
     item.shootingBrief ? { format: "shooting_brief" as const, content: item.shootingBrief } : null,
     item.rawCopy ? { format: "raw_copy" as const, content: item.rawCopy } : null,
   ].filter(Boolean) as Array<{ format: ContentFormat; content: string }>
+}
+
+interface EditorSelection {
+  text: string
+  range: TextSelectionRange
+}
+
+function readTextareaSelection(element: HTMLTextAreaElement): EditorSelection {
+  const range = { start: element.selectionStart, end: element.selectionEnd }
+  return { text: element.value.slice(range.start, range.end), range }
+}
+
+function BenchmarkEditorPanel({
+  open,
+  width,
+  labels,
+  referenceText,
+  editorText,
+  editorFormat,
+  onOpen,
+  onClose,
+  onWidthChange,
+  onEditorTextChange,
+  onReferenceSelection,
+  onDraftSelection,
+  onSave,
+}: {
+  open: boolean
+  width: number
+  labels: EditorPanelLabels
+  referenceText: string
+  editorText: string
+  editorFormat?: ContentFormat
+  onOpen: () => void
+  onClose: () => void
+  onWidthChange: (width: number) => void
+  onEditorTextChange: (text: string) => void
+  onReferenceSelection: (selection: EditorSelection) => void
+  onDraftSelection: (selection: EditorSelection) => void
+  onSave: () => void
+}) {
+  const splitRef = useRef<HTMLDivElement>(null)
+  const [referencePercent, setReferencePercent] = useState(50)
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="flex w-9 shrink-0 flex-col items-center justify-center gap-2 border-l bg-background text-xs text-muted-foreground hover:bg-muted/40"
+        onClick={onOpen}
+        title={labels.collapsedTitle}
+      >
+        <FileText className="h-4 w-4" />
+        <span className="[writing-mode:vertical-rl]">{editorText.length}字</span>
+      </button>
+    )
+  }
+
+  return (
+    <aside
+      className="relative flex shrink-0 flex-col border-l bg-background"
+      style={{ width }}
+    >
+      <div
+        className="absolute left-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/30"
+        onPointerDown={(event) => {
+          event.preventDefault()
+          const move = (moveEvent: PointerEvent) => {
+            onWidthChange(clampEditorPanelWidth(window.innerWidth - moveEvent.clientX))
+          }
+          const up = () => {
+            window.removeEventListener("pointermove", move)
+            window.removeEventListener("pointerup", up)
+          }
+          window.addEventListener("pointermove", move)
+          window.addEventListener("pointerup", up)
+        }}
+      />
+      <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">{labels.title}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {editorFormat ? FORMAT_LABELS[editorFormat] : labels.currentLabel} · {editorText.length} 字
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="ghost" className={ACTIVE_SOFT_ACTION_CLASS} onClick={onSave}>
+            保存
+          </Button>
+          <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={onClose}>
+            隐藏
+          </Button>
+        </div>
+      </div>
+      <div
+        ref={splitRef}
+        className="grid min-h-0 flex-1 bg-muted/15"
+        style={{ gridTemplateRows: `${referencePercent}% 6px minmax(0, 1fr)` }}
+      >
+        <section className="flex min-h-0 flex-col px-4 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">{labels.referenceTitle}</span>
+            {referenceText ? <span className="text-[11px] text-muted-foreground">{referenceText.length} 字</span> : null}
+          </div>
+          <textarea
+            readOnly
+            className="min-h-0 flex-1 resize-none rounded-md border border-transparent bg-background/70 p-3 text-sm leading-6 outline-none focus:border-primary/25"
+            value={referenceText}
+            placeholder={labels.referencePlaceholder}
+            onSelect={(event) => onReferenceSelection(readTextareaSelection(event.currentTarget))}
+          />
+        </section>
+        <div
+          className="group flex cursor-row-resize items-center bg-transparent transition-colors hover:bg-primary/5"
+          title="拖动调整上下区域高度"
+          onPointerDown={(event) => {
+            event.preventDefault()
+            const box = splitRef.current?.getBoundingClientRect()
+            if (!box) return
+            const move = (moveEvent: PointerEvent) => {
+              const next = ((moveEvent.clientY - box.top) / box.height) * 100
+              setReferencePercent(Math.min(80, Math.max(20, next)))
+            }
+            const up = () => {
+              window.removeEventListener("pointermove", move)
+              window.removeEventListener("pointerup", up)
+            }
+            window.addEventListener("pointermove", move)
+            window.addEventListener("pointerup", up)
+          }}
+        >
+          <div className="h-px w-full bg-border/60 transition-colors group-hover:bg-primary/35" />
+        </div>
+        <section className="flex min-h-0 flex-col px-4 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">{labels.draftTitle}</span>
+            <span className="text-[11px] text-muted-foreground">{editorText.length} 字</span>
+          </div>
+          <textarea
+            className="min-h-0 flex-1 resize-none rounded-md border border-transparent bg-background p-3 text-sm leading-6 outline-none focus:border-primary/25"
+            value={editorText}
+            onChange={(event) => onEditorTextChange(event.target.value)}
+            onSelect={(event) => onDraftSelection(readTextareaSelection(event.currentTarget))}
+            placeholder={labels.draftPlaceholder}
+          />
+        </section>
+      </div>
+    </aside>
+  )
 }
 
 const ZhuJianContent = memo(function ZhuJianContent({ text }: { text: string }) {
@@ -394,54 +684,32 @@ const ZhuJianContent = memo(function ZhuJianContent({ text }: { text: string }) 
 /** 交付物气泡：在对话中渲染 generateAimContent 的多格式结果 */
 function DeliverableBubble({
   deliverables,
+  nextActions,
   onRepurpose,
   onQuality,
   onMarkStatus,
+  onNextAction,
   isBusy,
-  onUpdateResults,
+  onEditResult,
   onCompileToWiki,
 }: {
   deliverables: AimGenerateResponse
+  nextActions?: AimNextAction[]
   onRepurpose: (format: ContentFormat) => void
   onQuality: () => void
   onMarkStatus: (status: string) => void
+  onNextAction?: (action: AimNextAction, content: string) => void
   isBusy: boolean
-  onUpdateResults?: (newResults: AimGenerateResponse["results"]) => void
+  onEditResult?: (format: ContentFormat, content: string) => void
   onCompileToWiki?: () => void
 }) {
   const [activeTab, setActiveTab] = useState<ContentFormat>(deliverables.results[0]?.format || "raw_copy")
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null)
-  
-  const [isEditing, setIsEditing] = useState(false)
-  const [editingText, setEditingText] = useState("")
 
   const activeFormat = deliverables.results.some((r) => r.format === activeTab)
     ? activeTab
     : deliverables.results[0]?.format || "raw_copy"
-
-  useEffect(() => {
-    startTransition(() => setIsEditing(false))
-  }, [activeTab, deliverables])
-
-  const handleStartEdit = (content: string) => {
-    setEditingText(content)
-    setIsEditing(true)
-  }
-
-  const handleSaveEdit = (format: ContentFormat) => {
-    if (!onUpdateResults) return
-    const newResults = deliverables.results.map((r) =>
-      r.format === format
-        ? { ...r, content: editingText, wordCount: editingText.length }
-        : r
-    )
-    onUpdateResults(newResults)
-    setIsEditing(false)
-  }
-
-  const handleCancelEdit = () => {
-    setIsEditing(false)
-  }
+  const activeResult = deliverables.results.find((r) => r.format === activeFormat) || deliverables.results[0]
 
   async function copyText(content: string, format?: string) {
     await navigator.clipboard.writeText(content)
@@ -456,7 +724,10 @@ function DeliverableBubble({
   const hasWechat = deliverables.results.some((r) => r.format === "wechat_article")
   const hasVideo = deliverables.results.some((r) => r.format === "video_script")
   const hasKoubo = deliverables.results.some((r) => r.format === "koubo_script")
+  const hasPublishScript = hasVideo || hasKoubo
   const hasXiaohongshu = deliverables.results.some((r) => r.format === "xiaohongshu_post")
+  const hasCommunity = deliverables.results.some((r) => r.format === "community_message")
+  const hasShooting = deliverables.results.some((r) => r.format === "shooting_brief")
 
   return (
     <div className="mt-2 w-full">
@@ -478,12 +749,12 @@ function DeliverableBubble({
         flat
       >
         <Tabs value={activeFormat} onValueChange={(v) => setActiveTab(v as ContentFormat)} className="w-full">
-          <TabsList className="flex h-auto flex-wrap justify-start bg-transparent p-0 gap-1 mb-4 border-b border-border/40 pb-1 rounded-none">
+          <TabsList className="mb-3 flex h-auto flex-wrap justify-start gap-1 rounded-none bg-transparent p-0">
             {deliverables.results.map((item) => (
               <TabsTrigger
                 key={item.format}
                 value={item.format}
-                className="text-xs px-3 py-1.5 rounded-md data-[state=active]:bg-muted/80 data-[state=active]:shadow-none"
+                className="rounded-md px-2.5 py-1.5 text-xs text-muted-foreground data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-none"
               >
                 {FORMAT_LABELS[item.format]}
               </TabsTrigger>
@@ -493,60 +764,27 @@ function DeliverableBubble({
             <TabsContent key={item.format} value={item.format} className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="bg-muted/50 text-[11px]">{FORMAT_LABELS[item.format]} · {item.wordCount} 字</Badge>
-                  {isEditing && item.format === activeFormat && (
-                    <span className="text-[10px] text-primary animate-pulse font-medium">编辑中...</span>
-                  )}
+                  <span className="text-xs text-muted-foreground">{FORMAT_LABELS[item.format]} · {item.wordCount} 字</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  {isEditing && item.format === activeFormat ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="h-7 text-xs px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-                        onClick={() => handleSaveEdit(item.format)}
-                      >
-                        保存
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-xs px-2 text-muted-foreground"
-                        onClick={handleCancelEdit}
-                      >
-                        取消
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      {onUpdateResults && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs px-2.5"
-                          onClick={() => handleStartEdit(item.content)}
-                        >
-                          编辑
-                        </Button>
-                      )}
-                      <Button size="sm" variant="outline" className="h-7 text-xs px-2.5" onClick={() => copyText(item.content, item.format)}>
-                        {copiedFormat === item.format ? <Check className="h-3.5 w-3.5 mr-1" /> : <Clipboard className="h-3.5 w-3.5 mr-1" />}
-                        复制
-                      </Button>
-                    </>
+                  {onEditResult && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className={SOFT_ACTION_CLASS}
+                      onClick={() => onEditResult(item.format, item.content)}
+                    >
+                      编辑
+                    </Button>
                   )}
+                  <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => copyText(item.content, item.format)}>
+                    {copiedFormat === item.format ? <Check className="h-3.5 w-3.5 mr-1" /> : <Clipboard className="h-3.5 w-3.5 mr-1" />}
+                    复制
+                  </Button>
                 </div>
               </div>
               <div className="max-h-[600px] overflow-y-auto py-1">
-                {isEditing && item.format === activeFormat ? (
-                  <textarea
-                    className="w-full min-h-[350px] max-h-[500px] p-3 text-sm sm:text-base leading-relaxed bg-muted/10 text-foreground border border-border/80 rounded-lg focus:ring-1 focus:ring-primary focus:border-transparent outline-none font-sans resize-y"
-                    value={editingText}
-                    onChange={(e) => setEditingText(e.target.value)}
-                    placeholder="请输入并修改文案内容..."
-                  />
-                ) : item.format === "video_script" ? (
+                {item.format === "video_script" ? (
                   <ZhuJianContent text={item.content} />
                 ) : (
                   <MarkdownRenderer content={item.content} />
@@ -558,30 +796,74 @@ function DeliverableBubble({
 
         <ActionStrip>
           {!hasKoubo && hasVideo && (
-            <Button size="sm" variant="outline" onClick={() => onRepurpose("koubo_script")} disabled={isBusy}>
+            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => onRepurpose("koubo_script")} disabled={isBusy}>
               <Mic className="h-3.5 w-3.5 mr-1" /> 口播文案
             </Button>
           )}
           {!hasXiaohongshu && hasVideo && (
-            <Button size="sm" variant="outline" onClick={() => onRepurpose("xiaohongshu_post")} disabled={isBusy}>
-              <Image className="h-3.5 w-3.5 mr-1" /> 小红书图文
+            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => onRepurpose("xiaohongshu_post")} disabled={isBusy}>
+              <ImageIcon className="h-3.5 w-3.5 mr-1" /> 小红书图文
+            </Button>
+          )}
+          {!hasShooting && hasVideo && (
+            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => onRepurpose("shooting_brief")} disabled={isBusy}>
+              <FileText className="h-3.5 w-3.5 mr-1" /> 拍摄交接单
             </Button>
           )}
           {!hasMoments && hasVideo && (
-            <Button size="sm" variant="outline" onClick={() => onRepurpose("moments_post")} disabled={isBusy}>
+            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => onRepurpose("moments_post")} disabled={isBusy}>
               <MessageCircle className="h-3.5 w-3.5 mr-1" /> 朋友圈文案
             </Button>
           )}
+          {!hasCommunity && hasVideo && (
+            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => onRepurpose("community_message")} disabled={isBusy}>
+              <MessageCircle className="h-3.5 w-3.5 mr-1" /> 社群运营
+            </Button>
+          )}
           {!hasWechat && hasVideo && (
-            <Button size="sm" variant="outline" onClick={() => onRepurpose("wechat_article")} disabled={isBusy}>
+            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => onRepurpose("wechat_article")} disabled={isBusy}>
               <FileText className="h-3.5 w-3.5 mr-1" /> 公众号文章
             </Button>
           )}
           {onCompileToWiki && (
-            <Button size="sm" variant="outline" onClick={onCompileToWiki} disabled={isBusy}>
+            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={onCompileToWiki} disabled={isBusy}>
               <BookOpen className="h-3.5 w-3.5 mr-1" /> 编译进 IP 维基
             </Button>
           )}
+          {nextActions?.map((action) => (
+            <Button
+              key={action.id}
+              size="sm"
+              variant="ghost"
+              className={SOFT_ACTION_CLASS}
+              onClick={() => {
+                if (action.id === "publish_check") {
+                  onQuality()
+                  return
+                }
+                if (activeResult) onNextAction?.(action, activeResult.content)
+              }}
+              disabled={isBusy || !activeResult?.content.trim() || (action.id === "publish_check" && !hasPublishScript)}
+            >
+              {action.id === "publish_check" && <ShieldCheck className="h-3.5 w-3.5 mr-1" />}
+              {action.label}
+            </Button>
+          ))}
+          {!nextActions?.some((action) => action.id === "publish_check") && (
+            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={onQuality} disabled={isBusy || !hasPublishScript}>
+              <ShieldCheck className="h-3.5 w-3.5 mr-1" /> 发布前自查
+            </Button>
+          )}
+          <Select onValueChange={(value) => { if (typeof value === "string") onMarkStatus(value) }}>
+            <SelectTrigger className="h-7 w-[88px] border-0 bg-muted/45 text-xs text-muted-foreground shadow-none hover:bg-muted">
+              <SelectValue placeholder="状态" />
+            </SelectTrigger>
+            <SelectContent>
+              {WORKFLOW_STATUS_OPTIONS.map((item) => (
+                <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </ActionStrip>
       </AiResultPanel>
     </div>
@@ -604,6 +886,15 @@ export default function AimPage() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialDraft?.messages || [])
   const [input, setInput] = useState(() => initialDraft?.input || "")
   const [sourceVideoCopyExtractionId, setSourceVideoCopyExtractionId] = useState<string | undefined>(() => initialDraft?.videoCopyExtractionId)
+  const [sourceOriginalText, setSourceOriginalText] = useState(() => initialDraft?.sourceOriginalText || "")
+  const [sourceAnalysisText, setSourceAnalysisText] = useState(() => initialDraft?.sourceAnalysisText || "")
+  const [editorText, setEditorText] = useState(() => initialDraft?.editorText || "")
+  const [editorFormat, setEditorFormat] = useState<ContentFormat | undefined>(() => initialDraft?.editorFormat)
+  const [editorSourceMessageId, setEditorSourceMessageId] = useState<string | undefined>(() => initialDraft?.editorSourceMessageId)
+  const [editorPanelWidth, setEditorPanelWidth] = useState(() => initialDraft?.editorPanelWidth ?? EDITOR_PANEL_DEFAULT_WIDTH)
+  const [editorPanelOpen, setEditorPanelOpen] = useState(() => initialDraft?.editorPanelOpen ?? true)
+  const [referenceSelection, setReferenceSelection] = useState<EditorSelection>({ text: "", range: { start: 0, end: 0 } })
+  const [draftSelection, setDraftSelection] = useState<EditorSelection>({ text: "", range: { start: 0, end: 0 } })
   const [isThinking, setIsThinking] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isQualityChecking, setIsQualityChecking] = useState(false)
@@ -614,7 +905,7 @@ export default function AimPage() {
     open: false,
     context: null,
   })
-  const [projectEnabled, setProjectEnabled] = useState(true)
+  const [projectEnabled, setProjectEnabled] = useState(false)
   const [isEvolving, setIsEvolving] = useState(false)
   const [evolutionSuggestions, setEvolutionSuggestions] = useState<AimEvolutionSuggestion[]>([])
 
@@ -626,6 +917,7 @@ export default function AimPage() {
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const requestAbortRef = useRef<AbortController | null>(null)
+  const pendingScrollMessageIdRef = useRef<string | null>(null)
 
   const agent = useMemo(() => {
     const baseAgent = AGENT_OPTIONS.find((a) => a.id === selectedAgentId)!
@@ -633,20 +925,14 @@ export default function AimPage() {
       return {
         ...baseAgent,
         title: "内容生产官 · 内容资产包",
-        intro: "我是内容生产官的内容资产包模式。一键为你的选题、对标文案或原始想法生成短视频脚本、拍摄交接单、朋友圈、社群运营、公众号文章全套宣发资产。",
-        placeholder: "说说今天要生产什么内容：选题、原始想法、对标文案、老板口述均可，我将为您一键生成全套内容资产包...",
-        defaultFormats: [
-          "video_script" as const,
-          "shooting_brief" as const,
-          "moments_post" as const,
-          "community_message" as const,
-          "wechat_article" as const,
-        ],
+        intro: "我是内容生产官的内容资产包模式。先生成短视频脚本，拍摄交接单、朋友圈、社群运营、公众号文章可按需点击派生。",
+        placeholder: "说说今天要生产什么内容：选题、原始想法、对标文案、老板口述均可，我先生成主脚本...",
+        defaultFormats: ["video_script" as const],
         quickPrompts: [
-          "把这个选题生成全套内容资产包（含短视频脚本、朋友圈、公众号等）。",
-          "基于老板的这段金句，一键输出全套宣发资产包。",
+          "把这个选题先生成短视频脚本。",
+          "基于老板的这段金句，先输出一版可拍脚本。",
         ],
-        primaryActionLabel: "生成全套资产包",
+        primaryActionLabel: "生成口播文案",
       }
     }
     if (selectedAgentId === "ip_video") {
@@ -661,6 +947,55 @@ export default function AimPage() {
     return baseAgent
   }, [selectedAgentId, modeParam])
 
+  const selectedProject = useMemo(
+    () => projects.find((p) => p.id === selectedProjectId),
+    [projects, selectedProjectId],
+  )
+
+  const editorPanelLabels = useMemo(
+    () => getEditorPanelLabels(selectedAgentId),
+    [selectedAgentId],
+  )
+
+  const workStage = selectedAgentId === "business_diagnosis"
+    ? "选题定位策划"
+    : selectedAgentId === "persona"
+      ? "来时路梳理"
+      : selectedAgentId === "content_review"
+        ? "发布质检"
+        : selectedAgentId === "business_system_diagnosis"
+          ? "商业诊断"
+          : selectedAgentId === "deep_copywriter"
+            ? "深度文案"
+            : "内容生产"
+
+  const hasEditorSelection = Boolean(referenceSelection.text.trim() || draftSelection.text.trim())
+
+  const materialStatus = [
+    projectEnabled && selectedProject ? "客户资料已读取" : projectEnabled ? "客户资料待选择" : "纯文案模式",
+    selectedAgentId === "business_diagnosis" ? "市场洞察可匹配" : null,
+    sourceVideoCopyExtractionId ? `${editorPanelLabels.referenceTitle}已带入` : null,
+    editorText.trim() ? `${editorPanelLabels.currentLabel}可编辑` : null,
+  ].filter(Boolean) as string[]
+
+  const analysisTextCandidates = useMemo(() => {
+    const candidates = []
+    if (sourceAnalysisText.trim()) candidates.push(sourceAnalysisText)
+    const inputAnalysis = extractBenchmarkAnalysisText(input)
+    if (inputAnalysis) candidates.push(inputAnalysis)
+    for (const message of [...messages].reverse()) {
+      if (message.role !== "user") continue
+      const messageAnalysis = extractBenchmarkAnalysisText(message.content)
+      if (messageAnalysis) candidates.push(messageAnalysis)
+    }
+    return candidates
+  }, [input, messages, sourceAnalysisText])
+
+  const annotatedReferenceText = useMemo(
+    () => applyFirstMatchingStructureToReference(sourceOriginalText, analysisTextCandidates),
+    [analysisTextCandidates, sourceOriginalText],
+  )
+
   const { isRecording, isTranscribing, startRecording, stopRecording } = useAudioRecorder({
     transcribeFn: transcribeAudio,
     onTranscribeSuccess: (text) => setInput((prev) => (prev ? `${prev}\n${text}` : text)),
@@ -671,15 +1006,53 @@ export default function AimPage() {
       .then((items) => {
         setProjects(items)
         setSelectedProjectId((current) => current || items[0]?.id || "")
+        setProjectEnabled(items.length > 0)
       })
-      .catch(() => {})
+      .catch(() => setProjectEnabled(false))
   }, [])
 
   const lastAgentParamRef = useRef(agentParam)
 
   useEffect(() => {
-    saveAimDraft({ selectedAgentId, selectedProjectId, input, messages, videoCopyExtractionId: sourceVideoCopyExtractionId })
-  }, [input, messages, selectedAgentId, selectedProjectId, sourceVideoCopyExtractionId])
+    saveAimDraft({
+      selectedAgentId,
+      selectedProjectId,
+      input,
+      messages,
+      videoCopyExtractionId: sourceVideoCopyExtractionId,
+      sourceOriginalText,
+      sourceAnalysisText,
+      editorText,
+      editorFormat,
+      editorSourceMessageId,
+      editorPanelWidth,
+      editorPanelOpen,
+    })
+  }, [
+    editorFormat,
+    editorPanelOpen,
+    editorPanelWidth,
+    editorSourceMessageId,
+    editorText,
+    input,
+    messages,
+    selectedAgentId,
+    selectedProjectId,
+    sourceOriginalText,
+    sourceAnalysisText,
+    sourceVideoCopyExtractionId,
+  ])
+
+  useEffect(() => {
+    if (!sourceVideoCopyExtractionId || (sourceOriginalText.trim() && sourceAnalysisText.trim())) return
+    getVideoCopyExtraction(sourceVideoCopyExtractionId)
+      .then((record) => {
+        const analysisText = formatAnalysisResultForPrompt(record.analysisResult) || ""
+        if (!sourceOriginalText.trim()) setSourceOriginalText(record.transcript || "")
+        if (!sourceAnalysisText.trim()) setSourceAnalysisText(analysisText)
+      })
+      .catch(() => {})
+  }, [sourceAnalysisText, sourceOriginalText, sourceVideoCopyExtractionId])
 
   // 切换智能体（由全局侧边栏的 ?agent= 驱动）：同步选中态并重置当前对话
   useEffect(() => {
@@ -689,6 +1062,11 @@ export default function AimPage() {
       setSelectedAgentId(activeAgentId)
       setMessages([])
       setInput("")
+      setSourceOriginalText("")
+      setSourceAnalysisText("")
+      setEditorText("")
+      setEditorFormat(undefined)
+      setEditorSourceMessageId(undefined)
     })
   }, [activeAgentId, agentParam])
 
@@ -706,6 +1084,11 @@ export default function AimPage() {
       setMessages([])
       setInput(prefillLines.join("\n"))
       setSourceVideoCopyExtractionId(undefined)
+      setSourceOriginalText("")
+      setSourceAnalysisText("")
+      setEditorText("")
+      setEditorFormat(undefined)
+      setEditorSourceMessageId(undefined)
     })
 
     const nextParams = new URLSearchParams(searchParams.toString())
@@ -722,27 +1105,31 @@ export default function AimPage() {
     getVideoCopyExtraction(videoCopyExtractionIdParam)
       .then((record) => {
         const isDeepCopy = shouldOpenDeepCopywriter(record)
+        const lengthRule = buildBenchmarkLengthRule(record.transcript)
+        const recreationSop = buildBenchmarkRecreationSopBlock()
         const prefill = [
           isDeepCopy
-            ? "请基于下面这条长对标文案和已有拆解，提炼它的开头机制、结构节奏和心理推进方式，再结合我的知识库，创作一篇适合我自己的完整长篇文案。"
-            : "请基于下面这条对标文案，结合我的知识库，改写成适合我自己的口播文案。",
+            ? "请基于下面这条长对标文案和已有拆解，按爆款选题再创作 SOP，创作一篇适合我自己的完整长篇文案。"
+            : "请基于下面这条对标文案，按爆款选题再创作 SOP，创作成适合我自己的口播文案。",
           "",
-          isDeepCopy ? "创作原则：" : "改写原则：",
+          "创作原则：",
+          recreationSop,
           isDeepCopy
             ? "1. 先参考拆解里的开头类型和情绪入口，重新设计适合我的长文开头。"
-            : "1. 开头第一句话不要轻易变，除非明显不适合我的产品和人设。",
+            : "1. 开头机制可以借，但第一句话必须重写成我的身份和业务场景里的话。",
           isDeepCopy
-            ? "2. 参考拆解里的正文结构、转折节奏和心理推进，但不要照搬原文。"
-            : "2. 中间结构框架不要轻易变，保留原文的信息推进顺序和节奏。",
+            ? "2. 参考拆解里的正文结构、转折节奏和心理推进，但表达至少 30% 可感知重写。"
+            : "2. 结构节奏可以保留，但表达至少 30% 可感知重写：案例、转折、句式和行动引导不能贴原文。",
           isDeepCopy
-            ? "3. 用我的产品、案例、用户痛点和人设表达重新完成创作。"
-            : "3. 只替换产品、案例、用户痛点、人设表达和行动引导。",
+            ? "3. 用我的产品、案例、用户痛点和人设表达重新完成创作，除专有名词外不要连续沿用原文 12 个字以上。"
+            : "3. 除专有名词外，不要连续沿用原文 12 个字以上，最终稿要像我的内容，不像原文换皮。",
+          lengthRule ? `4. ${lengthRule}` : null,
           "",
           record.videoTitle ? `对标标题：${record.videoTitle}` : null,
           "对标原文：",
           record.transcript || "",
           record.analysisResult ? "\n已有拆解：" : null,
-          record.analysisResult ? JSON.stringify(record.analysisResult, null, 2) : null,
+          formatAnalysisResultForPrompt(record.analysisResult),
         ].filter(Boolean).join("\n")
 
         startTransition(() => {
@@ -750,6 +1137,12 @@ export default function AimPage() {
           setMessages([])
           setInput(prefill)
           setSourceVideoCopyExtractionId(record.id)
+          setSourceOriginalText(record.transcript || "")
+          setSourceAnalysisText(formatAnalysisResultForPrompt(record.analysisResult) || "")
+          setEditorText("")
+          setEditorFormat(undefined)
+          setEditorSourceMessageId(undefined)
+          setEditorPanelOpen(true)
         })
         toast.success("已带入对标文案")
       })
@@ -761,19 +1154,34 @@ export default function AimPage() {
       })
   }, [router, searchParams, videoCopyExtractionIdParam])
 
+  const openEditorFromResult = useCallback((messageId: string, format: ContentFormat, content: string) => {
+    setEditorText(content)
+    setEditorFormat(format)
+    setEditorSourceMessageId(messageId)
+    setEditorPanelOpen(true)
+    setDraftSelection({ text: "", range: { start: 0, end: 0 } })
+  }, [])
+
   // 侧边栏点击「最近内容」：把记录加载为一次对话（数据来自共享 store，无需额外请求）
   useEffect(() => {
     if (!loadTargetId) return
     const item = storeHistory.find((h) => h.id === loadTargetId)
     if (!item) return // 列表尚未拉取到，等 storeHistory 更新后由本 effect 重试
     const contents = getHistoryContents(item)
+    const assistantId = nextId()
+    const itemAgentId = isValidAimAgent(item.agentId) ? item.agentId : DEFAULT_AIM_AGENT
+    const historyOriginalText = extractBenchmarkOriginalText(item.rawInput)
+    const historyAnalysisText = extractBenchmarkAnalysisText(item.rawInput)
     startTransition(() => {
+      setSelectedAgentId(itemAgentId)
       setSelectedProjectId(item.projectId || "")
+      setSourceOriginalText(historyOriginalText)
+      setSourceAnalysisText(historyAnalysisText)
       setMessages([
         { id: nextId(), role: "user", content: item.rawInput || "（历史素材）" },
         ...(contents.length
           ? [{
-              id: nextId(),
+              id: assistantId,
               role: "assistant" as const,
               content: `已加载历史记录${item.topicTitle ? `「${item.topicTitle}」` : ""}，可继续改写或追问。`,
               agentId: item.agentId ?? undefined,
@@ -785,10 +1193,17 @@ export default function AimPage() {
             }]
           : [{ id: nextId(), role: "assistant" as const, content: "已加载历史素材，可直接让我改写。" }]),
       ])
+      if (contents[0]) openEditorFromResult(assistantId, contents[0].format, contents[0].content)
     })
+    if (itemAgentId !== selectedAgentId) {
+      const nextParams = new URLSearchParams(searchParams.toString())
+      nextParams.set("agent", itemAgentId)
+      lastAgentParamRef.current = itemAgentId
+      router.replace(`/aim?${nextParams.toString()}`)
+    }
     toast.success("已加载历史记录")
     clearLoadTarget()
-  }, [loadTargetId, storeHistory, clearLoadTarget])
+  }, [clearLoadTarget, loadTargetId, openEditorFromResult, router, searchParams, selectedAgentId, storeHistory])
 
   useEffect(() => {
     if (!isGenerating) return
@@ -799,7 +1214,18 @@ export default function AimPage() {
   // 自动滚到底部
   useEffect(() => {
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el) return
+    const targetId = pendingScrollMessageIdRef.current
+    if (targetId) {
+      pendingScrollMessageIdRef.current = null
+      requestAnimationFrame(() => {
+        el.querySelector<HTMLElement>(`[data-message-id="${targetId}"]`)?.scrollIntoView({
+          block: "start",
+        })
+      })
+      return
+    }
+    el.scrollTop = el.scrollHeight
   }, [messages, isThinking, isGenerating])
 
   /** 人设故事官：取最近一条助手回复的【进度 XX%】驱动顶部进度条 */
@@ -813,6 +1239,11 @@ export default function AimPage() {
     setMessages([])
     setInput("")
     setSourceVideoCopyExtractionId(undefined)
+    setSourceOriginalText("")
+    setSourceAnalysisText("")
+    setEditorText("")
+    setEditorFormat(undefined)
+    setEditorSourceMessageId(undefined)
     if (typeof window !== "undefined") window.sessionStorage.removeItem(AIM_DRAFT_STORAGE_KEY)
   }
 
@@ -836,8 +1267,251 @@ export default function AimPage() {
     return [...messages].reverse().find((m) => m.deliverables?.id)?.deliverables?.id
   }
 
-  async function sendText(text: string) {
+  function latestDeliverableMessageId() {
+    return [...messages]
+      .reverse()
+      .find((message) => message.deliverables?.results.some((result) => result.format === "video_script"))
+      ?.id
+  }
+
+  function latestDeliverableText() {
+    const latest = [...messages].reverse().find((message) => message.deliverables?.results.length)
+    return latest?.deliverables?.results[0]?.content.trim() || ""
+  }
+
+  function fillReferenceTextFromConversation() {
+    const source = [...messages]
+      .reverse()
+      .map((message) => extractBenchmarkOriginalText(message.content))
+      .find((content) => content.trim())
+    if (!source) {
+      toast.error(`当前对话里没有可识别的${editorPanelLabels.referenceTitle}`)
+      return true
+    }
+    setSourceOriginalText(source)
+    setEditorPanelOpen(true)
+    setInput("")
+    toast.success(`已填入右侧${editorPanelLabels.referenceTitle}`)
+    return true
+  }
+
+  function integrateLatestAssistantDraftToEditor() {
+    const draft = [...messages]
+      .reverse()
+      .filter((message) => message.role === "assistant")
+      .map((message) => extractEditorDraftFromAssistantText(message.content))
+      .find((content) => content.trim())
+
+    if (!draft) {
+      toast.error(`没有找到可整合的最新版${editorPanelLabels.draftTitle}`)
+      return true
+    }
+
+    setEditorText(draft)
+    setEditorPanelOpen(true)
+    setInput("")
+    toast.success(`已整合到右侧${editorPanelLabels.title}`)
+    return true
+  }
+
+  function buildBenchmarkRewriteInput() {
+    const original = sourceOriginalText.trim() || [...messages]
+      .reverse()
+      .map((message) => extractBenchmarkOriginalText(message.content))
+      .find((content) => content.trim()) || ""
+
+    if (!original) {
+      toast.error("请先带入对标原文")
+      return null
+    }
+
+    const currentDraft = editorText.trim() || latestDeliverableText()
+    const lengthRule = buildBenchmarkLengthRule(original)
+
+    return [
+      "请按对标原文重新生成一版文案，直接输出最终稿。",
+      "硬性要求：",
+      buildBenchmarkRecreationSopBlock(),
+      "1. 目标字数必须和对标原文基本一致，允许 95%-105% 波动。",
+      "2. 整体至少 30% 可感知重写，不能只是替换少数字。",
+      "3. 除专有名词外，不要连续沿用原文 12 个字以上。",
+      lengthRule ? `4. ${lengthRule}` : null,
+      sourceAnalysisText.trim() ? `已有拆解：\n${sourceAnalysisText.trim()}` : null,
+      `对标原文：\n${original}`,
+      currentDraft ? `我当前不满意的稿子：\n${currentDraft}` : null,
+    ].filter(Boolean).join("\n\n")
+  }
+
+  function buildBenchmarkQualityMessage() {
+    const original = sourceOriginalText.trim() || [...messages]
+      .reverse()
+      .map((message) => extractBenchmarkOriginalText(message.content))
+      .find((content) => content.trim()) || ""
+    const draft = editorText.trim() || latestDeliverableText()
+
+    if (!original || !draft) return null
+
+    const report = assessBenchmarkRewrite(original, draft)
+    const lengthRatio = report.lengthRatio == null ? "无法计算" : `${Math.round(report.lengthRatio * 100)}%`
+    const lengthStatus = report.lengthPassed
+      ? "通过"
+      : report.outputChars < report.originalChars
+        ? "偏短"
+        : "偏长"
+    const copyStatus = report.tooSimilar ? "风险高，需要继续重写" : "通过"
+
+    return [
+      "## 对标自检结果",
+      `- 字数：当前 ${report.outputChars} 字 / 原文 ${report.originalChars} 字，比例 ${lengthRatio}，判定：${lengthStatus}。`,
+      `- 12字连续复用：${Math.round(report.reuseRatio * 100)}%，判定：${copyStatus}。`,
+      report.reusedSamples.length
+        ? `- 复用片段示例：${report.reusedSamples.map((sample) => `「${sample}」`).join("、")}`
+        : "- 复用片段示例：未发现明显连续复用。",
+      report.lengthPassed && !report.tooSimilar
+        ? "- 结论：这版在字数和照抄风险上基本合格，可以继续看表达质量。"
+        : "- 结论：这版还不合格，优先按原文字数重写，并替换开头、案例、过渡句或行动引导。",
+    ].join("\n\n")
+  }
+
+  function rememberWorkbenchPreference(input: string) {
+    const contextMessages = [
+      ...messages.map((message) => ({ role: message.role, content: message.content })),
+      { role: "user" as const, content: input },
+    ].filter((message) => message.content.trim()).slice(-8)
+
+    if (contextMessages.length === 0) {
+      toast.error("没有可沉淀的偏好内容")
+      return
+    }
+
+    setIsEvolving(true)
+    void evolveStyleConversation({ messages: contextMessages })
+      .then((result) => {
+        if (result.profile) {
+          toast.success(result.created ? "已建立全局写作风格档案" : "全局写作风格档案已更新")
+        } else if (result.reason === "no_style") {
+          toast.info("这句话还没有形成稳定偏好")
+        } else {
+          toast.info(result.reason || "这句话没有形成稳定偏好")
+        }
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "偏好沉淀失败")
+      })
+      .finally(() => setIsEvolving(false))
+  }
+
+  function saveEditorToDeliverable() {
+    if (!editorSourceMessageId || !editorFormat) {
+      toast.error("当前编辑稿还没有关联交付物")
+      return false
+    }
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === editorSourceMessageId && message.deliverables
+          ? {
+              ...message,
+              deliverables: {
+                ...message.deliverables,
+                results: message.deliverables.results.map((result) =>
+                  result.format === editorFormat
+                    ? { ...result, content: editorText, wordCount: editorText.length }
+                    : result
+                ),
+              },
+            }
+          : message
+      )
+    )
+    toast.success("已保存到交付物")
+    return true
+  }
+
+  function runWorkbenchCommand(command: AimWorkbenchCommand) {
+    setInput("")
+
+    if (command.id === "integrate_editor") return integrateLatestAssistantDraftToEditor()
+    if (command.id === "fill_reference") return fillReferenceTextFromConversation()
+    if (command.id === "open_editor") {
+      setEditorPanelOpen(true)
+      toast.success(`已打开右侧${editorPanelLabels.title}`)
+      return true
+    }
+    if (command.id === "close_editor") {
+      setEditorPanelOpen(false)
+      toast.success(`已隐藏右侧${editorPanelLabels.title}`)
+      return true
+    }
+    if (command.id === "save_editor") return saveEditorToDeliverable()
+    if (command.id === "reset_conversation") {
+      resetConversation()
+      toast.success("已清空当前对话")
+      return true
+    }
+    if (command.id === "regenerate") {
+      void generateWithInput("")
+      return true
+    }
+    if (command.id === "rewrite_benchmark") {
+      const rewriteInput = buildBenchmarkRewriteInput()
+      if (rewriteInput) void generateWithInput(rewriteInput)
+      return true
+    }
+    if (command.id === "run_quality_check") {
+      const localCheckMessage = buildBenchmarkQualityMessage()
+      const messageId = latestDeliverableMessageId()
+      if (localCheckMessage) {
+        setMessages((prev) => [...prev, { id: nextId(), role: "assistant", content: localCheckMessage }])
+      }
+      if (messageId) {
+        void handleQuality(messageId)()
+        toast.success(localCheckMessage ? "已完成对标自检，并开始脚本质检" : "已开始脚本质检")
+        return true
+      }
+      if (localCheckMessage) {
+        toast.success("对标自检完成")
+        return true
+      }
+      toast.error("当前没有可质检的生成结果")
+      return true
+    }
+    if (command.id === "remember_preference") {
+      rememberWorkbenchPreference(command.input)
+      return true
+    }
+    return false
+  }
+
+  function buildEditorContext(action: string): AimEditorContext {
+    return {
+      action,
+      referenceSelection: referenceSelection.text.trim() || undefined,
+      draftSelection: draftSelection.text.trim() || undefined,
+      draftText: editorText.trim() || undefined,
+      documentType: editorPanelLabels.documentType,
+      referenceLabel: editorPanelLabels.referenceTitle,
+      draftLabel: editorPanelLabels.draftTitle,
+    }
+  }
+
+  function applyEditorReplacement(message: ChatMessage) {
+    const replacement = extractReplacementDraft(message.content)
+    const range = message.editorApply?.range
+    if (!replacement || !range) return
+    setEditorText((current) => applySelectionReplacement(current, range, replacement))
+    toast.success("已应用到右侧选区")
+  }
+
+  async function sendText(
+    text: string,
+    options?: {
+      editorContext?: AimEditorContext
+      editorApplyRange?: TextSelectionRange
+    }
+  ) {
     if (!text) return
+    const workbenchCommand = detectAimWorkbenchCommand(text)
+    if (workbenchCommand && runWorkbenchCommand(workbenchCommand)) return
     const controller = new AbortController()
     requestAbortRef.current = controller
     const userMsg: ChatMessage = { id: nextId(), role: "user", content: text }
@@ -863,6 +1537,7 @@ export default function AimPage() {
           projectId: projectEnabled ? selectedProjectId || undefined : undefined,
           toolAction,
           resultId,
+          editorContext: options?.editorContext,
           signal: controller.signal,
         })
         setMessages((prev) => [...prev, { id: nextId(), role: "assistant", content }])
@@ -871,10 +1546,19 @@ export default function AimPage() {
 
       const assistantId = nextId()
       let hasContent = false
-      setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "" }])
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: assistantId,
+          role: "assistant",
+          content: "",
+          editorApply: options?.editorApplyRange ? { range: options.editorApplyRange } : null,
+        },
+      ])
       await chatAimStream(chatMessages, {
         agentId: selectedAgentId,
         projectId: projectEnabled ? selectedProjectId || undefined : undefined,
+        editorContext: options?.editorContext,
         signal: controller.signal,
         onDelta: (_delta, content) => {
           hasContent = content.length > 0
@@ -964,12 +1648,54 @@ export default function AimPage() {
     }
   }
 
+  const handleAimNextAction = useCallback(
+    async (action: AimNextAction, content: string) => {
+      const cleanContent = content.trim()
+      if (!cleanContent) return
+
+      if (action.id === "save_knowledge") {
+        if (!selectedProjectId) {
+          toast.error("请先选择 IP 营销全案")
+          return
+        }
+        try {
+          await createKnowledge({
+            projectId: selectedProjectId,
+            category: "positioning_material",
+            title: `AIM交付物 · ${agent.title}`,
+            content: cleanContent,
+            tags: ["aim_delivery", action.id],
+            sourceType: "manual",
+          })
+          toast.success("已保存为档案素材")
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "保存失败")
+        }
+        return
+      }
+
+      if (action.targetAgentId && action.targetAgentId !== selectedAgentId) {
+        const nextParams = new URLSearchParams(searchParams.toString())
+        nextParams.set("agent", action.targetAgentId)
+        lastAgentParamRef.current = action.targetAgentId
+        setSelectedAgentId(action.targetAgentId)
+        router.replace(`/aim?${nextParams.toString()}`)
+      }
+      setInput(buildAimNextActionPrompt(action, cleanContent))
+      toast.success("已带入聊天框")
+    },
+    [agent.title, router, searchParams, selectedAgentId, selectedProjectId],
+  )
+
   async function handleSend() {
-    await sendText(input.trim())
+    await sendText(input.trim(), hasEditorSelection ? {
+      editorContext: buildEditorContext("用户追问"),
+      editorApplyRange: draftSelection.text.trim() ? draftSelection.range : undefined,
+    } : undefined)
   }
 
-  async function handleGenerate() {
-    const rawInput = buildRawInputForGenerate(input.trim() || undefined)
+  async function generateWithInput(currentInput: string) {
+    const rawInput = buildRawInputForGenerate(currentInput || undefined)
     if (!rawInput) {
       toast.error("请先在对话框里说点素材或需求")
       return
@@ -993,17 +1719,54 @@ export default function AimPage() {
         taskType: "write_script",
         useMarketViralVideos: selectedAgentId === "business_diagnosis",
       }, controller.signal)
+      const proofreadFormats = new Set<ContentFormat>(["raw_copy", "video_script", "koubo_script"])
+      const proofreadResults = await Promise.all(
+        response.results.map(async (result) => {
+          if (!proofreadFormats.has(result.format) || result.content.trim().length < 30) return result
+          try {
+            const polished = await polishScript({
+              content: result.content,
+              persona: agent.defaultInstruction,
+              mode: "proofread",
+            })
+            return {
+              ...result,
+              content: polished.polished,
+              wordCount: polished.polished.length,
+            }
+          } catch {
+            return result
+          }
+        }),
+      )
+      const correctedResponse = { ...response, results: proofreadResults }
+      const extractedOriginalText = extractBenchmarkOriginalText(currentInput)
+      const extractedAnalysisText = extractBenchmarkAnalysisText(currentInput)
+      if (extractedOriginalText) setSourceOriginalText(extractedOriginalText)
+      if (extractedAnalysisText) setSourceAnalysisText(extractedAnalysisText)
+      const assistantMessageId = nextId()
+      const mainResult = response.results[0]
+      pendingScrollMessageIdRef.current = assistantMessageId
       setMessages((prev) => [
         ...prev,
+        ...(currentInput ? [{ id: nextId(), role: "user" as const, content: currentInput }] : []),
         {
-          id: nextId(),
+          id: assistantMessageId,
           role: "assistant",
           content: `${agent.title} 交付物已生成，可直接复制使用，也能继续在下方对话里让我改写。`,
           agentId: agent.id,
-          deliverables: response,
+          deliverables: correctedResponse,
         },
       ])
-      if (input.trim()) setInput("")
+      if (mainResult) {
+        const correctedMainResult = correctedResponse.results[0] ?? mainResult
+        openEditorFromResult(
+          assistantMessageId,
+          correctedMainResult.format,
+          correctedMainResult.content,
+        )
+      }
+      if (currentInput) setInput("")
       refreshHistory({ force: true })
       toast.success(`${agent.primaryActionLabel}完毕`)
     } catch (error) {
@@ -1013,6 +1776,14 @@ export default function AimPage() {
       if (requestAbortRef.current === controller) requestAbortRef.current = null
       setIsGenerating(false)
     }
+  }
+
+  async function handleGenerate() {
+    if (hasEditorSelection) {
+      await handleSend()
+      return
+    }
+    await generateWithInput(input.trim())
   }
 
   function handleStop() {
@@ -1052,21 +1823,27 @@ export default function AimPage() {
         setIsGenerating(false)
       }
     },
-    [messages, refreshHistory, selectedProjectId],
+    [messages, projectEnabled, refreshHistory, selectedProjectId],
   )
 
   const handleQuality = useCallback(
     (msgId: string) => async () => {
       const base = messages.find((m) => m.id === msgId)?.deliverables
-      const mainContent = base?.results.find((r) => r.format === "video_script")?.content
+      const mainContent =
+        base?.results.find((r) => r.format === "video_script")?.content
+        || base?.results.find((r) => r.format === "koubo_script")?.content
       if (!mainContent) return
       setIsQualityChecking(true)
       try {
-        const report = await checkScriptQuality({ content: mainContent, persona: agent.defaultInstruction })
+        const report = await checkScriptQuality({
+          content: mainContent,
+          persona: agent.defaultInstruction,
+          publishPlatform: "douyin",
+        })
         setMessages((prev) =>
           prev.map((m) => (m.id === msgId ? { ...m, qualityReport: report } : m)),
         )
-        toast.success("质检完成")
+        toast.success("发布前自查完成")
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "质检失败")
       } finally {
@@ -1095,14 +1872,15 @@ export default function AimPage() {
   )
 
   const busy = isThinking || isGenerating || isQualityChecking || isTranscribing
+  const hasEditor = Boolean(sourceOriginalText.trim() || editorText.trim())
 
   return (
-    <div className="-mx-4 -my-4 h-[calc(100dvh-3.5rem)] min-h-115 md:-mx-6 md:-my-6">
+    <div className="-mx-4 -my-4 flex h-[calc(100dvh-3.5rem)] min-h-115 overflow-hidden md:-mx-6 md:-my-6">
       {/* 对话区（智能体列表与最近内容已移至全局侧边栏） */}
       <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-card px-4 md:px-6">
-        {/* 头部：当前智能体 + 关联全案 */}
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b p-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
+        {/* 头部：AIM 业务工作台 */}
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b p-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
             {/* 小屏智能体切换 */}
             <div className="md:hidden">
               <Select value={selectedAgentId} onValueChange={(v) => { if (v !== selectedAgentId) router.push(`/aim?agent=${v}`) }}>
@@ -1119,9 +1897,25 @@ export default function AimPage() {
             <span className="hidden h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary md:flex">
               <agent.icon className="h-4 w-4" />
             </span>
-            <div className="min-w-0 mr-1">
-              <p className="truncate text-sm font-semibold text-foreground">{agent.title}</p>
-              <p className="hidden truncate text-xs text-muted-foreground sm:block">{agent.description}</p>
+            <div className="min-w-0 flex-1 mr-1">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="text-[11px] font-medium text-muted-foreground">AIM 工作台</span>
+                <span className="text-xs text-muted-foreground">/</span>
+                <p className="truncate text-sm font-semibold text-foreground">{agent.title}</p>
+                <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[10px] font-medium">
+                  {workStage}
+                </Badge>
+              </div>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {selectedProject?.name || (projectEnabled ? "未选择 IP 全案" : "未绑定项目")} · {agent.description}
+              </p>
+              <div className="mt-1 hidden flex-wrap gap-1.5 sm:flex">
+                {materialStatus.map((item) => (
+                  <span key={item} className="rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {item}
+                  </span>
+                ))}
+              </div>
             </div>
 
           </div>
@@ -1219,6 +2013,11 @@ export default function AimPage() {
                 <p className="text-base font-semibold text-foreground">{agent.title}</p>
                 <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{agent.intro}</p>
               </div>
+              <AgentGuidePanel
+                agent={agent}
+                onUseTemplate={() => setInput(buildAimGuideTemplate(agent.inputTemplate))}
+                onUseVariant={(prompt) => setInput((prev) => prev.trim() ? `${prev.trim()}\n${prompt}` : prompt)}
+              />
               <div className="flex w-full flex-col gap-2">
                 <p className="self-start text-xs font-medium text-muted-foreground">试试这样开头：</p>
                 {agent.quickPrompts.map((p, i) => (
@@ -1236,7 +2035,7 @@ export default function AimPage() {
           ) : (
             <div className="mx-auto flex max-w-6xl w-full flex-col gap-4">
               {messages.map((m) => (
-                <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div key={m.id} data-message-id={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div className={`${m.deliverables ? "w-full max-w-full" : "max-w-[88%]"} ${m.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
                     <div
                       className={`leading-relaxed ${
@@ -1260,24 +2059,29 @@ export default function AimPage() {
                       />
                     )}
 
+                    {m.role === "assistant" && m.editorApply?.range && extractReplacementDraft(m.content) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-2 h-7 px-2 text-xs"
+                        onClick={() => applyEditorReplacement(m)}
+                      >
+                        应用到右侧选区
+                      </Button>
+                    )}
+
                     {/* 交付物气泡 */}
                     {m.deliverables && (
                       <div className="w-full mt-2">
                         <DeliverableBubble
                           deliverables={m.deliverables}
+                          nextActions={getAimAgentGuide(isValidAimAgent(m.agentId) ? m.agentId : selectedAgentId).nextActions}
                           onRepurpose={handleRepurpose(m.id)}
                           onQuality={handleQuality(m.id)}
                           onMarkStatus={handleMarkStatus(m.id)}
+                          onNextAction={handleAimNextAction}
                           isBusy={busy}
-                          onUpdateResults={(newResults) => {
-                            setMessages((prev) =>
-                              prev.map((msg) =>
-                                msg.id === m.id && msg.deliverables
-                                  ? { ...msg, deliverables: { ...msg.deliverables, results: newResults } }
-                                  : msg
-                              )
-                            )
-                          }}
+                          onEditResult={(format, content) => openEditorFromResult(m.id, format, content)}
                           onCompileToWiki={
                             m.agentId === "business_diagnosis" &&
                             !!selectedProjectId &&
@@ -1323,6 +2127,64 @@ export default function AimPage() {
                             </div>
                           ))}
                         </div>
+                        {m.qualityReport.publishCheck && (
+                          <div className="mt-4 space-y-3 border-t pt-4">
+                            <div className="flex items-center gap-2 text-sm font-semibold">
+                              抖音发布前自查
+                              <Badge
+                                variant={m.qualityReport.publishCheck.verdict === "可发" ? "default" : "destructive"}
+                                className="ml-auto"
+                              >
+                                {m.qualityReport.publishCheck.verdict}
+                              </Badge>
+                            </div>
+                            {m.qualityReport.publishCheck.violations.length > 0 ? (
+                              <div className="space-y-2">
+                                {m.qualityReport.publishCheck.violations.map((violation) => (
+                                  <div key={`${violation.text}-${violation.category}`} className="rounded-lg border p-3 text-sm">
+                                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                                      <span className="font-medium">「{violation.text}」</span>
+                                      <Badge variant={violation.severity === "high" ? "destructive" : "secondary"} className="text-[10px]">
+                                        {violation.category}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">{violation.reason}</p>
+                                    <p className="mt-1 text-xs text-foreground">{violation.suggest}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">未发现明显发布违规风险。</p>
+                            )}
+                            <div className="rounded-lg border p-3">
+                              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                                流量潜力评分
+                                <Badge variant={m.qualityReport.publishCheck.trafficScore.score >= 80 ? "default" : "secondary"} className="ml-auto">
+                                  {m.qualityReport.publishCheck.trafficScore.score}分 · {m.qualityReport.publishCheck.trafficScore.level}
+                                </Badge>
+                              </div>
+                              <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                                {m.qualityReport.publishCheck.trafficScore.reasons.map((item) => (
+                                  <li key={item}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{m.qualityReport.publishCheck.aiLabelReminder}</p>
+                            {m.qualityReport.publishCheck.trafficWeakness.length > 0 && (
+                              <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                                {m.qualityReport.publishCheck.trafficWeakness.map((item) => (
+                                  <li key={item}>{item}</li>
+                                ))}
+                              </ul>
+                            )}
+                            {m.qualityReport.publishCheck.violations.length > 0 && m.qualityReport.publishCheck.minimalRewrite !== "" && (
+                              <div className="rounded-lg bg-muted/40 p-3">
+                                <p className="mb-1 text-xs font-medium text-muted-foreground">最小改法</p>
+                                <p className="whitespace-pre-wrap text-sm leading-6">{m.qualityReport.publishCheck.minimalRewrite}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1359,8 +2221,11 @@ export default function AimPage() {
             isRecording={isRecording}
             isTranscribing={isTranscribing}
             isGenerating={isGenerating}
-            canGenerate={Boolean(selectedProjectId) && (messages.some((m) => m.role === "user") || input.trim().length > 0)}
-            primaryActionLabel={agent.primaryActionLabel}
+            canGenerate={
+              Boolean(selectedProjectId) &&
+              (hasEditorSelection ? input.trim().length > 0 : messages.some((m) => m.role === "user") || input.trim().length > 0)
+            }
+            primaryActionLabel={hasEditorSelection ? editorPanelLabels.selectActionLabel : agent.primaryActionLabel}
             onChange={setInput}
             onSend={handleSend}
             onGenerate={handleGenerate}
@@ -1370,6 +2235,24 @@ export default function AimPage() {
           />
         </footer>
       </section>
+
+      {hasEditor && (
+        <BenchmarkEditorPanel
+          open={editorPanelOpen}
+          width={editorPanelWidth}
+          labels={editorPanelLabels}
+          referenceText={annotatedReferenceText}
+          editorText={editorText}
+          editorFormat={editorFormat}
+          onOpen={() => setEditorPanelOpen(true)}
+          onClose={() => setEditorPanelOpen(false)}
+          onWidthChange={setEditorPanelWidth}
+          onEditorTextChange={setEditorText}
+          onReferenceSelection={setReferenceSelection}
+          onDraftSelection={setDraftSelection}
+          onSave={saveEditorToDeliverable}
+        />
+      )}
 
       {wikiDialog.open && wikiDialog.context && (
         <IpWikiDialog

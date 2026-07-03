@@ -102,7 +102,7 @@ function signalLabel(rank: TopicSignalRank) {
 }
 
 function sourceLabel(category: string) {
-  if (category === "industry_hot") return "热点"
+  if (category === "industry_hot") return "辅助热点"
   if (category === "benchmark_reference") return "对标"
   if (category === "client_project") return "全案"
   return "素材"
@@ -122,7 +122,7 @@ function buildSignals(items: ApiAiHotBriefingItem[], sources: TopicDailyReportSo
     title: item.title,
     summary: item.summary,
     source: item.source,
-    url: item.url,
+    url: typeof item.url === "string" ? item.url : undefined,
   }))
 
   const combined = [...sourceSignals, ...hotSignals]
@@ -135,7 +135,7 @@ function buildSignals(items: ApiAiHotBriefingItem[], sources: TopicDailyReportSo
         title: item.title,
         summary: item.summary,
         source: item.source,
-        url: "url" in item ? item.url : undefined,
+        url: "url" in item && typeof item.url === "string" ? item.url : undefined,
       }
     })
   }
@@ -188,7 +188,7 @@ function buildEvidence(items: ApiAiHotBriefingItem[], sources: TopicDailyReportS
 
   const hotEvidence = items.slice(0, 4).map((item, index) => ({
     title: item.title,
-    source: item.source,
+    source: `辅助热点｜${item.source}`,
     summary: item.summary,
     url: item.url,
     status: index <= 2 ? "可验证" : "待观察",

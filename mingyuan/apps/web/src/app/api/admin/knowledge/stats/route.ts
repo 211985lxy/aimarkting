@@ -102,7 +102,7 @@ export const GET = withAdminAuth(async (request) => {
 
   // --- 项目维度 ---
   // 获取项目名称
-  const projectIds = projectGroups.map((g) => g.projectId).filter(Boolean)
+  const projectIds = projectGroups.map((g) => g.projectId).filter((id): id is string => Boolean(id))
   const projectMap = new Map<string, { name: string; companyName: string | null }>()
   if (projectIds.length > 0) {
     const projects = await prisma.clientProject.findMany({
@@ -136,6 +136,7 @@ export const GET = withAdminAuth(async (request) => {
     voice_transcribe: "语音转写",
     import: "文件导入",
     obsidian: "Obsidian 同步",
+    smart_import: "智能导入",
   }
   const sourceTypeDistribution = sourceTypeGroups.map((g) => ({
     sourceType: g.sourceType,

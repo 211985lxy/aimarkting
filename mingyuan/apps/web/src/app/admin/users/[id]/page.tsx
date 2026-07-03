@@ -38,6 +38,10 @@ export default function AdminUserDetailPage() {
     setLoading(true)
     getAdminUserDetail(params.id as string)
       .then((res) => setUser(res.data))
+      .catch((error) => {
+        console.error(error)
+        setUser(null)
+      })
       .finally(() => setLoading(false))
   }, [params.id])
 

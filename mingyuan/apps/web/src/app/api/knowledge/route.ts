@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { authenticateRequest, authErrorResponse } from "@/lib/user-auth"
 import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
+import { extractAndPersistForEntry } from "@/lib/knowledge-entity-extractor"
 import { buildDefaultKnowledgeTags, mergeKnowledgeTags, normalizeValueGrade } from "@/lib/knowledge-tags"
+import { enforceKnowledgeBetaLimit } from "@/lib/internal-beta-limits"
 
 export async function GET(request: NextRequest) {
   try {
@@ -73,6 +75,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const limitResponse = await enforceKnowledgeBetaLimit({ userId: user.id, projectId })
+    if (limitResponse) return limitResponse
+
     const entry = await prisma.knowledgeEntry.create({
       data: {
         userId: user.id,
@@ -86,8 +91,9 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Fire-and-forget: generate embedding for the new entry
+    // Fire-and-forget: generate embedding + extract entities/relations for the new entry
     ensureKnowledgeEmbedding(entry.id).catch(() => {})
+    extractAndPersistForEntry(entry.id, content, { userId: user.id, projectId: projectId || null }).catch(() => {})
 
     return NextResponse.json(entry, { status: 201 })
   } catch (error) {

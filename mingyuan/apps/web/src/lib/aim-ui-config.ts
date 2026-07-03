@@ -1,5 +1,5 @@
 import type { ComponentType } from "react"
-import { Activity, Compass, PenLine, RefreshCw, ShieldCheck, Video } from "lucide-react"
+import { Activity, Compass, PenLine, ShieldCheck, Video } from "lucide-react"
 import type { ContentFormat } from "@/lib/api/client"
 
 /** 内容智能体 id */
@@ -42,7 +42,7 @@ export const AIM_AGENT_OPTIONS: AimAgentMeta[] = [
     title: "内容生产官",
     description: "选题、脚本、朋友圈、长文、质检",
     icon: Video,
-    defaultFormats: ["video_script", "shooting_brief", "moments_post", "community_message"],
+    defaultFormats: ["video_script"],
   },
   {
     id: "deep_copywriter",
@@ -53,9 +53,9 @@ export const AIM_AGENT_OPTIONS: AimAgentMeta[] = [
   },
   {
     id: "content_review",
-    title: "数据复盘官",
-    description: "发布后数据复盘、优化、复用",
-    icon: RefreshCw,
+    title: "发布质检官",
+    description: "成稿质检、平台风险、最小改法",
+    icon: ShieldCheck,
     defaultFormats: ["raw_copy"],
   },
   {

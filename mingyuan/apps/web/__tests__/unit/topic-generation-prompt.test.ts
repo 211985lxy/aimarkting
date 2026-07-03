@@ -1,5 +1,15 @@
-import { describe, expect, it } from "vitest"
-import { buildTopicUserPrompt } from "@/lib/topic-generation"
+import { describe, expect, it, vi } from "vitest"
+import { buildTopicUserPrompt, generateTopicCards } from "@/lib/topic-generation"
+
+const completeMock = vi.hoisted(() => vi.fn())
+
+vi.mock("@/lib/llm", () => ({
+  LLMClient: {
+    shared: () => ({
+      complete: completeMock,
+    }),
+  },
+}))
 
 describe("buildTopicUserPrompt", () => {
   it("requires benchmark rewrites to follow the current IP profile", () => {
@@ -25,9 +35,60 @@ describe("buildTopicUserPrompt", () => {
       ],
     }, ["practical", "contrast"])
 
-    expect(prompt).toContain("对标文案迁移规则")
-    expect(prompt).toContain("基于上方 IP 档案")
-    expect(prompt).toContain("行业、人设、产品、目标受众、说话风格")
-    expect(prompt).toContain("写法开启方向")
+    expect(prompt).toContain("对标优先规则")
+    expect(prompt).toContain("至少 2 张选题")
+    expect(prompt).toContain("对标信号")
+    expect(prompt).toContain("不能照抄标题、原句或原行业模板")
+    expect(prompt).toContain("AI HOT 或行业热点")
+  })
+
+  it("falls back to valid benchmark-led cards when the model returns invalid JSON", async () => {
+    completeMock.mockRejectedValue(new Error("bad model output"))
+
+    const result = await generateTopicCards({
+      elements: [
+        { code: "practical", name: "实用", typeLabel: "价值", description: "给具体方法" },
+        { code: "contrast", name: "反差", typeLabel: "钩子", description: "制造认知反差" },
+      ],
+      forcedElementCodes: ["practical", "contrast"],
+      topicSources: [
+        {
+          category: "benchmark_reference",
+          title: "对标账号",
+          content: "对标账号已验证内容信号：1. 爆款标题｜赞100 评10 转5 藏20",
+        },
+        {
+          category: "industry_hot",
+          title: "AI HOT",
+          content: "辅助热点",
+        },
+      ],
+      recommendationMode: "daily",
+    })
+
+    expect(result.success).toBe(true)
+    if (!result.success) return
+    expect(result.cards).toHaveLength(4)
+    expect(result.cards.every((card) => card.sourceType === "对标参考")).toBe(true)
+    expect(result.model).toContain("fallback")
+  })
+
+  it("falls back with project sources when no benchmark source exists", async () => {
+    completeMock.mockRejectedValue(new Error("bad model output"))
+
+    const result = await generateTopicCards({
+      elements: [
+        { code: "practical", name: "实用", typeLabel: "价值", description: "给具体方法" },
+        { code: "contrast", name: "反差", typeLabel: "钩子", description: "制造认知反差" },
+      ],
+      forcedElementCodes: ["practical", "contrast"],
+      topicSources: [{ category: "client_project", title: "项目资料", content: "客户想降低获客成本" }],
+      recommendationMode: "daily",
+    })
+
+    expect(result.success).toBe(true)
+    if (!result.success) return
+    expect(result.cards).toHaveLength(4)
+    expect(result.cards[0].sourceType).toBe("客户资料")
   })
 })

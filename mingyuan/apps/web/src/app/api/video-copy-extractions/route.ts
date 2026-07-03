@@ -5,6 +5,7 @@ import {
 } from "@/lib/video-copy-extractions"
 import { prisma } from "@/lib/prisma"
 import { withUserAuth } from "@/lib/user-auth"
+import { enforceDailyBetaLimit } from "@/lib/internal-beta-limits"
 
 export const GET = withUserAuth(async (_request, { user }) => {
   const records = await prisma.videoCopyExtraction.findMany({
@@ -17,6 +18,9 @@ export const GET = withUserAuth(async (_request, { user }) => {
 })
 
 export const POST = withUserAuth(async (request, { user }) => {
+  const quotaResponse = await enforceDailyBetaLimit(user.id, "video_copy_extraction")
+  if (quotaResponse) return quotaResponse
+
   let body: { url?: unknown }
   try {
     body = await request.json()

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { buildKnowledgeBlock, rankKnowledgeEntriesForAgent } from "@/lib/aim-knowledge-context"
+import { buildKnowledgeBlock, rankKnowledgeEntriesForAgent, categoriesFromBoost } from "@/lib/aim-knowledge-context"
 import { KNOWLEDGE_STRATEGY_PROFILES } from "@/lib/aim-knowledge-strategy"
 
 describe("AIM knowledge cleanup tags", () => {
@@ -53,6 +53,22 @@ describe("AIM evolved preferences retrieval", () => {
     ])
 
     expect(ranked.some((entry) => entry.category === "user_insight")).toBe(true)
+  })
+
+  it("prioritizes strategy insights for content production", () => {
+    const ranked = rankKnowledgeEntriesForAgent("content_producer", [
+      { id: "product", category: "product_usp", title: "产品", content: "产品卖点", score: 0.8, tags: ["kb_scope:project"] },
+      {
+        id: "strategy",
+        category: "user_insight",
+        title: "内容策略底盘",
+        content: "话题分布：AI工具教程 40%。",
+        score: 0.8,
+        tags: ["kb_scope:project", "asset_role:strategy", "usable_for:topic", "usable_for:video"],
+      },
+    ])
+
+    expect(ranked[0].id).toBe("strategy")
   })
 })
 
@@ -228,5 +244,38 @@ describe("AIM knowledge value-grade weighting", () => {
       { category: "boss_experience", title: "战略洞察", content: "改变认知", tags: [], valueGrade: "S" },
     ])
     expect(block).toContain("[S]")
+  })
+})
+
+describe("knowledge retrieval prefilter (categoryBoost → SQL whitelist)", () => {
+  it("categoriesFromBoost 只取权重 > 1 的类别", () => {
+    const cats = categoriesFromBoost({ hot_topic: 1.5, benchmark_reference: 1.5, user_insight: 1.2, product_usp: 1.0 })
+    expect(cats).toHaveLength(3)
+    expect(cats).toContain("hot_topic")
+    expect(cats).toContain("benchmark_reference")
+    expect(cats).toContain("user_insight")
+    expect(cats).not.toContain("product_usp")
+  })
+
+  it("categoriesFromBoost 对空字典返回空数组（deep 档 → 无 prefilter → 向后兼容）", () => {
+    expect(categoriesFromBoost({})).toEqual([])
+  })
+
+  it("deep 策略档 categoryBoost 为空 → 不产生预过滤", () => {
+    expect(KNOWLEDGE_STRATEGY_PROFILES.deep.categoryBoost).toEqual({})
+    expect(categoriesFromBoost(KNOWLEDGE_STRATEGY_PROFILES.deep.categoryBoost)).toEqual([])
+  })
+
+  it("hot_topic 策略档产生热点相关白名单", () => {
+    const cats = categoriesFromBoost(KNOWLEDGE_STRATEGY_PROFILES.hot_topic.categoryBoost)
+    expect(cats).toContain("hot_topic")
+    expect(cats).toContain("benchmark_reference")
+  })
+
+  it("conversion 策略档产生转化相关白名单", () => {
+    const cats = categoriesFromBoost(KNOWLEDGE_STRATEGY_PROFILES.conversion.categoryBoost)
+    expect(cats).toContain("product_usp")
+    expect(cats).toContain("customer_pain")
+    expect(cats).toContain("customer_qa")
   })
 })

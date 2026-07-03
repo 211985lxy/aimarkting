@@ -27,7 +27,7 @@ export const POST = withAdminAuth(async (request: NextRequest, { admin }) => {
     )
   }
 
-  const duration = parseInt(durationDays ?? "365")
+  const duration = parseInt(durationDays ?? "14")
   if (!duration || duration < 1 || duration > 3650) {
     return NextResponse.json(
       { error: "Duration days must be between 1 and 3650" },

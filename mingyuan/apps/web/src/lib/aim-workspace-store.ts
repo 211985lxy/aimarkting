@@ -1,11 +1,13 @@
 "use client"
 
 import { create } from "zustand"
-import { listAimHistory, type AimGeneration } from "@/lib/api/client"
+import { deleteAimHistory, listAimHistory, type AimGeneration } from "@/lib/api/client"
 
 interface FetchHistoryOpts {
   /** 按全案过滤；不传则取全局最近 */
   projectId?: string
+  /** 按智能体过滤；不传则取全局最近 */
+  agentId?: string
   /** 强制刷新，跳过节流 */
   force?: boolean
 }
@@ -19,6 +21,7 @@ interface AimWorkspaceState {
   /** 待加载进对话的历史记录 id（侧边栏点击后设置，工作台页面消费后清空） */
   loadTargetId: string | null
   fetchHistory: (opts?: FetchHistoryOpts) => Promise<void>
+  deleteHistory: (id: string) => Promise<void>
   requestLoad: (id: string) => void
   clearLoadTarget: () => void
 }
@@ -39,13 +42,21 @@ export const useAimWorkspaceStore = create<AimWorkspaceState>()((set, get) => ({
     }
     set({ isLoading: true })
     try {
-      const data = await listAimHistory(1, 12, opts?.projectId)
+      const data = await listAimHistory(1, 50, opts?.projectId, opts?.agentId)
       set({ history: data, lastFetchAt: Date.now() })
     } catch {
       // 静默失败；调用方各自决定是否 toast
     } finally {
       set({ isLoading: false })
     }
+  },
+
+  deleteHistory: async (id) => {
+    await deleteAimHistory(id)
+    set((state) => ({
+      history: state.history.filter((item) => item.id !== id),
+      loadTargetId: state.loadTargetId === id ? null : state.loadTargetId,
+    }))
   },
 
   requestLoad: (id) => set({ loadTargetId: id }),

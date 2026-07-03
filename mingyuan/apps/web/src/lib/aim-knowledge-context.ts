@@ -65,12 +65,14 @@ const AGENT_PRIORITY_CATEGORIES: Record<string, string[]> = {
     "user_insight",
   ],
   business_diagnosis: [
+    "user_insight",
     "positioning_material",
     "boss_experience",
     "product_usp",
     "customer_pain",
   ],
   content_producer: [
+    "user_insight",
     "product_usp",
     "project_case",
     "private_domain_material",
@@ -115,6 +117,17 @@ function truncateContent(content: string, maxChars: number): string {
 // ─── 公开函数 ──────────────────────────────────────────────
 
 /**
+ * 把策略的 categoryBoost 字典转成检索预过滤白名单。
+ * 只取权重 > 1 的类别（被策略"加权"的才进白名单）。
+ * deep 档 categoryBoost 为空 → 返回 [] → 上层不传 prefilter → 退化为全量（向后兼容）。
+ */
+export function categoriesFromBoost(categoryBoost: Record<string, number>): string[] {
+  return Object.entries(categoryBoost)
+    .filter(([, w]) => w > 1)
+    .map(([c]) => c)
+}
+
+/**
  * 构建知识上下文块
  *
  * 统一 AIM 知识检索入口，对所有智能体共用同一条上下文构建链路。
@@ -134,6 +147,9 @@ export async function buildAimKnowledgeContext(
   // 策略画像决定本次调用量与侧重（默认 deep = 改造前行为）
   const profile = getStrategyProfile(input.strategy ?? "deep")
 
+  // 把策略加权的类别转成检索预过滤白名单，下推到 SQL 缩窄候选
+  const boostCategories = categoriesFromBoost(profile.categoryBoost)
+
   // 1. 语义检索
   const retrieved = await retrieveRelevantKnowledge({
     userId,
@@ -142,6 +158,7 @@ export async function buildAimKnowledgeContext(
     topicTitle,
     topicRationale,
     topK: profile.topK,
+    prefilter: boostCategories.length > 0 ? { categories: boostCategories } : undefined,
   })
 
   let entries = retrieved.entries
@@ -198,6 +215,7 @@ export function rankKnowledgeEntriesForAgent<T extends { category: string; score
       let score = prioritySet.has(entry.category) ? entry.score * 1.15 : entry.score * 0.85
       if (wantsIp && parsed.scope === "ip") score *= 1.2
       if (wantsProject && parsed.scope === "project") score *= 1.2
+      if (entry.category === "user_insight" && parsed.assetRole === "strategy") score *= 1.35
       // 策略级分类权重叠加（hot_topic 突出热点/对标、conversion 突出卖点/痛点等）
       if (categoryBoost[entry.category]) score *= categoryBoost[entry.category]
       // 价值分级权重：S/A 优先浮出，C 靠后；null 视为 B(×1.0)

@@ -87,12 +87,12 @@ const COMPRESSION_PROFILES: Record<string, AimCompressionProfile> = {
   content_review: {
     recentRounds: 5,
     focus: [
-      "数据指标（播放量、互动率、转化等）",
-      "分析结论和判断",
-      "用户对表现的反馈",
-      "已确定的优化动作",
-      "复用建议和资产识别",
-      "评论/私信中的用户反馈",
+      "待质检的成稿内容",
+      "发布前自查结论",
+      "平台风险和必改表达",
+      "AI味、逻辑和文笔问题",
+      "最小修改建议",
+      "用户确认保留或删除的表达",
     ],
     maxSummaryChars: 2000,
   },

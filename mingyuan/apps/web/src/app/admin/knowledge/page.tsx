@@ -12,6 +12,7 @@ import {
   Upload,
   Plus,
   X,
+  Eye,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -70,6 +71,7 @@ interface AdminProject {
   companyName: string | null
   industry: string | null
   status: string
+  knowledgeCount?: number
   user: { id: string; name: string | null; email: string }
 }
 
@@ -108,6 +110,7 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   voice_transcribe: "语音转写",
   import: "文件导入",
   obsidian: "Obsidian 同步",
+  smart_import: "智能导入",
 }
 
 // 中转站测试：通道与可选模型（OpenRouter 免费模型标注 free）
@@ -188,7 +191,8 @@ async function fetchProjects() {
 }
 
 function projectLabel(project: AdminProject) {
-  return `${project.name}${project.companyName ? ` · ${project.companyName}` : ""}`
+  const count = typeof project.knowledgeCount === "number" ? ` · ${project.knowledgeCount}条资料` : ""
+  return `${project.name}${project.companyName ? ` · ${project.companyName}` : ""}${count}`
 }
 
 function embeddingLabel(entry: KnowledgeEntry) {
@@ -212,7 +216,7 @@ async function batchAction(
     body: JSON.stringify({ ids, action, value }),
   })
   if (!res.ok) throw new Error("操作失败")
-  return res.json()
+  return res.json().catch(() => ({ success: true }))
 }
 
 async function deleteEntries(ids: string[]) {
@@ -224,7 +228,7 @@ async function deleteEntries(ids: string[]) {
     },
   })
   if (!res.ok) throw new Error("删除失败")
-  return res.json()
+  return res.json().catch(() => ({ success: true }))
 }
 
 async function distillEntries(ids: string[]) {
@@ -264,6 +268,7 @@ export default function AdminKnowledgePage() {
 
   // 选中
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+  const [detailEntry, setDetailEntry] = React.useState<KnowledgeEntry | null>(null)
 
   // 蒸馏
   const [distillDialogOpen, setDistillDialogOpen] = React.useState(false)
@@ -290,6 +295,39 @@ export default function AdminKnowledgePage() {
   const [uploadProjectId, setUploadProjectId] = React.useState("none")
   const [uploading, setUploading] = React.useState(false)
 
+  // 智能导入
+  const [smartImportOpen, setSmartImportOpen] = React.useState(false)
+  const [smartImportStep, setSmartImportStep] = React.useState<"upload" | "processing" | "preview">("upload")
+  const [smartImportFiles, setSmartImportFiles] = React.useState<File[]>([])
+  const [smartImportProjectId, setSmartImportProjectId] = React.useState("none")
+  const [smartImportPreviewData, setSmartImportPreviewData] = React.useState<{
+    userId: string
+    projectId: string | null
+    processed: Array<{
+      index: number
+      originalText: string
+      detectedSource: string
+      suggestedTitle: string
+      suggestedKeyPoints: string
+      suggestedCategory: string
+      suggestedTags: string[]
+      suggestedValueGrade: string
+      duplicateOfId?: string
+      duplicateScore?: number
+      confidence: string
+    }>
+    fileNames: string[]
+  } | null>(null)
+  const [smartImportConfirming, setSmartImportConfirming] = React.useState(false)
+  const [smartImportEdits, setSmartImportEdits] = React.useState<Record<number, {
+    title?: string
+    category?: string
+    tags?: string[]
+    valueGrade?: string
+    skip?: boolean
+  }>>({})
+  const [smartImportExpanded, setSmartImportExpanded] = React.useState<Set<number>>(new Set())
+
   // 中转站测试
   const [jiekouTestOpen, setJiekouTestOpen] = React.useState(false)
   const [jiekouProvider, setJiekouProvider] = React.useState<"jiekou" | "openrouter">("jiekou")
@@ -314,8 +352,8 @@ export default function AdminKnowledgePage() {
         projectId: projectFilter,
         valueGrade: gradeFilter,
       })
-      setEntries(res.data.results)
-      setTotal(res.data.total)
+      setEntries(Array.isArray(res.data?.results) ? res.data.results : [])
+      setTotal(typeof res.data?.total === "number" ? res.data.total : 0)
     } finally {
       setLoading(false)
     }
@@ -326,7 +364,7 @@ export default function AdminKnowledgePage() {
   }, [fetchData])
 
   React.useEffect(() => {
-    fetchProjects().then((res) => setProjects(res.data)).catch(() => {})
+    fetchProjects().then((res) => setProjects(Array.isArray(res.data) ? res.data : [])).catch(() => setProjects([]))
   }, [])
 
   const totalPages = Math.ceil(total / pageSize)
@@ -472,6 +510,78 @@ export default function AdminKnowledgePage() {
       alert("上传失败，请重试")
     } finally {
       setUploading(false)
+    }
+  }
+
+  async function handleSmartImportAnalyze() {
+    if (smartImportFiles.length === 0) return
+    setSmartImportStep("processing")
+    setSmartImportEdits({})
+    setSmartImportPreviewData(null)
+    try {
+      const formData = new FormData()
+      for (const file of smartImportFiles) formData.append("files", file)
+      if (smartImportProjectId !== "none") formData.append("projectId", smartImportProjectId)
+
+      const res = await fetch("/api/admin/knowledge/smart-import", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getAdminToken()}` },
+        body: formData,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "分析失败" }))
+        throw new Error(err.error || "智能分析失败")
+      }
+      const data = await res.json()
+      setSmartImportPreviewData(data.data)
+      setSmartImportStep("preview")
+    } catch (error) {
+      alert(`智能分析失败: ${error instanceof Error ? error.message : "未知错误"}`)
+      setSmartImportStep("upload")
+    }
+  }
+
+  async function handleSmartImportConfirm() {
+    if (!smartImportPreviewData) return
+    setSmartImportConfirming(true)
+    try {
+      const entries = (Array.isArray(smartImportPreviewData.processed) ? smartImportPreviewData.processed : [])
+        .filter((r) => !(smartImportEdits[r.index]?.skip))
+        .map((r) => {
+          const edit = smartImportEdits[r.index]
+          return {
+            title: edit?.title || r.suggestedTitle,
+            content: r.originalText,
+            category: edit?.category || r.suggestedCategory,
+            tags: edit?.tags || r.suggestedTags,
+            valueGrade: edit?.valueGrade || r.suggestedValueGrade,
+          }
+        })
+
+      const res = await fetch("/api/admin/knowledge/smart-import/confirm", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getAdminToken()}`,
+        },
+        body: JSON.stringify({
+          userId: smartImportPreviewData.userId,
+          projectId: smartImportPreviewData.projectId,
+          entries,
+        }),
+      })
+      if (!res.ok) throw new Error("确认导入失败")
+      await res.json().catch(() => null)
+      setSmartImportOpen(false)
+      setSmartImportStep("upload")
+      setSmartImportFiles([])
+      setSmartImportPreviewData(null)
+      setSmartImportEdits({})
+      fetchData()
+    } catch (error) {
+      alert(`导入失败: ${error instanceof Error ? error.message : "未知错误"}`)
+    } finally {
+      setSmartImportConfirming(false)
     }
   }
 
@@ -749,6 +859,15 @@ export default function AdminKnowledgePage() {
             <Upload className="h-4 w-4 mr-1" />
             上传文件
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSmartImportOpen(true)}
+            className="cursor-pointer"
+          >
+            <Sparkles className="h-4 w-4 mr-1" />
+            智能导入
+          </Button>
           <Select
             value={categoryFilter || "all"}
             onValueChange={(v) => {
@@ -935,7 +1054,14 @@ export default function AdminKnowledgePage() {
                           />
                         </td>
                         <td className="p-3 max-w-[260px]">
-                          <p className="truncate font-medium">{entry.title}</p>
+                          <button
+                            type="button"
+                            onClick={() => setDetailEntry(entry)}
+                            className="flex max-w-full items-center gap-1 truncate text-left font-medium hover:text-primary"
+                          >
+                            <Eye className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{entry.title}</span>
+                          </button>
                           <p className="truncate text-xs text-muted-foreground mt-0.5">
                             {entry.content.slice(0, 80)}...
                           </p>
@@ -1056,6 +1182,32 @@ export default function AdminKnowledgePage() {
       )}
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!detailEntry} onOpenChange={(open) => !open && setDetailEntry(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{detailEntry?.title ?? "知识详情"}</DialogTitle>
+            <DialogDescription>
+              {detailEntry?.project?.name ?? "全局/未绑定"} · {detailEntry?.user?.email ?? "未知用户"}
+            </DialogDescription>
+          </DialogHeader>
+          {detailEntry && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">{CATEGORY_LABELS[detailEntry.category] || detailEntry.category}</Badge>
+                <Badge variant="outline">{SOURCE_TYPE_LABELS[detailEntry.sourceType] || detailEntry.sourceType}</Badge>
+                <Badge variant={detailEntry.status === "active" ? "default" : "secondary"}>
+                  {detailEntry.status === "active" ? "生效" : "已归档"}
+                </Badge>
+                {detailEntry.valueGrade ? <Badge variant="outline">{detailEntry.valueGrade}</Badge> : null}
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <p className="whitespace-pre-wrap text-sm leading-7">{detailEntry.content}</p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* 知识蒸馏结果弹窗 */}
       <Dialog open={distillDialogOpen} onOpenChange={setDistillDialogOpen}>
@@ -1298,6 +1450,218 @@ export default function AdminKnowledgePage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 智能导入 Dialog */}
+      <Dialog open={smartImportOpen} onOpenChange={(open) => { if (!open) { setSmartImportStep("upload"); setSmartImportFiles([]); setSmartImportPreviewData(null); setSmartImportEdits({}) } setSmartImportOpen(open) }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              智能导入
+            </DialogTitle>
+            <DialogDescription>上传文件，系统自动分类、打标签、去重</DialogDescription>
+          </DialogHeader>
+
+          {/* Step 1: Upload */}
+          {smartImportStep === "upload" && (
+            <div className="space-y-4">
+              <div>
+                <Label>归属项目</Label>
+                <Select value={smartImportProjectId} onValueChange={(v) => setSmartImportProjectId(v ?? "none")}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">全局方法论 / 不绑定项目</SelectItem>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>{projectLabel(project)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>选择文件（支持 PDF/TXT/MD/CSV/DOCX/XLSX，含微信导出聊天记录自动识别）</Label>
+                <div className="mt-1">
+                  <Input
+                    type="file"
+                    accept=".pdf,.txt,.md,.csv,.docx,.xlsx"
+                    multiple
+                    onChange={(e) => setSmartImportFiles(Array.from(e.target.files ?? []))}
+                    className="cursor-pointer"
+                  />
+                </div>
+              </div>
+              {smartImportFiles.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">已选 {smartImportFiles.length} 个文件：</p>
+                  <div className="flex flex-wrap gap-2">
+                    {smartImportFiles.map((f, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">
+                        {f.name} ({(f.size / 1024).toFixed(1)}KB)
+                        <button className="ml-1 hover:text-destructive" onClick={() => setSmartImportFiles((prev) => prev.filter((_, j) => j !== i))}>×</button>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setSmartImportOpen(false)} className="cursor-pointer">取消</Button>
+                <Button onClick={handleSmartImportAnalyze} disabled={smartImportFiles.length === 0} className="cursor-pointer">
+                  <Sparkles className="h-4 w-4 mr-1" />
+                  开始智能分析
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Processing */}
+          {smartImportStep === "processing" && (
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">正在智能分析文件内容…</p>
+              <div className="text-xs text-muted-foreground space-y-1">
+                {smartImportFiles.map((f) => (
+                  <p key={f.name}>{f.name}</p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Preview + Confirm */}
+          {smartImportStep === "preview" && smartImportPreviewData && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                共 {(Array.isArray(smartImportPreviewData.processed) ? smartImportPreviewData.processed : []).length} 条知识待确认，可编辑标题/分类/分级，勾选跳过重复条目
+              </p>
+              <div className="space-y-3">
+                {(Array.isArray(smartImportPreviewData.processed) ? smartImportPreviewData.processed : []).map((item) => {
+                  const edit = smartImportEdits[item.index] ?? {}
+                  const isDuplicate = !!item.duplicateOfId
+                  const isExpanded = smartImportExpanded.has(item.index)
+                  return (
+                    <Card key={item.index} className={`border ${edit.skip ? "opacity-50" : isDuplicate ? "border-orange-200" : ""}`}>
+                      <CardContent className="p-3 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">#{item.index + 1}</span>
+                            {item.detectedSource === "wechat_chat" && (
+                              <Badge variant="outline" className="text-[10px]">微信记录</Badge>
+                            )}
+                            <Badge variant={item.confidence === "high" ? "default" : item.confidence === "medium" ? "secondary" : "outline"} className="text-[10px]">
+                              {item.confidence === "high" ? "高置信" : item.confidence === "medium" ? "中置信" : "低置信"}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isDuplicate && (
+                              <Badge variant="outline" className="text-[10px] text-orange-600 border-orange-300">
+                                重复 {(item.duplicateScore! * 100).toFixed(0)}%
+                              </Badge>
+                            )}
+                            <label className="flex items-center gap-1 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={!!edit.skip}
+                                onChange={(e) => setSmartImportEdits((prev) => ({ ...prev, [item.index]: { ...prev[item.index], skip: e.target.checked } }))}
+                              />
+                              跳过
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] text-muted-foreground">标题</Label>
+                            <Input
+                              value={edit.title ?? item.suggestedTitle}
+                              onChange={(e) => setSmartImportEdits((prev) => ({ ...prev, [item.index]: { ...prev[item.index], title: e.target.value } }))}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] text-muted-foreground">分类</Label>
+                            <Select
+                              value={edit.category ?? item.suggestedCategory}
+                              onValueChange={(v) => setSmartImportEdits((prev) => ({ ...prev, [item.index]: { ...prev[item.index], category: v ?? "" } }))}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] text-muted-foreground">价值分级</Label>
+                            <Select
+                              value={edit.valueGrade ?? item.suggestedValueGrade}
+                              onValueChange={(v) => setSmartImportEdits((prev) => ({ ...prev, [item.index]: { ...prev[item.index], valueGrade: v ?? "" } }))}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="S">S · 战略级</SelectItem>
+                                <SelectItem value="A">A · 战术级</SelectItem>
+                                <SelectItem value="B">B · 参考级</SelectItem>
+                                <SelectItem value="C">C · 索引级</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1">
+                          {(edit.tags ?? item.suggestedTags ?? []).map((tag) => (
+                            <Badge key={tag} variant="secondary" className="text-[10px]">{tag.replace("kb_scope:", "").replace("asset_role:", "").replace("usable_for:", "").replace("confidence:", "")}</Badge>
+                          ))}
+                        </div>
+
+                        <p className="text-xs text-muted-foreground line-clamp-2">{edit.skip ? "(已跳过)" : item.suggestedKeyPoints}</p>
+
+                        <button
+                          className="text-[10px] text-primary hover:underline cursor-pointer"
+                          onClick={() => setSmartImportExpanded((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(item.index)) next.delete(item.index)
+                            else next.add(item.index)
+                            return next
+                          })}
+                        >
+                          {isExpanded ? "收起原文" : "展开原文"}
+                        </button>
+                        {isExpanded && (
+                          <pre className="text-xs text-muted-foreground bg-muted/50 rounded p-2 whitespace-pre-wrap max-h-40 overflow-y-auto">{item.originalText}</pre>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+
+              <div className="flex justify-between items-center pt-2">
+                <span className="text-sm text-muted-foreground">
+                  将导入 {(Array.isArray(smartImportPreviewData.processed) ? smartImportPreviewData.processed : []).filter((r) => !smartImportEdits[r.index]?.skip).length} 条
+                </span>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setSmartImportStep("upload")} className="cursor-pointer">
+                    重新选择
+                  </Button>
+                  <Button
+                    onClick={handleSmartImportConfirm}
+                    disabled={smartImportConfirming || (Array.isArray(smartImportPreviewData.processed) ? smartImportPreviewData.processed : []).every((r) => smartImportEdits[r.index]?.skip)}
+                    className="cursor-pointer"
+                  >
+                    {smartImportConfirming ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    确认导入
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

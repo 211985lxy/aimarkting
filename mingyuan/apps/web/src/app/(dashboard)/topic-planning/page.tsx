@@ -219,7 +219,7 @@ export default function TopicPlanningPage() {
   const [knowledgeLoadedProjectId, setKnowledgeLoadedProjectId] = useState<string | null>(null)
   const [savingCategory, setSavingCategory] = useState<TopicCategory | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [recommendationMode, setRecommendationMode] = useState<ApiTopicRecommendationMode>("normal")
+  const [recommendationMode, setRecommendationMode] = useState<ApiTopicRecommendationMode>("daily")
   const [topicCards, setTopicCards] = useState<ApiTopicCard[]>([])
   const [dailyBriefingItems, setDailyBriefingItems] = useState<ApiAiHotBriefingItem[]>([])
   const [dailyReportSources, setDailyReportSources] = useState<TopicDailyReportSource[]>([])
@@ -227,6 +227,7 @@ export default function TopicPlanningPage() {
   const [selectedTopicIndex, setSelectedTopicIndex] = useState<number | null>(null)
   const [topicRefreshCount, setTopicRefreshCount] = useState(0)
   const [autoGenerating, setAutoGenerating] = useState(false)
+  const [autoGenerateError, setAutoGenerateError] = useState("")
   const [forms, setForms] = useState<Record<TopicCategory, { title: string; content: string }>>({
     daily_inspiration: { title: "", content: "" },
     benchmark_reference: { title: "", content: "" },
@@ -363,14 +364,16 @@ export default function TopicPlanningPage() {
           setTopicSelectionId(result.topicSelectionId)
           setSelectedTopicIndex(null)
           setTopicRefreshCount((c) => c + 1)
+          getTodayAiHotBriefing()
+            .then((briefing) => {
+              if (!cancelled) setDailyBriefingItems(briefing.items)
+            })
+            .catch(() => {})
           toast.success("已加载今日推荐选题")
           return
         }
         // missing → 自动生成
         const entryIds = knowledgeEntries.map((e) => e.id)
-        if (entryIds.length === 0) {
-          return // 无素材，不自动生成
-        }
         return generateTopics({
           projectId: selectedProjectId,
           knowledgeEntryIds: entryIds,
@@ -380,6 +383,7 @@ export default function TopicPlanningPage() {
       })
       .then((genResult) => {
         if (cancelled || !genResult) return
+        setAutoGenerateError("")
         setTopicCards(genResult.cards)
         setDailyReportSources(genResult.sourceHighlights ?? [])
         setTopicSelectionId(genResult.topicSelectionId)
@@ -389,8 +393,8 @@ export default function TopicPlanningPage() {
       })
       .catch((err) => {
         if (cancelled) return
-        // 静默失败，不阻塞页面
         console.error("[topic-auto] Auto-generation failed:", err)
+        setAutoGenerateError(err instanceof Error ? err.message : "今日选题日报自动生成失败")
       })
       .finally(() => {
         if (!cancelled) setAutoGenerating(false)
@@ -495,11 +499,6 @@ export default function TopicPlanningPage() {
       toast.error("先选择一个 IP 营销全案")
       return
     }
-    if (generationKnowledgeIds.length === 0) {
-      toast.error("至少录入 1 条素材再生成选题")
-      return
-    }
-
     setIsGenerating(true)
     try {
       const result = await generateTopics({
@@ -509,6 +508,7 @@ export default function TopicPlanningPage() {
         recommendationMode,
       })
       setTopicCards(result.cards)
+      setAutoGenerateError("")
       setDailyReportSources(result.sourceHighlights ?? [])
       if (recommendationMode === "daily") {
         const briefing = await getTodayAiHotBriefing().catch(() => null)
@@ -633,7 +633,7 @@ export default function TopicPlanningPage() {
             <Button
               variant="outline"
               onClick={handleGenerateTopics}
-              disabled={!selectedProjectId || generationKnowledgeIds.length === 0 || isGenerating}
+              disabled={!selectedProjectId || isGenerating}
             >
               <Sparkles className="mr-1 h-4 w-4" />
               {isGenerating ? "生成中..." : topicCards.length > 0 ? "重新生成" : `生成${MODE_META[recommendationMode].label}`}
@@ -653,10 +653,14 @@ export default function TopicPlanningPage() {
         </Card>
       ) : (
         <>
-          <div className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
-            <div className="space-y-6">
-              {groupedEntries.map(({ category, items }) => (
-                <Card key={category}>
+          <div className="flex flex-col gap-6">
+            <div className="order-2 rounded-xl border bg-muted/20 p-3 text-sm opacity-80">
+              <div className="font-medium text-muted-foreground">
+                补充素材（可选） · 素材池 {knowledgeEntries.length} 条
+              </div>
+              <div className="mt-4 space-y-4">
+                {groupedEntries.map(({ category, items }) => (
+                <Card key={category} className="shadow-none">
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -717,15 +721,20 @@ export default function TopicPlanningPage() {
                       )}
                     </div>
                   </CardContent>
-                </Card>
-              ))}
+                  </Card>
+                ))}
+              </div>
             </div>
 
-            <div className="space-y-6">
+            <div className="order-1 space-y-6">
               {dailyReport ? (
                 <TopicDailyReportPanel report={dailyReport} />
               ) : recommendationMode === "daily" ? (
-                <TopicDailyReportEmptyState />
+                <TopicDailyReportEmptyState
+                  error={autoGenerateError}
+                  onGenerate={handleGenerateTopics}
+                  disabled={!selectedProjectId || isGenerating || autoGenerating}
+                />
               ) : null}
 
               <AiResultPanel
@@ -737,7 +746,7 @@ export default function TopicPlanningPage() {
                   <div className="flex flex-wrap gap-2">
                     {selectedKnowledgeIds.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        未手动选择素材，将使用当前素材池全部 {knowledgeEntries.length} 条。
+                        未手动选择素材，将自动结合热点、对标账号、拆解文案和素材池 {knowledgeEntries.length} 条。
                       </p>
                     ) : (
                       selectedKnowledgeIds.map((entryId) => {
@@ -913,7 +922,15 @@ export default function TopicPlanningPage() {
   )
 }
 
-function TopicDailyReportEmptyState() {
+function TopicDailyReportEmptyState({
+  error,
+  onGenerate,
+  disabled,
+}: {
+  error: string
+  onGenerate: () => void
+  disabled: boolean
+}) {
   return (
     <Card className="border-dashed border-primary/30 bg-primary/[0.02]">
       <CardHeader className="space-y-3 pb-4">
@@ -924,9 +941,14 @@ function TopicDailyReportEmptyState() {
         <div>
           <CardTitle className="text-xl leading-tight">今日选题日报还没生成</CardTitle>
           <CardDescription className="mt-2 text-sm leading-6">
-            勾选素材后点击「生成选题日报」，系统会结合今日 AI HOT、项目资料和选题卡给出主推方向。
+            点击「生成选题日报」，系统会优先借助对标账号和拆解文案，结合项目资料生成主推方向；AI HOT 只做辅助热点参考。
           </CardDescription>
+          {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
         </div>
+        <Button className="w-fit" onClick={onGenerate} disabled={disabled}>
+          <Sparkles className="mr-1 h-4 w-4" />
+          生成选题日报
+        </Button>
       </CardHeader>
     </Card>
   )

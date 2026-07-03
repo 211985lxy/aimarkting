@@ -34,6 +34,7 @@ export function HeroSection() {
   const t = useTranslations("Hero")
   const tP = useTranslations("Platforms")
   const branding = useBranding()
+  const profileOnce = t("profileOnce")
 
   return (
     <section className="relative overflow-hidden bg-[#FAF8F3] px-4 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-28">
@@ -65,7 +66,7 @@ export function HeroSection() {
           <h1 className="max-w-3xl text-4xl font-bold leading-[1.08] tracking-tight text-[#25211D] sm:text-5xl lg:text-6xl">
             {t("title")}
             <br />
-            <span className="bg-fire-earth-gradient bg-clip-text text-transparent">
+            <span className="text-[#D14A33]">
               {t("titleHighlight")}
             </span>
           </h1>
@@ -75,13 +76,14 @@ export function HeroSection() {
             {t("subtitle", { name: branding.name })}
           </p>
 
-          {/* 「档案只配一次」卖点条 */}
-          <div className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[#D14A33]/15 bg-white/70 px-3.5 py-2 text-sm font-medium text-[#25211D] shadow-sm backdrop-blur">
-            <span className="seal-icon h-5! w-5!">
-              <Check className="h-3.5 w-3.5" />
-            </span>
-            {t("profileOnce")}
-          </div>
+          {profileOnce ? (
+            <div className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[#D14A33]/15 bg-white/70 px-3.5 py-2 text-sm font-medium text-[#25211D] shadow-sm backdrop-blur">
+              <span className="seal-icon h-5! w-5!">
+                <Check className="h-3.5 w-3.5" />
+              </span>
+              {profileOnce}
+            </div>
+          ) : null}
 
           {/* CTAs */}
           <div className="mt-8 flex flex-col gap-4 sm:flex-row">

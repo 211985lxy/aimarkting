@@ -45,6 +45,10 @@ export default function AdminUsersPage() {
       const res = await getAdminUsers({ page, pageSize, search, plan: planFilter })
       setUsers(res.data.results)
       setTotal(res.data.total)
+    } catch (error) {
+      console.error(error)
+      setUsers([])
+      setTotal(0)
     } finally {
       setLoading(false)
     }
@@ -56,7 +60,12 @@ export default function AdminUsersPage() {
   }, [fetchUsers])
 
   React.useEffect(() => {
-    getAdminUserStats().then((res) => setStats(res.data))
+    getAdminUserStats()
+      .then((res) => setStats(res.data))
+      .catch((error) => {
+        console.error(error)
+        setStats(null)
+      })
   }, [])
 
   const totalPages = Math.ceil(total / pageSize)

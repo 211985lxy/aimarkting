@@ -14,6 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { getStoredAdminToken } from "@/lib/admin-store"
 import { getAdminUserStats, getActivationCodeStats, type UserStats, type CodeStats } from "@/lib/api/admin-client"
 
 interface DashboardData {
@@ -33,14 +34,16 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
+    const token = getStoredAdminToken()
+
     Promise.all([
       fetch("/api/admin/dashboard", {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("mingyuan-admin-auth") ? JSON.parse(localStorage.getItem("mingyuan-admin-auth")!).state?.token : ""}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       })
-        .then((r) => r.json())
-        .then((r) => setDashboard(r.data))
+        .then((r) => (r.ok ? r.json() : null))
+        .then((r) => setDashboard(r?.data ?? null))
         .catch(() => null),
       getAdminUserStats()
         .then((r) => setUserStats(r.data))

@@ -360,6 +360,27 @@ export interface QualityDimensionScore {
   details?: string
 }
 
+export interface PublishCheckViolation {
+  text: string
+  severity: "high" | "mid" | "low"
+  category: string
+  reason: string
+  suggest: string
+}
+
+export interface PublishCheckReport {
+  verdict: "可发" | "改完可发" | "高风险勿发"
+  violations: PublishCheckViolation[]
+  aiLabelReminder: string
+  trafficScore: {
+    score: number
+    level: "高" | "中" | "低"
+    reasons: string[]
+  }
+  trafficWeakness: string[]
+  minimalRewrite: string
+}
+
 export interface QualityCheckReport {
   editorial: QualityDimensionScore
   aiTaste: QualityDimensionScore
@@ -367,6 +388,7 @@ export interface QualityCheckReport {
   logic: QualityDimensionScore
   overall: { score: number; passed: boolean; needsRewrite: boolean }
   rewriteCount: number
+  publishCheck?: PublishCheckReport
 }
 
 /** 将后端 1-10 分转换为 0-100 分 */
@@ -377,6 +399,7 @@ function toPercent(score1to10: number): number {
 export async function checkScriptQuality(input: {
   content: string
   topicTitle?: string
+  publishPlatform?: "douyin"
   persona?: string | {
     roleType?: string
     oneLiner?: string
@@ -394,6 +417,7 @@ export async function checkScriptQuality(input: {
         overall: { score: number; passed: boolean; needsRewrite: boolean }
         rewriteCount: number
       }
+      publishCheck?: PublishCheckReport
     }
   }>("/api/scripts/quality-check", {
     method: "POST",
@@ -408,6 +432,7 @@ export async function checkScriptQuality(input: {
     logic: { ...d.logic, score: toPercent(d.logic.score) },
     overall: { ...d.overall, score: toPercent(d.overall.score) },
     rewriteCount: d.rewriteCount,
+    publishCheck: payload.data.publishCheck,
   }
 }
 
@@ -422,6 +447,7 @@ export async function polishScript(input: {
   weakDimensions?: string[]
   topicTitle?: string
   persona?: string
+  mode?: "polish" | "proofread"
 }): Promise<PolishResult> {
   const payload = await request<{ data: PolishResult }>("/api/scripts/polish", {
     method: "POST",
@@ -684,7 +710,7 @@ export async function generateTopics(
     {
       method: "POST",
       body: JSON.stringify(body),
-      timeout: 30000,
+      timeout: 60000,
     }
   )
   return payload.data
@@ -1236,12 +1262,13 @@ export function exportToLarkBase(data: {
   })
 }
 
-export async function listAimHistory(page = 1, pageSize = 20, projectId?: string): Promise<AimGeneration[]> {
+export async function listAimHistory(page = 1, pageSize = 20, projectId?: string, agentId?: string): Promise<AimGeneration[]> {
   const params = new URLSearchParams({
     page: String(page),
     pageSize: String(pageSize),
   })
   if (projectId) params.set("projectId", projectId)
+  if (agentId) params.set("agentId", agentId)
   return request<AimGeneration[]>(`/api/aim/history?${params.toString()}`)
 }
 
@@ -1304,6 +1331,10 @@ export async function updateAimWorkflowStatus(id: string, data: {
   })
 }
 
+export async function deleteAimHistory(id: string): Promise<void> {
+  await request(`/api/aim/history/${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
 export async function transcribeAudio(audioBlob: Blob): Promise<{ text: string }> {
   return request<{ text: string }>("/api/aim/transcribe", {
     method: "POST",
@@ -1343,12 +1374,19 @@ export async function uploadKnowledgeDocument(
     )
   }
 
-  return response.json()
+  return response.json().catch(() => ({ created: 0, entries: [] }))
 }
 
 export interface AimChatMessage {
   role: "user" | "assistant"
   content: string
+}
+
+export interface AimEditorContext {
+  action: string
+  referenceSelection?: string
+  draftSelection?: string
+  draftText?: string
 }
 
 export type AimChatToolAction =
@@ -1364,6 +1402,7 @@ export async function chatAim(
     projectId?: string
     toolAction?: AimChatToolAction
     resultId?: string
+    editorContext?: AimEditorContext
     signal?: AbortSignal
   },
 ): Promise<{ content: string; toolResult?: unknown }> {
@@ -1381,6 +1420,7 @@ export async function chatAimStream(
   options: {
     agentId?: string
     projectId?: string
+    editorContext?: AimEditorContext
     signal?: AbortSignal
     onDelta: (delta: string, content: string) => void
   },

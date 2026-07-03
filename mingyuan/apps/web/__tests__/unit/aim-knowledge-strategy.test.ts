@@ -1,11 +1,71 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  resolveAimRuntimeTask,
   resolveKnowledgeStrategy,
+  shouldUseKnowledgeContextForTask,
+  shouldUseMarketViralContextForTask,
   getStrategyProfile,
   KNOWLEDGE_STRATEGY_PROFILES,
   type ResolvedKnowledgeStrategy,
 } from "@/lib/aim-knowledge-strategy"
+
+describe("AIM runtime task routing", () => {
+  it("treats small polish requests as light_edit without knowledge context", () => {
+    const task = resolveAimRuntimeTask({
+      agentId: "content_producer",
+      input: "帮我润色这句话，改得自然点",
+    })
+
+    expect(task).toBe("light_edit")
+    expect(resolveKnowledgeStrategy({ runtimeTask: task })).toBe("light_edit")
+    expect(shouldUseKnowledgeContextForTask(task)).toBe(false)
+  })
+
+  it("treats explicit replacement instructions as light_edit", () => {
+    const task = resolveAimRuntimeTask({
+      agentId: "content_producer",
+      input: "这里改成帮助客户沉淀可以进化的知识库资产",
+    })
+
+    expect(task).toBe("light_edit")
+    expect(shouldUseKnowledgeContextForTask(task)).toBe(false)
+  })
+
+  it("treats spoken style edits as light_edit", () => {
+    expect(resolveAimRuntimeTask({
+      agentId: "content_producer",
+      input: "帮我改得更口语化",
+    })).toBe("light_edit")
+  })
+
+  it("uses knowledge context when the user asks to combine customer cases", () => {
+    const task = resolveAimRuntimeTask({
+      agentId: "content_producer",
+      input: "结合客户案例写一版短视频文案",
+    })
+
+    expect(task).toBe("new_copy")
+    expect(shouldUseKnowledgeContextForTask(task)).toBe(true)
+  })
+
+  it("only uses market viral context for new copy and positioning/topic tasks", () => {
+    expect(shouldUseMarketViralContextForTask("light_edit")).toBe(false)
+    expect(shouldUseMarketViralContextForTask("quality_review")).toBe(false)
+    expect(shouldUseMarketViralContextForTask("new_copy")).toBe(true)
+    expect(shouldUseMarketViralContextForTask("positioning_topic")).toBe(true)
+  })
+
+  it("routes content_review to quality_review", () => {
+    const task = resolveAimRuntimeTask({
+      agentId: "content_review",
+      input: "帮我检查这版口播能不能发",
+    })
+
+    expect(task).toBe("quality_review")
+    expect(shouldUseMarketViralContextForTask(task)).toBe(false)
+  })
+})
 
 // ─── resolveKnowledgeStrategy 优先级矩阵 ────────────────────────
 

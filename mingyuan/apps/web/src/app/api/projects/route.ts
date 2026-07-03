@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { authenticateRequest, authErrorResponse } from "@/lib/user-auth"
+import { enforceCountBetaLimit } from "@/lib/internal-beta-limits"
 
 function cleanText(value: unknown, maxLength = 500) {
   if (typeof value !== "string") return null
@@ -56,6 +57,9 @@ export async function POST(request: NextRequest) {
     if (!name) {
       return NextResponse.json({ error: "项目名称必填" }, { status: 400 })
     }
+
+    const limitResponse = await enforceCountBetaLimit({ userId: user.id, kind: "client_project" })
+    if (limitResponse) return limitResponse
 
     const project = await prisma.clientProject.create({
       data: {

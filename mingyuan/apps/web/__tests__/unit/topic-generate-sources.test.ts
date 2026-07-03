@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   buildBenchmarkAccountSources,
+  buildTopicSources,
   buildVideoCopyExtractionSources,
 } from "@/app/api/topics/generate/route"
 
@@ -21,6 +22,7 @@ describe("topic generate sources", () => {
     })
     expect(sources[0].content).toContain("爆款标题")
     expect(sources[0].content).toContain("近期标题")
+    expect(sources[0].content).toContain("已验证内容信号")
   })
 
   it("builds benchmark sources from extracted copy analysis", () => {
@@ -40,5 +42,18 @@ describe("topic generate sources", () => {
     expect(sources[0].content).toContain("结构化拆解")
     expect(sources[0].content).toContain("原文摘要")
     expect(sources[0].content).toContain("反差开头")
+    expect(sources[0].content).toContain("禁止照抄原句")
+  })
+
+  it("puts benchmark sources before selected knowledge and AI HOT", () => {
+    const sources = buildTopicSources({
+      projectSource: { category: "client_project", title: "项目", content: "项目资料" },
+      benchmarkSources: [{ category: "benchmark_reference", title: "对标账号", content: "爆款作品" }],
+      videoCopySources: [{ category: "benchmark_reference", title: "对标文案", content: "拆解文案" }],
+      selectedKnowledge: [{ category: "daily_inspiration", title: "日常灵感", content: "灵感" }],
+      hotTopicSources: [{ category: "industry_hot", title: "AI HOT", content: "热点" }],
+    })
+
+    expect(sources.map((source) => source.title)).toEqual(["项目", "对标账号", "对标文案", "日常灵感", "AI HOT"])
   })
 })

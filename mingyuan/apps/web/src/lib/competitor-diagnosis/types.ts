@@ -108,12 +108,6 @@ export interface CompetitorDiagnosisViewModel {
   // Evidence
   evidence: EvidenceData
 
-  // Strategic Bets
-  bets: StrategicBet[]
-
-  // Falsification Summary
-  falsificationSummary: FalsificationRow[]
-
   // Raw data (for appendix)
   rawAnalysis: ApiCompetitorAnalysis
 }

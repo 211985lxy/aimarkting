@@ -18,6 +18,14 @@ type RequestOptions = RequestInit & {
   auth?: boolean
 }
 
+function handleAdminUnauthorized() {
+  useAdminStore.getState().clearSession()
+
+  if (typeof window !== "undefined" && window.location.pathname !== "/admin/login") {
+    window.location.replace("/admin/login")
+  }
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { auth = true, headers, ...init } = options
   const token = auth
@@ -36,8 +44,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const payload = await response.json().catch(() => null)
 
   if (!response.ok) {
-    if (response.status === 401) {
-      useAdminStore.getState().clearSession()
+    if (response.status === 401 && auth) {
+      handleAdminUnauthorized()
     }
     throw new AdminApiError(
       typeof payload?.error === "string" ? payload.error : `Request failed: ${response.status}`,
@@ -132,7 +140,7 @@ export async function downloadActivationCodesExport(params: { status?: string; b
     }
 
     if (response.status === 401) {
-      useAdminStore.getState().clearSession()
+      handleAdminUnauthorized()
     }
 
     throw new AdminApiError(

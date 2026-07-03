@@ -24,10 +24,8 @@ import type { EvidenceData } from "@/lib/competitor-diagnosis/types"
  */
 export function EvidenceDashboard({
   evidence,
-  targetUrl,
 }: {
   evidence: EvidenceData
-  targetUrl?: string
 }) {
   const maxHeat = Math.max(0, ...Object.values(evidence.postingHeatmap))
   const metrics = [
@@ -81,9 +79,9 @@ export function EvidenceDashboard({
                     <TableCell className="text-sm">{formatCount(v.likes)}</TableCell>
                     <TableCell className="text-sm">{v.engagement_rate.toFixed(1)}%</TableCell>
                     <TableCell>
-                      {targetUrl && (
+                      {v.url && (
                         <a
-                          href={targetUrl}
+                          href={v.url}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}

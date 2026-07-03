@@ -12,6 +12,7 @@ import {
   AssetReadabilityError,
   resolveUpstreamReadableUrl,
 } from "@/lib/upstream-media"
+import { enforceCountBetaLimit } from "@/lib/internal-beta-limits"
 
 // ─── POST /api/avatars ─────────────────────────────────
 
@@ -63,6 +64,9 @@ export const POST = withUserAuth(async (request, { user }) => {
       { status: 400 }
     )
   }
+
+  const limitResponse = await enforceCountBetaLimit({ userId: user.id, kind: "avatar" })
+  if (limitResponse) return limitResponse
 
   // Read authVideoUrl from the user record (recorded once, reused for all avatar creations)
   const dbUser = await prisma.user.findUnique({

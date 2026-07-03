@@ -13,6 +13,7 @@ export const POST = withUserAuth(async (request, { user }) => {
   const weakDimensions = Array.isArray(body.weakDimensions) ? body.weakDimensions as string[] : []
   const topicTitle = typeof body.topicTitle === "string" ? body.topicTitle : null
   const persona = typeof body.persona === "string" ? body.persona : null
+  const mode = body.mode === "proofread" ? "proofread" : "polish"
 
   if (!content || content.length < 30) {
     return NextResponse.json({ error: "文案内容不能为空" }, { status: 400 })
@@ -21,6 +22,50 @@ export const POST = withUserAuth(async (request, { user }) => {
   const llm = LLMClient.shared()
   if (!llm.available) {
     return NextResponse.json({ error: "AI 服务暂时不可用" }, { status: 503 })
+  }
+
+  if (mode === "proofread") {
+    const result = await llm.complete({
+      model: POLISH_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: [
+            "你是一位中文文案校对编辑。",
+            "只修正错别字、标点、明显语病、重复字词和不通顺的小问题。",
+            "必须保持原文意思、结构、段落顺序、语气和表达风格不变。",
+            "不要扩写，不要改标题，不要增加解释，不要输出修改说明。",
+          ].join("\n"),
+        },
+        {
+          role: "user",
+          content: [
+            "请轻量校对以下文案，直接输出校对后的纯文本：",
+            "",
+            content,
+          ].join("\n"),
+        },
+      ],
+      temperature: 0.1,
+      maxTokens: 2000,
+    })
+
+    const polished = result.content
+      .replace(/^校对后[：:]\s*/gi, "")
+      .replace(/^修改后[：:]\s*/gi, "")
+      .trim()
+
+    if (!polished || polished.length < 30) {
+      return NextResponse.json({ error: "校对结果无效，请重试" }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      data: {
+        original: content,
+        polished,
+        polishedDimensions: ["proofread"],
+      },
+    })
   }
 
   // Build targeted polish instructions based on weak dimensions

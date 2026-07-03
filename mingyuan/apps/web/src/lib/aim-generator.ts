@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma"
-import { LLMClient } from "@/lib/llm/client"
-import { buildIpCopywritingMethodologyBlock } from "@/lib/ip-copywriting-methodology"
-import { buildBusinessDiagnosisMethodologyBlock } from "@/lib/business-diagnosis-methodology"
 import { buildAimGeneration } from "./aim-agent-handlers"
+import type { AimRuntimeTask } from "@/lib/aim-knowledge-strategy"
+import type { AimTraceRecorder } from "@/lib/aim-observability"
+import type { ContentScenario } from "@/lib/content-scenario-config"
 
 export type ContentFormat =
   | "video_script"
@@ -33,6 +33,9 @@ interface AimInput {
   hotTopic?: string
   polishInstruction?: string
   videoCopyExtractionId?: string
+  runtimeTask?: AimRuntimeTask
+  contentScenario?: ContentScenario
+  trace?: AimTraceRecorder
 }
 
 function asStringArray(value: unknown): string[] {
@@ -168,5 +171,8 @@ export async function generateAimContent(input: AimInput) {
     hotTopic: input.hotTopic,
     polishInstruction: input.polishInstruction,
     videoCopyExtractionId: input.videoCopyExtractionId,
+    runtimeTask: input.runtimeTask,
+    contentScenario: input.contentScenario,
+    trace: input.trace,
   })
 }

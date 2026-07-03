@@ -72,14 +72,24 @@ export default function AdminActivationCodesPage() {
       setCodes(res.data.results);
       setTotal(res.data.total);
       setBatches(res.data.batches);
+    } catch (error) {
+      console.error(error);
+      setCodes([]);
+      setTotal(0);
+      setBatches([]);
     } finally {
       setLoading(false);
     }
   }, [page, statusFilter, batchFilter]);
 
   const fetchStats = React.useCallback(async () => {
-    const res = await getActivationCodeStats();
-    setStats(res.data);
+    try {
+      const res = await getActivationCodeStats();
+      setStats(res.data);
+    } catch (error) {
+      console.error(error);
+      setStats(null);
+    }
   }, []);
 
   React.useEffect(() => {
@@ -359,7 +369,7 @@ function StatCard({
 
 function GenerateCodesForm({ onSuccess }: { onSuccess: () => void }) {
   const [quantity, setQuantity] = React.useState("50");
-  const [durationDays, setDurationDays] = React.useState("365");
+  const [durationDays, setDurationDays] = React.useState("14");
   const [batchNote, setBatchNote] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);

@@ -28,5 +28,20 @@ describe("ip-copywriting-methodology", () => {
     expect(block).toContain("最佳发布时段")
     expect(block).toContain("爆款公式")
   })
-})
 
+  it("contains the four copywriting content routes", async () => {
+    const block = await buildIpCopywritingMethodologyBlock()
+
+    expect(block).toContain("人设信任型")
+    expect(block).toContain("观点立场型")
+    expect(block).toContain("问题解决型")
+    expect(block).toContain("案例转化型")
+    expect(block).toContain("干货方法并入问题解决型")
+    expect(block).toContain("成交转化并入案例转化型")
+    expect(block).toContain("内容路由 = 这条内容为什么拍")
+    expect(block).toContain("内容形式 = 这条内容怎么拍")
+    expect(block).toContain("局部优化指令路由")
+    expect(block).toContain("开头、前3秒、第一句话、钩子")
+    expect(block).toContain("调用爆款开头库")
+  })
+})

@@ -55,6 +55,7 @@ describe("buildTopicDailyReport", () => {
     )
 
     expect(report.signals.map((signal) => signal.rank)).toEqual(["S", "A", "A", "A", "B", "B", "B", "C"])
+    expect(report.evidence[0].source).toContain("辅助热点")
   })
 
   it("builds a report without AIHOT items", () => {

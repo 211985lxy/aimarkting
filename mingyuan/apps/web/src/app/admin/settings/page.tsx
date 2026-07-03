@@ -52,6 +52,9 @@ export default function AdminSettingsPage() {
     try {
       const res = await getAdminSettings()
       setGrouped(res.data)
+    } catch (error) {
+      console.error(error)
+      setGrouped({})
     } finally {
       setLoading(false)
     }

@@ -54,3 +54,29 @@ export async function PATCH(
     )
   }
 }
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await authenticateRequest(_request)
+    const { id } = await params
+
+    const existing = await prisma.aimGeneration.findFirst({
+      where: { id, userId: user.id },
+      select: { id: true },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: "生成记录不存在" }, { status: 404 })
+    }
+
+    await prisma.aimGeneration.delete({ where: { id } })
+    return new NextResponse(null, { status: 204 })
+  } catch (error) {
+    return authErrorResponse(error) ?? NextResponse.json(
+      { error: "生成记录删除失败" },
+      { status: 500 }
+    )
+  }
+}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { authenticateRequest, authErrorResponse } from "@/lib/user-auth"
 import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
+import { extractAndPersistForEntry } from "@/lib/knowledge-entity-extractor"
 
 export async function PUT(
   request: NextRequest,
@@ -29,9 +30,13 @@ export async function PUT(
       },
     })
 
-    // Fire-and-forget: re-embed when content changes
+    // Fire-and-forget: re-embed + re-extract entities when content changes
     if (body.content !== undefined) {
       ensureKnowledgeEmbedding(id).catch(() => {})
+      extractAndPersistForEntry(id, body.content, {
+        userId: user.id,
+        projectId: entry.projectId || null,
+      }).catch(() => {})
     }
 
     return NextResponse.json(updated)

@@ -129,6 +129,18 @@ describe("定位策划官 prompt 保护", () => {
     expect(systemPrompt).toContain("不得编造来源")
   })
 
+  it("generate prompt requires account analysis references and core positioning points", async () => {
+    const handler = getAgentHandler("business_diagnosis")
+    await handler.generate(buildGenerateContext())
+
+    const systemPrompt = capturedSystemPrompt()
+    expect(systemPrompt).toContain("账号分析参考来源")
+    expect(systemPrompt).toContain("已分析对标账号")
+    expect(systemPrompt).toContain("内容母题")
+    expect(systemPrompt).toContain("核心点位设计")
+    expect(systemPrompt).toContain("定位点位、人设点位、内容点位、信任点位、成交点位、差异化点位")
+  })
+
   it("business diagnosis prompt supports three positioning routes", async () => {
     const handler = getAgentHandler("business_diagnosis")
     await handler.generate(buildGenerateContext())

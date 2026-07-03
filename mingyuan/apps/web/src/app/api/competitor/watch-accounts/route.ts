@@ -3,8 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { withUserAuth } from "@/lib/user-auth"
 import { checkUrlType, parseUrl } from "@/lib/tikhub/url-parser"
 import { getCompetitorPlatformGate } from "@/lib/competitor-analysis/platform-scope"
-
-const MAX_WATCH_ACCOUNTS = 10
+import { enforceCountBetaLimit } from "@/lib/internal-beta-limits"
 
 export const GET = withUserAuth(async (_request, { user }) => {
   const accounts = await prisma.watchAccount.findMany({
@@ -53,11 +52,8 @@ export const POST = withUserAuth(async (request, { user }) => {
     return NextResponse.json({ error: "该账号已在监控列表中" }, { status: 409 })
   }
 
-  // Count existing accounts
-  const count = await prisma.watchAccount.count({ where: { userId: user.id } })
-  if (count >= MAX_WATCH_ACCOUNTS) {
-    return NextResponse.json({ error: `最多监控 ${MAX_WATCH_ACCOUNTS} 个账号` }, { status: 400 })
-  }
+  const limitResponse = await enforceCountBetaLimit({ userId: user.id, kind: "watch_account" })
+  if (limitResponse) return limitResponse
 
   const account = await prisma.watchAccount.create({
     data: {

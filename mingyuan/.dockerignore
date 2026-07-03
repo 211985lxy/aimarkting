@@ -3,6 +3,8 @@
 .next
 .playwright-cli
 .planning
+.turbo
+apps/desktop
 test-results
 output
 node_modules
