@@ -14,6 +14,7 @@ import {
   X,
   Eye,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,7 +43,15 @@ import {
   knowledgeCleanupLabel,
   parseKnowledgeTags,
 } from "@/lib/knowledge-tags"
+import { MarkdownRenderer } from "@/components/markdown-renderer"
 import { KnowledgeMap } from "@/components/admin/knowledge-map"
+import {
+  KnowledgeBrowser,
+  type KnowledgeEntry as BrowserKnowledgeEntry,
+  type AdminProject as BrowserAdminProject,
+} from "@/components/admin/knowledge-browser"
+
+const KNOWLEDGE_UPLOAD_ACCEPT = ".pdf,.txt,.md,.csv,.docx,.xls,.xlsx,.pptx,.html,.htm,.json,.xml,.rtf"
 
 // ─── 类型定义 ──────────────────────────────────────────────
 
@@ -263,8 +272,8 @@ export default function AdminKnowledgePage() {
   // 项目
   const [projects, setProjects] = React.useState<AdminProject[]>([])
 
-  // Tab 切换
-  const [activeTab, setActiveTab] = React.useState("map")
+  // Tab 切换：默认进入「知识浏览」，进入即可看到具体内容
+  const [activeTab, setActiveTab] = React.useState("browser")
 
   // 选中
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
@@ -341,6 +350,76 @@ export default function AdminKnowledgePage() {
 
   const jiekouModelOptions = JIEKOU_PROVIDER_MODELS[jiekouProvider] || []
 
+  // 知识浏览 Tab（默认）：独立的列表状态，与「条目列表」Tab 解耦，但共享 projectFilter/categoryFilter
+  // 这样「知识地图」的下钻（设置 categoryFilter）也能联动浏览视图
+  const [browserEntries, setBrowserEntries] = React.useState<BrowserKnowledgeEntry[]>([])
+  const [browserTotal, setBrowserTotal] = React.useState(0)
+  const [browserPage, setBrowserPage] = React.useState(1)
+  const [browserSearch, setBrowserSearch] = React.useState("")
+  const [browserSearchInput, setBrowserSearchInput] = React.useState("")
+  const [browserLoading, setBrowserLoading] = React.useState(false)
+  const browserPageSize = 20
+  // 浏览视图的导航筛选（项目 / 分类）。默认全部，不与条目列表的筛选互相干扰
+  const [browserProject, setBrowserProject] = React.useState("")
+  const [browserCategory, setBrowserCategory] = React.useState("")
+  // 浏览视图的分类计数（来自 /stats，按当前选中项目刷新）
+  const [browserStats, setBrowserStats] = React.useState<{
+    totalEntries: number
+    categoryDistribution: Array<{ category: string; categoryLabel: string; count: number }>
+  } | null>(null)
+
+  const fetchBrowserData = React.useCallback(async () => {
+    setBrowserLoading(true)
+    try {
+      const res = await fetchKnowledge({
+        page: browserPage,
+        pageSize: browserPageSize,
+        search: browserSearch,
+        category: browserCategory,
+        projectId: browserProject,
+      })
+      setBrowserEntries(Array.isArray(res.data?.results) ? res.data.results : [])
+      setBrowserTotal(typeof res.data?.total === "number" ? res.data.total : 0)
+    } catch (error) {
+      setBrowserEntries([])
+      setBrowserTotal(0)
+      toast.error(error instanceof Error ? error.message : "知识加载失败，请重试")
+    } finally {
+      setBrowserLoading(false)
+    }
+  }, [browserPage, browserSearch, browserCategory, browserProject])
+
+  React.useEffect(() => {
+    void Promise.resolve().then(fetchBrowserData)
+  }, [fetchBrowserData])
+
+  // 搜索输入防抖 300ms
+  React.useEffect(() => {
+    const t = window.setTimeout(() => {
+      setBrowserSearch(browserSearchInput)
+      setBrowserPage(1)
+    }, 300)
+    return () => window.clearTimeout(t)
+  }, [browserSearchInput])
+
+  // 拉取浏览视图的分类计数（按当前项目）
+  React.useEffect(() => {
+    const token = getAdminToken()
+    const qs = browserProject ? `?projectId=${encodeURIComponent(browserProject)}` : ""
+    void fetch(`/api/admin/knowledge/stats${qs}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        const data = json.data ?? json
+        setBrowserStats({
+          totalEntries: data?.totalEntries ?? 0,
+          categoryDistribution: Array.isArray(data?.categoryDistribution) ? data.categoryDistribution : [],
+        })
+      })
+      .catch(() => setBrowserStats(null))
+  }, [browserProject])
+
   const fetchData = React.useCallback(async () => {
     setLoading(true)
     try {
@@ -354,6 +433,10 @@ export default function AdminKnowledgePage() {
       })
       setEntries(Array.isArray(res.data?.results) ? res.data.results : [])
       setTotal(typeof res.data?.total === "number" ? res.data.total : 0)
+    } catch (error) {
+      setEntries([])
+      setTotal(0)
+      toast.error(error instanceof Error ? error.message : "知识列表加载失败，请重试")
     } finally {
       setLoading(false)
     }
@@ -407,35 +490,51 @@ export default function AdminKnowledgePage() {
 
   async function handleSuggestCleanup(entry: KnowledgeEntry) {
     const tags = buildKnowledgeCleaningSuggestion(entry)
-    await batchAction([entry.id], "mergeTags", tags)
-    fetchData()
+    try {
+      await batchAction([entry.id], "mergeTags", tags)
+      toast.success("已应用清洗建议")
+      fetchData()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "应用清洗建议失败，请重试")
+    }
   }
 
   async function handleBatchArchive() {
     if (selectedIds.size === 0) return
     if (!confirm(`确定归档 ${selectedIds.size} 条知识条目？`)) return
-    await batchAction([...selectedIds], "archive")
-    setSelectedIds(new Set())
-    fetchData()
+    try {
+      await batchAction([...selectedIds], "archive")
+      toast.success(`已归档 ${selectedIds.size} 条`)
+      setSelectedIds(new Set())
+      fetchData()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "归档失败，请重试")
+    }
   }
 
   async function handleBatchChangeGrade(grade: string) {
     if (selectedIds.size === 0) return
     try {
       await batchAction([...selectedIds], "changeValueGrade", grade)
+      toast.success("已批量修改分级")
       setSelectedIds(new Set())
       fetchData()
-    } catch {
-      alert("批量改等级失败，请重试")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "批量改等级失败，请重试")
     }
   }
 
   async function handleBatchDelete() {
     if (selectedIds.size === 0) return
     if (!confirm(`确定永久删除 ${selectedIds.size} 条知识条目？此操作不可恢复！`)) return
-    await deleteEntries([...selectedIds])
-    setSelectedIds(new Set())
-    fetchData()
+    try {
+      await deleteEntries([...selectedIds])
+      toast.success(`已删除 ${selectedIds.size} 条`)
+      setSelectedIds(new Set())
+      fetchData()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "删除失败，请重试")
+    }
   }
 
   async function handleDistill() {
@@ -445,8 +544,9 @@ export default function AdminKnowledgePage() {
     try {
       const res = await distillEntries([...selectedIds])
       setDistillResult(res.data.result)
-    } catch {
+    } catch (error) {
       setDistillResult(null)
+      toast.error(error instanceof Error ? error.message : "知识蒸馏失败，请重试")
     } finally {
       setDistilling(false)
     }
@@ -476,9 +576,10 @@ export default function AdminKnowledgePage() {
       if (!res.ok) throw new Error("创建失败")
       setAddDialogOpen(false)
       setEditForm({ title: "", content: "", category: "product_usp", tags: "", sourceType: "manual", projectId: "none", valueGrade: "" })
+      toast.success("知识条目已创建")
       fetchData()
-    } catch {
-      alert("创建失败，请重试")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "创建失败，请重试")
     } finally {
       setSaving(false)
     }
@@ -505,9 +606,10 @@ export default function AdminKnowledgePage() {
       setUploadDialogOpen(false)
       setUploadFile(null)
       setUploadProjectId("none")
+      toast.success("文件已上传")
       fetchData()
-    } catch {
-      alert("上传失败，请重试")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "上传失败，请重试")
     } finally {
       setUploading(false)
     }
@@ -536,7 +638,7 @@ export default function AdminKnowledgePage() {
       setSmartImportPreviewData(data.data)
       setSmartImportStep("preview")
     } catch (error) {
-      alert(`智能分析失败: ${error instanceof Error ? error.message : "未知错误"}`)
+      toast.error(`智能分析失败：${error instanceof Error ? error.message : "未知错误"}`)
       setSmartImportStep("upload")
     }
   }
@@ -577,9 +679,10 @@ export default function AdminKnowledgePage() {
       setSmartImportFiles([])
       setSmartImportPreviewData(null)
       setSmartImportEdits({})
+      toast.success(`已导入 ${entries.length} 条知识`)
       fetchData()
     } catch (error) {
-      alert(`导入失败: ${error instanceof Error ? error.message : "未知错误"}`)
+      toast.error(`导入失败：${error instanceof Error ? error.message : "未知错误"}`)
     } finally {
       setSmartImportConfirming(false)
     }
@@ -662,9 +765,52 @@ export default function AdminKnowledgePage() {
       {/* Tab 切换 */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
+          <TabsTrigger value="browser">知识浏览</TabsTrigger>
           <TabsTrigger value="map">知识地图</TabsTrigger>
           <TabsTrigger value="list">条目列表</TabsTrigger>
         </TabsList>
+
+      {/* 知识浏览 Tab（默认）：左树右文，进入即可看具体内容 */}
+        <TabsContent value="browser">
+          <KnowledgeBrowser
+            entries={browserEntries}
+            total={browserTotal}
+            loading={browserLoading}
+            page={browserPage}
+            pageSize={browserPageSize}
+            projects={projects as unknown as BrowserAdminProject[]}
+            stats={browserStats}
+            selectedProject={browserProject}
+            selectedCategory={browserCategory}
+            searchValue={browserSearchInput}
+            selectedIds={selectedIds}
+            onSelectProject={(value) => {
+              setBrowserProject(value)
+              setBrowserCategory("")
+              setBrowserPage(1)
+            }}
+            onSelectCategory={(value) => {
+              setBrowserCategory(value)
+              setBrowserPage(1)
+            }}
+            onSearchChange={setBrowserSearchInput}
+            onPageChange={setBrowserPage}
+            onToggleSelect={toggleSelect}
+            onOpenDetail={setDetailEntry}
+            onManualAdd={() => {
+              setEditForm((f) => ({ ...f, projectId: browserProject === "unbound" ? "none" : browserProject || "none" }))
+              setAddDialogOpen(true)
+            }}
+            onUpload={() => {
+              setUploadProjectId(browserProject === "unbound" ? "none" : browserProject || "none")
+              setUploadDialogOpen(true)
+            }}
+            onSmartImport={() => {
+              setSmartImportProjectId(browserProject === "unbound" ? "none" : browserProject || "none")
+              setSmartImportOpen(true)
+            }}
+          />
+        </TabsContent>
 
       {/* 知识地图 Tab */}
         <TabsContent value="map">
@@ -672,9 +818,9 @@ export default function AdminKnowledgePage() {
             projects={projects}
             onDrillDown={(filters) => {
               if (filters.category) {
-                setCategoryFilter(filters.category)
-                setPage(1)
-                setActiveTab("list")
+                setBrowserCategory(filters.category)
+                setBrowserPage(1)
+                setActiveTab("browser")
               }
             }}
           />
@@ -1140,7 +1286,7 @@ export default function AdminKnowledgePage() {
                         </Badge>
                       </td>
                       <td className="p-3 hidden lg:table-cell text-muted-foreground text-xs">
-                        {new Date(entry.updatedAt).toLocaleDateString()}
+                        {new Date(entry.updatedAt).toLocaleDateString("zh-CN")}
                       </td>
                       </tr>
                     )
@@ -1202,7 +1348,7 @@ export default function AdminKnowledgePage() {
                 {detailEntry.valueGrade ? <Badge variant="outline">{detailEntry.valueGrade}</Badge> : null}
               </div>
               <div className="rounded-lg border bg-muted/30 p-4">
-                <p className="whitespace-pre-wrap text-sm leading-7">{detailEntry.content}</p>
+                <MarkdownRenderer content={detailEntry.content} />
               </div>
             </div>
           )}
@@ -1387,7 +1533,7 @@ export default function AdminKnowledgePage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>上传文件导入知识</DialogTitle>
-            <DialogDescription>支持 PDF、TXT、MD、DOCX、CSV、XLSX 格式</DialogDescription>
+            <DialogDescription>支持 PDF、Word、PPT、Excel、HTML、TXT、MD、CSV、JSON、XML、RTF</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -1424,7 +1570,7 @@ export default function AdminKnowledgePage() {
               <div className="mt-1 flex items-center gap-2">
                 <Input
                   type="file"
-                  accept=".pdf,.txt,.md,.csv,.docx,.xlsx"
+                  accept={KNOWLEDGE_UPLOAD_ACCEPT}
                   onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
                   className="cursor-pointer"
                 />
@@ -1482,11 +1628,11 @@ export default function AdminKnowledgePage() {
                 </Select>
               </div>
               <div>
-                <Label>选择文件（支持 PDF/TXT/MD/CSV/DOCX/XLSX，含微信导出聊天记录自动识别）</Label>
+                <Label>选择文件（支持 PDF/Word/PPT/Excel/HTML/TXT/MD/CSV/JSON/XML/RTF）</Label>
                 <div className="mt-1">
                   <Input
                     type="file"
-                    accept=".pdf,.txt,.md,.csv,.docx,.xlsx"
+                    accept={KNOWLEDGE_UPLOAD_ACCEPT}
                     multiple
                     onChange={(e) => setSmartImportFiles(Array.from(e.target.files ?? []))}
                     className="cursor-pointer"
