@@ -14,11 +14,55 @@ export async function polishCopy(input: {
   rawInput: string
   instruction?: string
   styleId?: StyleGuideId
+  mode?: "polish" | "imitate"
+  viralSourceText?: string
 }): Promise<{ content: string; wordCount: number }> {
   const [knowledge, methodologyBlock] = await Promise.all([
     loadProjectKnowledge(input.userId, input.projectId),
     buildIpCopywritingMethodologyBlock(),
   ])
+
+  if (input.mode === "imitate" && input.viralSourceText) {
+    // Imitate mode: structural analysis + cross-industry rebuild
+    const systemPrompt = `你是一个「爆款文案仿写专家」。你的任务是把一条爆款文案的底层逻辑迁移到用户所在的行业。
+
+${knowledge}
+${methodologyBlock}
+
+仿写规则：
+1. 先分析爆款原文的结构：开头钩子类型？中段推进节奏？结尾收束方式？
+2. 保留原文的结构逻辑和情绪节奏，内容完全替换成用户行业的
+3. 必须使用知识库中的产品卖点、客户痛点、老板经验填充新内容
+4. 保持爆点力度，场景和细节必须是用户行业的真实场景
+5. 禁止保留原文行业特定词汇，全部替换
+6. 直接输出仿写成稿，不要解释分析过程
+7. 禁止使用：赋能、闭环、抓手、颗粒度、对齐、拉通、打通、沉淀、复盘、迭代、链路、触达、心智、赛道
+8. 输出纯文本，不加格式标记`
+
+    const userPrompt = `请把以下爆款文案的逻辑迁移到我所在的行业：
+
+【爆款原文】
+${input.viralSourceText}
+
+${input.instruction ? `\n额外要求：${input.instruction}` : ""}
+---`
+
+    const completion = await LLMClient.shared().complete({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.7,
+      maxTokens: 2000,
+    })
+
+    return {
+      content: completion.content.trim(),
+      wordCount: completion.content.trim().length,
+    }
+  }
+
+  // else: existing polish logic continues below...
 
   const styleBlock = getStylePromptBlock(input.styleId)
 
