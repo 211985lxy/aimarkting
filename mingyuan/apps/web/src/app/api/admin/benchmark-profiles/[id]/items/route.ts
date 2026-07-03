@@ -7,7 +7,7 @@ import { buildDefaultKnowledgeTags, mergeKnowledgeTags } from "@/lib/knowledge-t
 const ALLOWED_KINDS = new Set(["note", "report", "copy_extraction", "video"])
 
 // GET — 档案的素材列表
-export const GET = withAdminAuth(async (request, { params }) => {
+export const GET = withAdminAuth(async (_request, { params }) => {
   const id = params?.id
   if (!id) {
     return NextResponse.json({ error: "缺少 id" }, { status: 400 })
@@ -47,7 +47,7 @@ export const POST = withAdminAuth(async (request, { params }) => {
   })
 
   if (!profile) {
-    return NextResponse.json({ error: "对标档案不存在" }, { status: 404 })
+    return NextResponse.json({ error: "真实档案不存在" }, { status: 404 })
   }
 
   // 事务：创建 item + KnowledgeEntry 原子操作

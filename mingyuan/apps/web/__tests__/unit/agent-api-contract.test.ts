@@ -11,16 +11,19 @@ import {
 } from "@/lib/agent-api-contract"
 
 describe("Agent API contract", () => {
-  it("returns the four external AIM agents", () => {
+  it("returns the external AIM agents with content_producer (was ip_video)", () => {
     const capabilities = buildAgentCapabilities()
     const ids = capabilities.agents.map((agent) => agent.id)
 
     expect(ids).toEqual([
       "business_system_diagnosis",
       "business_diagnosis",
-      "ip_video",
+      "content_producer",
+      "deep_copywriter",
       "content_review",
     ])
+    // 旧别名 ip_video 不应再出现在公开契约里
+    expect(ids).not.toContain("ip_video")
   })
 
   it("accepts only whitelisted target formats", () => {

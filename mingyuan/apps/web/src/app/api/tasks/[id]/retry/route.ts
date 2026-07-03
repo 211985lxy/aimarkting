@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { redis } from "@/lib/redis"
 import { withUserAuth } from "@/lib/user-auth"
-import { Prisma } from "@/generated/prisma/client"
 
 // ─── POST /api/tasks/[id]/retry ───────────────────────
 // Create a new video task from a failed one, reusing the same parameters.

@@ -36,8 +36,13 @@ export function BrandingProvider({
 }
 
 export function useBranding() {
-  const { updateBranding: _updateBranding, ...branding } = React.useContext(BrandingContext)
-  return branding
+  const branding = React.useContext(BrandingContext)
+  return {
+    name: branding.name,
+    logoUrl: branding.logoUrl,
+    defaultName: branding.defaultName,
+    defaultLogoUrl: branding.defaultLogoUrl,
+  }
 }
 
 export function useBrandingControls() {

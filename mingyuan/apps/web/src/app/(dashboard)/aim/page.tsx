@@ -53,6 +53,7 @@ import {
 } from "@/lib/api/client"
 import { useAudioRecorder } from "@/hooks/use-audio-recorder"
 import { transcribeAudio } from "@/lib/api/client"
+import { STYLE_GUIDE_LABELS, type StyleGuideId } from "@/lib/style-guide-config"
 import {
   AIM_AGENT_OPTIONS,
   DEFAULT_AIM_AGENT,
@@ -83,6 +84,7 @@ import {
   type AimEditorContext,
   type TextSelectionRange,
 } from "@/lib/aim-editor"
+import { getAimEditorPanelLabels, type EditorPanelLabels } from "@/lib/aim-editor-labels"
 
 interface AimAgentOption extends AimAgentMeta, AimAgentGuide {}
 
@@ -105,88 +107,7 @@ const FORMAT_LABELS: Record<ContentFormat, string> = {
 const LOADING_MESSAGES = ["分析输入...", "检索知识库...", "生成内容..."]
 const SOFT_ACTION_CLASS = "h-7 rounded-md border-0 bg-muted/45 px-2 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
 const ACTIVE_SOFT_ACTION_CLASS = "h-7 rounded-md border-0 bg-primary/10 px-2 text-xs text-primary shadow-none hover:bg-primary/15"
-
-interface EditorPanelLabels {
-  title: string
-  collapsedTitle: string
-  referenceTitle: string
-  referencePlaceholder: string
-  draftTitle: string
-  draftPlaceholder: string
-  currentLabel: string
-  selectActionLabel: string
-  documentType: "copy" | "plan"
-}
-
-const COPY_EDITOR_LABELS: EditorPanelLabels = {
-  title: "文案编辑",
-  collapsedTitle: "展开文案编辑",
-  referenceTitle: "对标文案",
-  referencePlaceholder: "暂无对标原文案",
-  draftTitle: "我的稿子",
-  draftPlaceholder: "AI 生成的稿子会出现在这里，也可以直接粘贴/编辑。",
-  currentLabel: "当前稿",
-  selectActionLabel: "修改选中文案",
-  documentType: "copy",
-}
-
-function getEditorPanelLabels(agentId: AimAgentId): EditorPanelLabels {
-  if (agentId === "ip_video" || agentId === "deep_copywriter") return COPY_EDITOR_LABELS
-
-  if (agentId === "business_system_diagnosis") {
-    return {
-      title: "诊断案编辑",
-      collapsedTitle: "展开诊断案编辑",
-      referenceTitle: "业务材料",
-      referencePlaceholder: "暂无业务材料",
-      draftTitle: "我的诊断案",
-      draftPlaceholder: "AI 生成的诊断案会出现在这里，也可以直接粘贴/编辑。",
-      currentLabel: "当前诊断案",
-      selectActionLabel: "修改选中诊断案",
-      documentType: "plan",
-    }
-  }
-
-  if (agentId === "persona") {
-    return {
-      title: "人设策划案编辑",
-      collapsedTitle: "展开人设策划案编辑",
-      referenceTitle: "人物材料",
-      referencePlaceholder: "暂无人物材料",
-      draftTitle: "我的人设策划案",
-      draftPlaceholder: "AI 生成的人设策划案会出现在这里，也可以直接粘贴/编辑。",
-      currentLabel: "当前人设策划案",
-      selectActionLabel: "修改选中策划案",
-      documentType: "plan",
-    }
-  }
-
-  if (agentId === "business_diagnosis") {
-    return {
-      title: "策划案编辑",
-      collapsedTitle: "展开策划案编辑",
-      referenceTitle: "参考材料",
-      referencePlaceholder: "暂无参考材料",
-      draftTitle: "我的策划案",
-      draftPlaceholder: "AI 生成的定位策划案会出现在这里，也可以直接粘贴/编辑。",
-      currentLabel: "当前策划案",
-      selectActionLabel: "修改选中策划案",
-      documentType: "plan",
-    }
-  }
-
-  return {
-    title: "策划案编辑",
-    collapsedTitle: "展开策划案编辑",
-    referenceTitle: "参考材料",
-    referencePlaceholder: "暂无参考材料",
-    draftTitle: "我的策划案",
-    draftPlaceholder: "AI 生成的策划案会出现在这里，也可以直接粘贴/编辑。",
-    currentLabel: "当前策划案",
-    selectActionLabel: "修改选中策划案",
-    documentType: "plan",
-  }
-}
+const RESEARCH_HINT_AGENT_IDS = new Set<AimAgentId>(["business_system_diagnosis", "business_diagnosis"])
 
 const WORKFLOW_STATUS_OPTIONS = [
   { value: "draft", label: "草稿" },
@@ -386,7 +307,7 @@ function AgentGuidePanel({
   )
 }
 
-const AIM_DRAFT_STORAGE_KEY = "aim-workbench-draft-v1"
+const AIM_DRAFT_STORAGE_KEY_PREFIX = "aim-workbench-draft-v2"
 
 interface AimDraft {
   selectedAgentId: AimAgentId
@@ -396,6 +317,8 @@ interface AimDraft {
   videoCopyExtractionId?: string
   sourceOriginalText?: string
   sourceAnalysisText?: string
+  sourceTopicTitle?: string
+  sourceTopicRationale?: string
   editorText?: string
   editorFormat?: ContentFormat
   editorSourceMessageId?: string
@@ -403,10 +326,14 @@ interface AimDraft {
   editorPanelOpen?: boolean
 }
 
-function loadAimDraft(): AimDraft | null {
+function aimDraftStorageKey(agentId: AimAgentId) {
+  return `${AIM_DRAFT_STORAGE_KEY_PREFIX}:${agentId}`
+}
+
+function loadAimDraft(agentId: AimAgentId): AimDraft | null {
   if (typeof window === "undefined") return null
   try {
-    const raw = window.sessionStorage.getItem(AIM_DRAFT_STORAGE_KEY)
+    const raw = window.sessionStorage.getItem(aimDraftStorageKey(agentId))
     if (!raw) return null
     const draft = JSON.parse(raw) as Partial<AimDraft>
     if (!isValidAimAgent(draft.selectedAgentId) || !Array.isArray(draft.messages)) return null
@@ -418,6 +345,8 @@ function loadAimDraft(): AimDraft | null {
       videoCopyExtractionId: typeof draft.videoCopyExtractionId === "string" ? draft.videoCopyExtractionId : undefined,
       sourceOriginalText: typeof draft.sourceOriginalText === "string" ? draft.sourceOriginalText : undefined,
       sourceAnalysisText: typeof draft.sourceAnalysisText === "string" ? draft.sourceAnalysisText : undefined,
+      sourceTopicTitle: typeof draft.sourceTopicTitle === "string" ? draft.sourceTopicTitle : undefined,
+      sourceTopicRationale: typeof draft.sourceTopicRationale === "string" ? draft.sourceTopicRationale : undefined,
       editorText: typeof draft.editorText === "string" ? draft.editorText : undefined,
       editorFormat: typeof draft.editorFormat === "string" ? draft.editorFormat as ContentFormat : undefined,
       editorSourceMessageId: typeof draft.editorSourceMessageId === "string" ? draft.editorSourceMessageId : undefined,
@@ -432,17 +361,20 @@ function loadAimDraft(): AimDraft | null {
 function saveAimDraft(draft: AimDraft) {
   if (typeof window === "undefined") return
   try {
+    const storageKey = aimDraftStorageKey(draft.selectedAgentId)
     if (
       !draft.input.trim()
       && draft.messages.length === 0
       && !draft.editorText?.trim()
       && !draft.sourceOriginalText?.trim()
       && !draft.sourceAnalysisText?.trim()
+      && !draft.sourceTopicTitle?.trim()
+      && !draft.sourceTopicRationale?.trim()
     ) {
-      window.sessionStorage.removeItem(AIM_DRAFT_STORAGE_KEY)
+      window.sessionStorage.removeItem(storageKey)
       return
     }
-    window.sessionStorage.setItem(AIM_DRAFT_STORAGE_KEY, JSON.stringify(draft))
+    window.sessionStorage.setItem(storageKey, JSON.stringify(draft))
   } catch {
     // ponytail: losing a browser draft is better than breaking the editor.
   }
@@ -508,6 +440,10 @@ function BenchmarkEditorPanel({
   onReferenceSelection,
   onDraftSelection,
   onSave,
+  onImitate,
+  imitating,
+  imitateStyleId,
+  onImitateStyleChange,
 }: {
   open: boolean
   width: number
@@ -522,6 +458,11 @@ function BenchmarkEditorPanel({
   onReferenceSelection: (selection: EditorSelection) => void
   onDraftSelection: (selection: EditorSelection) => void
   onSave: () => void
+  /** 跨行业爆款仿写：拿上面对标爆款的结构逻辑，重写下方草稿。仅当有对标原文时可用 */
+  onImitate: () => void
+  imitating: boolean
+  imitateStyleId: string
+  onImitateStyleChange: (styleId: string) => void
 }) {
   const splitRef = useRef<HTMLDivElement>(null)
   const [referencePercent, setReferencePercent] = useState(50)
@@ -568,6 +509,34 @@ function BenchmarkEditorPanel({
           </p>
         </div>
         <div className="flex items-center gap-1">
+          {referenceText.length >= 30 ? (
+            <>
+              <Select value={imitateStyleId} onValueChange={(value) => onImitateStyleChange(value ?? "default")}>
+                <SelectTrigger size="sm" className="h-7 w-[104px] text-xs">
+                  <SelectValue placeholder="文风" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">默认（我的风格）</SelectItem>
+                  {Object.entries(STYLE_GUIDE_LABELS).map(([id, label]) => (
+                    <SelectItem key={id} value={id}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                variant="ghost"
+                className={ACTIVE_SOFT_ACTION_CLASS}
+                disabled={imitating || editorText.trim().length < 30}
+                onClick={onImitate}
+                title="把上面对标爆款的结构逻辑迁移到你的稿子"
+              >
+                {imitating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                仿写
+              </Button>
+            </>
+          ) : null}
           <Button size="sm" variant="ghost" className={ACTIVE_SOFT_ACTION_CLASS} onClick={onSave}>
             保存
           </Button>
@@ -881,13 +850,15 @@ export default function AimPage() {
   const modeParam = searchParams.get("mode")
   const ideaParam = searchParams.get("idea")
   const activeAgentId: AimAgentId = isValidAimAgent(agentParam) ? agentParam : DEFAULT_AIM_AGENT
-  const [initialDraft] = useState<AimDraft | null>(() => loadAimDraft())
+  const [initialDraft] = useState<AimDraft | null>(() => loadAimDraft(activeAgentId))
   const [selectedAgentId, setSelectedAgentId] = useState<AimAgentId>(() => agentParam ? activeAgentId : initialDraft?.selectedAgentId || activeAgentId)
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialDraft?.messages || [])
   const [input, setInput] = useState(() => initialDraft?.input || "")
   const [sourceVideoCopyExtractionId, setSourceVideoCopyExtractionId] = useState<string | undefined>(() => initialDraft?.videoCopyExtractionId)
   const [sourceOriginalText, setSourceOriginalText] = useState(() => initialDraft?.sourceOriginalText || "")
   const [sourceAnalysisText, setSourceAnalysisText] = useState(() => initialDraft?.sourceAnalysisText || "")
+  const [sourceTopicTitle, setSourceTopicTitle] = useState(() => initialDraft?.sourceTopicTitle || "")
+  const [sourceTopicRationale, setSourceTopicRationale] = useState(() => initialDraft?.sourceTopicRationale || "")
   const [editorText, setEditorText] = useState(() => initialDraft?.editorText || "")
   const [editorFormat, setEditorFormat] = useState<ContentFormat | undefined>(() => initialDraft?.editorFormat)
   const [editorSourceMessageId, setEditorSourceMessageId] = useState<string | undefined>(() => initialDraft?.editorSourceMessageId)
@@ -908,6 +879,8 @@ export default function AimPage() {
   const [projectEnabled, setProjectEnabled] = useState(false)
   const [isEvolving, setIsEvolving] = useState(false)
   const [evolutionSuggestions, setEvolutionSuggestions] = useState<AimEvolutionSuggestion[]>([])
+  const [isImitating, setIsImitating] = useState(false)
+  const [imitateStyleId, setImitateStyleId] = useState("default")
 
   // 历史记录由侧边栏共享 store 管理（侧边栏渲染列表、生成成功后刷新、点击后触发加载）
   const storeHistory = useAimWorkspaceStore((s) => s.history)
@@ -921,12 +894,15 @@ export default function AimPage() {
 
   const agent = useMemo(() => {
     const baseAgent = AGENT_OPTIONS.find((a) => a.id === selectedAgentId)!
-    if (selectedAgentId === "ip_video" && modeParam === "asset_pack") {
+    if (selectedAgentId === "content_producer" && modeParam === "asset_pack") {
+      const isHotTopicAsset = sourceTopicTitle.trim().length > 0 && !sourceVideoCopyExtractionId
       return {
         ...baseAgent,
         title: "内容生产官 · 内容资产包",
         intro: "我是内容生产官的内容资产包模式。先生成短视频脚本，拍摄交接单、朋友圈、社群运营、公众号文章可按需点击派生。",
-        placeholder: "说说今天要生产什么内容：选题、原始想法、对标文案、老板口述均可，我先生成主脚本...",
+        placeholder: isHotTopicAsset
+          ? "这个热点要怎么讲？补充你的观点、客户场景或产品承接，我先生成主脚本..."
+          : "说说今天要生产什么内容：选题、原始想法、老板口述、客户问题都可以，我先生成主脚本...",
         defaultFormats: ["video_script" as const],
         quickPrompts: [
           "把这个选题先生成短视频脚本。",
@@ -935,7 +911,7 @@ export default function AimPage() {
         primaryActionLabel: "生成口播文案",
       }
     }
-    if (selectedAgentId === "ip_video") {
+    if (selectedAgentId === "content_producer") {
       return {
         ...baseAgent,
         title: "内容生产官 · 单篇创作",
@@ -945,7 +921,7 @@ export default function AimPage() {
       }
     }
     return baseAgent
-  }, [selectedAgentId, modeParam])
+  }, [modeParam, selectedAgentId, sourceTopicTitle, sourceVideoCopyExtractionId])
 
   const selectedProject = useMemo(
     () => projects.find((p) => p.id === selectedProjectId),
@@ -953,8 +929,8 @@ export default function AimPage() {
   )
 
   const editorPanelLabels = useMemo(
-    () => getEditorPanelLabels(selectedAgentId),
-    [selectedAgentId],
+    () => getAimEditorPanelLabels(selectedAgentId, editorFormat),
+    [editorFormat, selectedAgentId],
   )
 
   const workStage = selectedAgentId === "business_diagnosis"
@@ -974,6 +950,7 @@ export default function AimPage() {
   const materialStatus = [
     projectEnabled && selectedProject ? "客户资料已读取" : projectEnabled ? "客户资料待选择" : "纯文案模式",
     selectedAgentId === "business_diagnosis" ? "市场洞察可匹配" : null,
+    sourceTopicTitle.trim() ? "热点选题已带入" : null,
     sourceVideoCopyExtractionId ? `${editorPanelLabels.referenceTitle}已带入` : null,
     editorText.trim() ? `${editorPanelLabels.currentLabel}可编辑` : null,
   ].filter(Boolean) as string[]
@@ -1022,6 +999,8 @@ export default function AimPage() {
       videoCopyExtractionId: sourceVideoCopyExtractionId,
       sourceOriginalText,
       sourceAnalysisText,
+      sourceTopicTitle,
+      sourceTopicRationale,
       editorText,
       editorFormat,
       editorSourceMessageId,
@@ -1040,6 +1019,8 @@ export default function AimPage() {
     selectedProjectId,
     sourceOriginalText,
     sourceAnalysisText,
+    sourceTopicTitle,
+    sourceTopicRationale,
     sourceVideoCopyExtractionId,
   ])
 
@@ -1058,17 +1039,24 @@ export default function AimPage() {
   useEffect(() => {
     if (lastAgentParamRef.current === agentParam) return
     lastAgentParamRef.current = agentParam
+    const nextDraft = loadAimDraft(activeAgentId)
     startTransition(() => {
       setSelectedAgentId(activeAgentId)
-      setMessages([])
-      setInput("")
-      setSourceOriginalText("")
-      setSourceAnalysisText("")
-      setEditorText("")
-      setEditorFormat(undefined)
-      setEditorSourceMessageId(undefined)
+      setSelectedProjectId(nextDraft?.selectedProjectId || selectedProjectId)
+      setMessages(nextDraft?.messages || [])
+      setInput(nextDraft?.input || "")
+      setSourceVideoCopyExtractionId(nextDraft?.videoCopyExtractionId)
+      setSourceOriginalText(nextDraft?.sourceOriginalText || "")
+      setSourceAnalysisText(nextDraft?.sourceAnalysisText || "")
+      setSourceTopicTitle(nextDraft?.sourceTopicTitle || "")
+      setSourceTopicRationale(nextDraft?.sourceTopicRationale || "")
+      setEditorText(nextDraft?.editorText || "")
+      setEditorFormat(nextDraft?.editorFormat)
+      setEditorSourceMessageId(nextDraft?.editorSourceMessageId)
+      setEditorPanelWidth(nextDraft?.editorPanelWidth ?? EDITOR_PANEL_DEFAULT_WIDTH)
+      setEditorPanelOpen(nextDraft?.editorPanelOpen ?? true)
     })
-  }, [activeAgentId, agentParam])
+  }, [activeAgentId, agentParam, selectedProjectId])
 
   useEffect(() => {
     if (!topicTitleParam && !topicRationaleParam && !projectIdParam && !ideaParam) return
@@ -1083,6 +1071,8 @@ export default function AimPage() {
       if (projectIdParam) setSelectedProjectId(projectIdParam)
       setMessages([])
       setInput(prefillLines.join("\n"))
+      setSourceTopicTitle(topicTitleParam || ideaParam || "")
+      setSourceTopicRationale(topicRationaleParam || "")
       setSourceVideoCopyExtractionId(undefined)
       setSourceOriginalText("")
       setSourceAnalysisText("")
@@ -1137,6 +1127,8 @@ export default function AimPage() {
           setMessages([])
           setInput(prefill)
           setSourceVideoCopyExtractionId(record.id)
+          setSourceTopicTitle(record.videoTitle || "")
+          setSourceTopicRationale("")
           setSourceOriginalText(record.transcript || "")
           setSourceAnalysisText(formatAnalysisResultForPrompt(record.analysisResult) || "")
           setEditorText("")
@@ -1175,6 +1167,8 @@ export default function AimPage() {
     startTransition(() => {
       setSelectedAgentId(itemAgentId)
       setSelectedProjectId(item.projectId || "")
+      setSourceTopicTitle(item.topicTitle || "")
+      setSourceTopicRationale("")
       setSourceOriginalText(historyOriginalText)
       setSourceAnalysisText(historyAnalysisText)
       setMessages([
@@ -1241,10 +1235,12 @@ export default function AimPage() {
     setSourceVideoCopyExtractionId(undefined)
     setSourceOriginalText("")
     setSourceAnalysisText("")
+    setSourceTopicTitle("")
+    setSourceTopicRationale("")
     setEditorText("")
     setEditorFormat(undefined)
     setEditorSourceMessageId(undefined)
-    if (typeof window !== "undefined") window.sessionStorage.removeItem(AIM_DRAFT_STORAGE_KEY)
+    if (typeof window !== "undefined") window.sessionStorage.removeItem(aimDraftStorageKey(selectedAgentId))
   }
 
   /** 把对话里的用户输入拼成生成素材 */
@@ -1399,6 +1395,36 @@ export default function AimPage() {
         toast.error(error instanceof Error ? error.message : "偏好沉淀失败")
       })
       .finally(() => setIsEvolving(false))
+  }
+
+  function handleImitate() {
+    const viralSourceText = sourceOriginalText.trim()
+    if (viralSourceText.length < 30) {
+      toast.error("请先在对标面板加载一条对标爆款原文")
+      return
+    }
+    if (editorText.trim().length < 30) {
+      toast.error("草稿太短，请先写一些你行业的方向作为仿写参考")
+      return
+    }
+    setIsImitating(true)
+    void polishScript({
+      mode: "imitate",
+      content: editorText,
+      viralSourceText,
+      persona: agent.defaultInstruction,
+      projectId: selectedProjectId || undefined,
+      topicTitle: sourceTopicTitle || undefined,
+      ...(imitateStyleId !== "default" ? { styleId: imitateStyleId as StyleGuideId } : {}),
+    })
+      .then((result) => {
+        setEditorText(result.polished)
+        toast.success("已把对标爆款的结构逻辑迁移到你的稿子")
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "仿写失败，请重试")
+      })
+      .finally(() => setIsImitating(false))
   }
 
   function saveEditorToDeliverable() {
@@ -1679,6 +1705,15 @@ export default function AimPage() {
         nextParams.set("agent", action.targetAgentId)
         lastAgentParamRef.current = action.targetAgentId
         setSelectedAgentId(action.targetAgentId)
+        setMessages([])
+        setSourceVideoCopyExtractionId(undefined)
+        setSourceOriginalText("")
+        setSourceAnalysisText("")
+        setSourceTopicTitle("")
+        setSourceTopicRationale("")
+        setEditorText("")
+        setEditorFormat(undefined)
+        setEditorSourceMessageId(undefined)
         router.replace(`/aim?${nextParams.toString()}`)
       }
       setInput(buildAimNextActionPrompt(action, cleanContent))
@@ -1715,6 +1750,8 @@ export default function AimPage() {
         targetFormats: agent.defaultFormats,
         projectId: projectEnabled ? selectedProjectId || undefined : undefined,
         videoCopyExtractionId: sourceVideoCopyExtractionId,
+        topicTitle: sourceTopicTitle.trim() || undefined,
+        topicRationale: sourceTopicRationale.trim() || undefined,
         polishInstruction: agent.defaultInstruction,
         taskType: "write_script",
         useMarketViralVideos: selectedAgentId === "business_diagnosis",
@@ -1767,7 +1804,7 @@ export default function AimPage() {
         )
       }
       if (currentInput) setInput("")
-      refreshHistory({ force: true })
+      refreshHistory({ force: true, agentId: selectedAgentId })
       toast.success(`${agent.primaryActionLabel}完毕`)
     } catch (error) {
       if (error instanceof ApiError && error.status === 499) toast.info("已停止")
@@ -1815,7 +1852,7 @@ export default function AimPage() {
               : m,
           ),
         )
-        refreshHistory({ force: true })
+        refreshHistory({ force: true, agentId: selectedAgentId })
         toast.success(`${FORMAT_LABELS[fmt]}已生成`)
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "生成失败")
@@ -1823,7 +1860,7 @@ export default function AimPage() {
         setIsGenerating(false)
       }
     },
-    [messages, projectEnabled, refreshHistory, selectedProjectId],
+    [messages, projectEnabled, refreshHistory, selectedAgentId, selectedProjectId],
   )
 
   const handleQuality = useCallback(
@@ -1862,13 +1899,13 @@ export default function AimPage() {
       }
       try {
         await updateAimWorkflowStatus(base.id, { workflowStatus: status })
-        refreshHistory({ force: true })
+        refreshHistory({ force: true, agentId: selectedAgentId })
         toast.success(`已标记为：${workflowStatusLabel(status)}`)
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "状态更新失败")
       }
     },
-    [messages, refreshHistory],
+    [messages, refreshHistory, selectedAgentId],
   )
 
   const busy = isThinking || isGenerating || isQualityChecking || isTranscribing
@@ -2214,6 +2251,11 @@ export default function AimPage() {
 
         {/* 输入区 */}
         <footer className="border-t px-3 py-2 sm:px-5">
+          {RESEARCH_HINT_AGENT_IDS.has(selectedAgentId) && (
+            <p className="mx-auto mb-2 max-w-2xl text-xs text-muted-foreground">
+              可以直接把官网链接、竞品资料、客户资料或 Research Agent 资料包粘贴到聊天框里，系统会作为诊断上下文使用。
+            </p>
+          )}
           <AimPromptComposer
             value={input}
             placeholder={agent.placeholder}
@@ -2251,6 +2293,10 @@ export default function AimPage() {
           onReferenceSelection={setReferenceSelection}
           onDraftSelection={setDraftSelection}
           onSave={saveEditorToDeliverable}
+          onImitate={handleImitate}
+          imitating={isImitating}
+          imitateStyleId={imitateStyleId}
+          onImitateStyleChange={setImitateStyleId}
         />
       )}
 

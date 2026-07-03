@@ -5,7 +5,6 @@ import { redis } from "@/lib/redis"
 import { withUserAuth } from "@/lib/user-auth"
 import {
   cloneFastAvatar,
-  cloneProfessionalAvatar,
   cloneImageAvatar,
 } from "@/lib/shanjian"
 import {

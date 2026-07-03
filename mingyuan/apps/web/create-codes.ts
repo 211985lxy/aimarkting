@@ -53,7 +53,7 @@ async function createActivationCodes() {
 
     for (const code of codes) {
       try {
-        const activationCode = await prisma.activationCode.create({
+        await prisma.activationCode.create({
           data: {
             code: code,
             batchId: batchId,

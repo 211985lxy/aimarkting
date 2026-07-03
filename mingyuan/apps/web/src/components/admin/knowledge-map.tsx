@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   BarChart,
   Bar,
@@ -350,7 +350,7 @@ export function KnowledgeMap({ projects, onDrillDown }: KnowledgeMapProps) {
                     paddingAngle={2}
                     dataKey="count"
                   >
-                    {stats.sourceTypeDistribution.map((entry, index) => (
+                    {stats.sourceTypeDistribution.map((_entry, index) => (
                       <Cell
                         key={index}
                         fill={

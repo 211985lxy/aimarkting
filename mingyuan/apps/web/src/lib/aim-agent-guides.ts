@@ -1,4 +1,5 @@
 import type { AimAgentId } from "@/lib/aim-ui-config"
+import { normalizeAimAgentId } from "@/lib/aim-ui-config"
 
 export interface AimInputTemplateField {
   label: string
@@ -47,7 +48,7 @@ const BASIC_INPUT_TEMPLATE: AimInputTemplateField[] = [
 ]
 
 export const AIM_AGENT_GUIDES: Record<AimAgentId, AimAgentGuide> = {
-  ip_video: {
+  content_producer: {
     intro: "我是你的内容生产官。选题、脚本、朋友圈、长文和发布前质检都在这里处理，先把素材、主题或老板口述丢进来。",
     placeholder: "说说今天要生产什么内容：选题、原始想法、老板口述、客户问题都可以…",
     defaultInstruction: "去 AI 味，保留真人表达的犹豫、判断和具体细节，少用套话。先判断内容类型，再输出适合发布的内容交付物。",
@@ -80,7 +81,7 @@ export const AIM_AGENT_GUIDES: Record<AimAgentId, AimAgentGuide> = {
     inputTemplate: BASIC_INPUT_TEMPLATE,
     outputAssets: ["文案框架", "完整长文", "观点确认问题"],
     nextActions: [
-      { id: "to_content_producer", label: "带入内容生产官", targetAgentId: "ip_video", prompt: "请把下面长文拆成一条适合抖音口播的短视频文案。" },
+      { id: "to_content_producer", label: "带入内容生产官", targetAgentId: "content_producer", prompt: "请把下面长文拆成一条适合抖音口播的短视频文案。" },
       { id: "publish_package", label: "生成发布包", prompt: "请基于下面文案，整理发布标题、发布文案和发布话题。" },
       { id: "save_knowledge", label: "保存为档案素材", prompt: "保存为 AIM 档案素材。" },
     ],
@@ -92,13 +93,14 @@ export const AIM_AGENT_GUIDES: Record<AimAgentId, AimAgentGuide> = {
     quickPrompts: [
       "ERP 软件定位诊断：客单价 5 万，目前依赖熟人转介绍，怎么开启线上精准获客？",
       "社区宠物店引流：周边有竞品竞争，客单价和复购率双低，如何破局？",
+      "基于我的 IP 方法论四类选题，规划一套可日更的 100 条选题库。",
     ],
     primaryActionLabel: "生成诊断报告",
-    scenarios: ["还没想清楚账号定位", "客户画像和成交路径不清楚", "需要把资料整理成 IP 策划"],
+    scenarios: ["还没想清楚账号定位", "客户画像和成交路径不清楚", "需要日更 100 条选题"],
     inputTemplate: BASIC_INPUT_TEMPLATE,
-    outputAssets: ["IP 定位建议", "内容定位", "成交路径", "IP 维基素材"],
+    outputAssets: ["IP 定位建议", "内容定位", "成交路径", "100 条选题库"],
     nextActions: [
-      { id: "to_content_producer", label: "带入内容生产官", targetAgentId: "ip_video", prompt: "请基于下面定位策划，生成 3 个可拍选题，并先写第 1 条口播文案。" },
+      { id: "to_content_producer", label: "带入内容生产官", targetAgentId: "content_producer", prompt: "请基于下面定位策划，生成 3 个可拍选题，并先写第 1 条口播文案。" },
       { id: "save_knowledge", label: "保存为档案素材", prompt: "保存为 AIM 档案素材。" },
     ],
   },
@@ -116,7 +118,7 @@ export const AIM_AGENT_GUIDES: Record<AimAgentId, AimAgentGuide> = {
     inputTemplate: BASIC_INPUT_TEMPLATE,
     outputAssets: ["商业诊断报告", "核心矛盾", "调整路径", "本周动作"],
     nextActions: [
-      { id: "to_business_diagnosis", label: "带入定位策划官", targetAgentId: "business_diagnosis", prompt: "请基于下面商业诊断，进一步拆成 IP 定位、内容定位和成交路径。" },
+      { id: "to_business_diagnosis", label: "带入定位策划官", targetAgentId: "business_diagnosis", prompt: "请基于下面商业诊断结果，生成一份《天命IP资产化操盘全案》，走天命IP资产化操盘全案路由（12 模块）：项目总判断、天命底盘、IP主定位、目标客户、核心问题、IP价值、产品设计、内容系统、流量闭环、私域成交、交付资产化、行动处方。天命底盘没有命理资料时写「未提供/待补充」，不编造。每个模块要能指导后续选题、文案、产品承接、私域成交和交付资产化。" },
       { id: "save_knowledge", label: "保存为档案素材", prompt: "保存为 AIM 档案素材。" },
     ],
   },
@@ -154,14 +156,15 @@ export const AIM_AGENT_GUIDES: Record<AimAgentId, AimAgentGuide> = {
     ],
     outputAssets: ["来时路总结", "人设故事", "置顶视频脚本"],
     nextActions: [
-      { id: "to_content_producer", label: "带入内容生产官", targetAgentId: "ip_video", prompt: "请基于下面人设故事，生成一条置顶视频口播文案。" },
+      { id: "to_content_producer", label: "带入内容生产官", targetAgentId: "content_producer", prompt: "请基于下面人设故事，生成一条置顶视频口播文案。" },
       { id: "save_knowledge", label: "保存为档案素材", prompt: "保存为 AIM 档案素材。" },
     ],
   },
 }
 
-export function getAimAgentGuide(agentId: AimAgentId): AimAgentGuide {
-  return AIM_AGENT_GUIDES[agentId]
+export function getAimAgentGuide(agentId: string): AimAgentGuide {
+  // 归一化旧别名（ip_video → content_producer），兼容历史调用
+  return AIM_AGENT_GUIDES[normalizeAimAgentId(agentId) as AimAgentId]
 }
 
 export function buildAimGuideTemplate(fields: AimInputTemplateField[]): string {

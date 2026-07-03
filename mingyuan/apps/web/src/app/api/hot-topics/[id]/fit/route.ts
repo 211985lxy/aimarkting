@@ -8,7 +8,7 @@ import {
 } from "@/lib/hot-topic-intelligence"
 import type { ExpressionBlueprint } from "@/types/content-template"
 
-export const POST = withUserAuth(async (request, { user, params }) => {
+export const POST = withUserAuth(async (request, { params }) => {
   const topicId = params?.id
   if (!topicId) {
     return NextResponse.json({ error: "Missing topic id" }, { status: 400 })

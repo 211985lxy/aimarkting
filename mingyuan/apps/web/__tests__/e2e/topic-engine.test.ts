@@ -293,7 +293,7 @@ describe("CopyStructure to VideoStructure Mapping", () => {
   })
 
   it("every mapping target is a real VideoStructure name", () => {
-    for (const [_copyCode, vsName] of Object.entries(COPY_TO_VIDEO_STRUCTURE_MAP)) {
+    for (const vsName of Object.values(COPY_TO_VIDEO_STRUCTURE_MAP)) {
       expect(videoStructureNames).toContain(vsName)
     }
   })

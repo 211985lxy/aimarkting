@@ -54,6 +54,16 @@ export function getProviderConfigs(): LLMProviderConfig[] {
     })
   }
 
+  // GPT-5.x: 离火API中转站（OpenAI-compatible，GPT-5.4/5.5 等模型）
+  if (process.env.LIHUO_API_KEY) {
+    configs.push({
+      name: "lihuo",
+      apiKey: process.env.LIHUO_API_KEY,
+      baseURL: process.env.LIHUO_BASE_URL || "https://api.lihuo.me/v1",
+      defaultModel: process.env.LIHUO_MODEL || "gpt-5.4",
+    })
+  }
+
   // Fallback: Native OpenAI
   if (process.env.OPENAI_API_KEY) {
     configs.push({

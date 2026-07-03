@@ -92,6 +92,7 @@ interface ProfileListItem {
   updatedAt: string
   project: { id: string; name: string; companyName: string | null; industry: string | null; status: string } | null
   user: { id: string; name: string | null; email: string } | null
+  items: Array<{ id: string; kind: string; title: string; content: string }>
   _count: { items: number }
 }
 
@@ -116,6 +117,7 @@ function ProjectSelector({
 
   React.useEffect(() => {
     if (!token) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     fetch("/api/admin/projects?status=active&pageSize=100", {
       headers: { Authorization: `Bearer ${token}` },
@@ -260,7 +262,7 @@ export default function BenchmarkProfilesPage() {
       return
     }
     if (createMode === "account" && !platform) {
-      setCreateError("对标账号模式必须选择平台")
+      setCreateError("真实账号模式必须选择平台")
       return
     }
     if (createMode === "note" && !content.trim()) {
@@ -428,9 +430,9 @@ export default function BenchmarkProfilesPage() {
       {/* 标题栏 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">对标档案</h1>
+          <h1 className="text-2xl font-bold">真实档案</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            管理对标账号和客户资料，素材自动进入 AIM 检索
+            管理真实账号和客户资料，素材自动进入 AIM 检索
           </p>
         </div>
         <Button className="cursor-pointer" onClick={() => setCreateOpen(true)}>
@@ -494,7 +496,7 @@ export default function BenchmarkProfilesPage() {
               <p className="text-sm text-muted-foreground mt-1">
                 {statusTab === "archived"
                   ? "归档的档案会显示在这里"
-                  : "添加一个对标账号或客户资料即可"}
+                  : "添加一个真实账号或客户资料即可"}
               </p>
             </div>
             {statusTab !== "archived" && (
@@ -552,6 +554,24 @@ export default function BenchmarkProfilesPage() {
                   {profile.project && (
                     <div className="text-xs text-muted-foreground truncate">
                       项目：{profile.project.name}
+                    </div>
+                  )}
+
+                  {profile.items.length > 0 && (
+                    <div className="space-y-2 rounded-lg bg-muted/40 p-3 text-xs">
+                      {profile.items.map((item) => (
+                        <div key={item.id} className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className={cn("shrink-0 px-1.5 py-0 text-[10px]", KIND_COLORS[item.kind])}>
+                              {KIND_LABELS[item.kind] ?? item.kind}
+                            </Badge>
+                            <span className="truncate font-medium">{item.title}</span>
+                          </div>
+                          <p className="mt-1 line-clamp-2 text-muted-foreground">
+                            {item.content}
+                          </p>
+                        </div>
+                      ))}
                     </div>
                   )}
 
@@ -621,7 +641,7 @@ export default function BenchmarkProfilesPage() {
             <DialogTitle>添加档案</DialogTitle>
             <DialogDescription className="leading-6">
               {createMode === "account"
-                ? "录入对标账号信息，后续可通过「一键拉取」导入竞品分析。"
+                ? "录入真实账号信息，后续可通过「一键拉取」导入账号分析。"
                 : "粘贴聊天记录、客户资料或 Markdown 文档，保存后进入该项目的 AIM 检索。"}
             </DialogDescription>
           </DialogHeader>
@@ -630,7 +650,7 @@ export default function BenchmarkProfilesPage() {
           <Tabs value={createMode} onValueChange={(v) => setCreateMode(v as "account" | "note")}>
             <TabsList className="w-full">
               <TabsTrigger value="note" className="flex-1">客户资料</TabsTrigger>
-              <TabsTrigger value="account" className="flex-1">对标账号</TabsTrigger>
+              <TabsTrigger value="account" className="flex-1">真实账号</TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -656,7 +676,7 @@ export default function BenchmarkProfilesPage() {
               />
             </div>
 
-            {/* 对标账号专属字段 */}
+            {/* 真实账号专属字段 */}
             {createMode === "account" && (
               <>
                 <div className="space-y-2">

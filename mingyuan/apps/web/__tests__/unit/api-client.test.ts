@@ -16,9 +16,9 @@ describe("api client error messages", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response("[]", { status: 200 }))
 
-    await listAimHistory(1, 12, undefined, "ip_video")
+    await listAimHistory(1, 12, undefined, "content_producer")
 
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("/api/aim/history?page=1&pageSize=12&agentId=ip_video")
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("/api/aim/history?page=1&pageSize=12&agentId=content_producer")
   })
 
   it("does not throw when document upload succeeds with an empty body", async () => {

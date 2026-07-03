@@ -58,6 +58,10 @@ describe("aim editor helpers", () => {
 
     expect(prompt).toContain("优先做定点修改")
     expect(prompt).toContain("帮助客户沉淀可以进化的知识库资产")
+    expect(prompt).toContain("替换稿只处理用户点名要改的地方")
+    expect(prompt).toContain("不要替换、删改用户没有点名的词句")
+    expect(prompt).toContain("修改思路可以给开头、结构、结尾等简短意见")
+    expect(prompt).toContain("不要把未点名建议直接写进替换稿")
     expect(prompt).toContain("确实需要整段重写时要说明原因")
   })
 
@@ -81,7 +85,7 @@ describe("aim editor helpers", () => {
   })
 
   it("keeps copy editor labels while adding planning labels in AIM page", () => {
-    const source = readFileSync(join(process.cwd(), "src/app/(dashboard)/aim/page.tsx"), "utf8")
+    const source = readFileSync(join(process.cwd(), "src/lib/aim-editor-labels.ts"), "utf8")
 
     expect(source).toContain("策划案编辑")
     expect(source).toContain("我的策划案")

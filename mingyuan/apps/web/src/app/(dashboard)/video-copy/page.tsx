@@ -74,7 +74,7 @@ export default function VideoCopyPage() {
   const rewriteHref = record && shouldOpenDeepCopywriter(record)
     ? `/aim?agent=deep_copywriter&videoCopyExtractionId=${record.id}`
     : record
-      ? `/aim?agent=ip_video&mode=asset_pack&videoCopyExtractionId=${record.id}`
+      ? `/aim?agent=content_producer&mode=asset_pack&videoCopyExtractionId=${record.id}`
       : "/aim"
   const [history, setHistory] = useState<ApiVideoCopyExtraction[]>([])
 

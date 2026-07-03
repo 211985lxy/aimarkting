@@ -29,7 +29,7 @@ async function syncKnowledgeEntryStatus(profileId: string, status: "active" | "a
 }
 
 // GET — 档案详情（含所有素材条目）
-export const GET = withAdminAuth(async (request, { params }) => {
+export const GET = withAdminAuth(async (_request, { params }) => {
   const id = params?.id
   if (!id) {
     return NextResponse.json({ error: "缺少 id" }, { status: 400 })
@@ -47,7 +47,7 @@ export const GET = withAdminAuth(async (request, { params }) => {
   })
 
   if (!profile) {
-    return NextResponse.json({ error: "对标档案不存在" }, { status: 404 })
+    return NextResponse.json({ error: "真实档案不存在" }, { status: 404 })
   }
 
   return NextResponse.json({ data: profile })
@@ -111,7 +111,7 @@ export const PATCH = withAdminAuth(async (request, { params }) => {
 })
 
 // DELETE — 软删除（归档），同步归档关联 KnowledgeEntry
-export const DELETE = withAdminAuth(async (request, { params }) => {
+export const DELETE = withAdminAuth(async (_request, { params }) => {
   const id = params?.id
   if (!id) {
     return NextResponse.json({ error: "缺少 id" }, { status: 400 })

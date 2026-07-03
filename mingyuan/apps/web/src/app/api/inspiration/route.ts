@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { authenticateRequest, authErrorResponse } from "@/lib/user-auth"
 import { LLMClient } from "@/lib/llm/client"
-import type { Prisma } from "@/generated/prisma/client"
 
 // ─── GET /api/inspiration — 获取用户的灵感列表 ───────────────
 
@@ -61,7 +60,7 @@ export async function POST(request: NextRequest) {
 
     // 如果需要 AI 处理，异步生成选题
     if (autoProcess) {
-      processInspiration(inspiration.id, user.id).catch((err) => {
+      processInspiration(inspiration.id).catch((err) => {
         console.error(`[inspiration/${inspiration.id}] AI processing failed:`, err)
       })
     }
@@ -77,7 +76,7 @@ export async function POST(request: NextRequest) {
 
 // ─── AI 处理：分析灵感并生成选题和文案 ─────────────────────
 
-async function processInspiration(inspirationId: string, userId: string) {
+async function processInspiration(inspirationId: string) {
   const llm = LLMClient.shared()
 
   // 标记处理中

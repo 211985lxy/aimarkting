@@ -408,7 +408,7 @@ export default function CompetitorWatchPage() {
     const analysis = record.analysisResult as { markdown: string } | null
     const rewriteHref = shouldOpenDeepCopywriter(record)
       ? `/aim?agent=deep_copywriter&videoCopyExtractionId=${record.id}`
-      : `/aim?agent=ip_video&mode=asset_pack&videoCopyExtractionId=${record.id}`
+      : `/aim?agent=content_producer&mode=asset_pack&videoCopyExtractionId=${record.id}`
     if (record.status === "failed") {
       return <p className="rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-600">{record.errorMessage || "文案提取失败"}</p>
     }

@@ -29,7 +29,7 @@ export async function POST(
     })
 
     // 异步处理，不阻塞响应
-    processInspiration(id, user.id).catch((err) => {
+    processInspiration(id).catch((err) => {
       console.error(`[inspiration/${id}] re-process failed:`, err)
     })
 
@@ -42,7 +42,7 @@ export async function POST(
   }
 }
 
-async function processInspiration(inspirationId: string, userId: string) {
+async function processInspiration(inspirationId: string) {
   const llm = LLMClient.shared()
 
   try {

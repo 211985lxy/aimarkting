@@ -25,7 +25,7 @@ function formatNumber(n: number | undefined | null): string {
 // 把 6维评分 + 关键策略提炼成一条可读的「账号诊断」素材
 function buildReportContent(result: CompetitorAnalysisResult, accountName: string | null): string {
   const lines: string[] = []
-  lines.push(`【账号诊断报告 · ${accountName ?? "对标账号"}】`)
+  lines.push(`【账号诊断报告 · ${accountName ?? "真实账号"}】`)
   lines.push("")
 
   const s = result.scores
@@ -72,7 +72,7 @@ function buildViralContent(
   if (picks.length === 0) return null
 
   const lines: string[] = []
-  lines.push(`【爆款作品样本 · ${accountName ?? "对标账号"}】`)
+  lines.push(`【爆款作品样本 · ${accountName ?? "真实账号"}】`)
   lines.push("")
   picks.forEach((v, i) => {
     lines.push(`${i + 1}. ${v.title || v.desc}`)
@@ -104,7 +104,7 @@ export const POST = withAdminAuth(async (request, { params }) => {
     select: { id: true, userId: true, projectId: true, name: true },
   })
   if (!profile) {
-    return NextResponse.json({ error: "对标档案不存在" }, { status: 404 })
+    return NextResponse.json({ error: "真实档案不存在" }, { status: 404 })
   }
 
   const analysis = await prisma.competitorAnalysis.findUnique({
@@ -170,7 +170,7 @@ export const POST = withAdminAuth(async (request, { params }) => {
     createdItems.push({
       id: "",
       kind: "report",
-      title: `账号诊断 · ${analysis.accountName ?? "对标账号"} [${competitorAnalysisId.slice(0, 8)}]`,
+      title: `账号诊断 · ${analysis.accountName ?? "真实账号"} [${competitorAnalysisId.slice(0, 8)}]`,
       content: reportContent,
     })
   }
@@ -187,7 +187,7 @@ export const POST = withAdminAuth(async (request, { params }) => {
     createdItems.push({
       id: "",
       kind: "video",
-      title: `爆款作品样本 · ${analysis.accountName ?? "对标账号"}`,
+      title: `爆款作品样本 · ${analysis.accountName ?? "真实账号"}`,
       content: viralContent,
     })
   }

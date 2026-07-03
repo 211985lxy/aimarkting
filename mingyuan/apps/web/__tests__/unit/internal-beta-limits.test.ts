@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   clientProjectCount: vi.fn(),
   avatarCount: vi.fn(),
   knowledgeEntryCount: vi.fn(),
+  userFindUnique: vi.fn(),
 }))
 
 vi.mock("@/lib/prisma", () => ({
@@ -23,6 +24,7 @@ vi.mock("@/lib/prisma", () => ({
     clientProject: { count: mocks.clientProjectCount },
     avatar: { count: mocks.avatarCount },
     knowledgeEntry: { count: mocks.knowledgeEntryCount },
+    user: { findUnique: mocks.userFindUnique },
   },
 }))
 
@@ -37,6 +39,7 @@ import {
 describe("internal beta limits", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.userFindUnique.mockResolvedValue({ email: "limited@example.com" })
   })
 
   it("blocks AIM generation after the daily beta quota", async () => {
@@ -50,6 +53,18 @@ describe("internal beta limits", () => {
       limit: INTERNAL_BETA_LIMITS.aimGenerateDaily,
       used: INTERNAL_BETA_LIMITS.aimGenerateDaily,
     })
+  })
+
+  it("skips beta limits for the unlimited account", async () => {
+    mocks.userFindUnique.mockResolvedValue({ email: "1450069849@qq.com" })
+
+    await expect(enforceDailyBetaLimit("u1", "aim_generate")).resolves.toBeNull()
+    await expect(enforceCountBetaLimit({ userId: "u1", kind: "client_project" })).resolves.toBeNull()
+    await expect(enforceKnowledgeBetaLimit({ userId: "u1", projectId: "p1", incoming: 999 })).resolves.toBeNull()
+
+    expect(mocks.aimGenerationCount).not.toHaveBeenCalled()
+    expect(mocks.clientProjectCount).not.toHaveBeenCalled()
+    expect(mocks.knowledgeEntryCount).not.toHaveBeenCalled()
   })
 
   it("allows project creation below the beta cap", async () => {

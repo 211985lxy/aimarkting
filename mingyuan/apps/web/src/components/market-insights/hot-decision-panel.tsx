@@ -156,6 +156,17 @@ export function HotDecisionPanel({ source }: { source: ApiHotDecisionSource }) {
 }
 
 function HotDecisionCard({ item }: { item: ApiHotDecisionItem }) {
+  const aimParams = new URLSearchParams({
+    agent: "content_producer",
+    mode: "asset_pack",
+    topicTitle: item.title,
+    topicRationale: [
+      item.summary,
+      `为什么看：${item.reason}`,
+      `怎么用：${item.recommendedAction}`,
+      `来源：${item.sourceName}`,
+    ].join("\n"),
+  })
   const topicPoolParams = new URLSearchParams({
     idea: item.title,
     source: item.sourceName,
@@ -190,7 +201,7 @@ function HotDecisionCard({ item }: { item: ApiHotDecisionItem }) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" nativeButton={false} render={<Link href={`/aim?hotTopic=${encodeURIComponent(item.title)}`} />}>
+            <Button size="sm" nativeButton={false} render={<Link href={`/aim?${aimParams.toString()}`} />}>
               <Sparkles className="h-3.5 w-3.5" />
               AIM 创作
             </Button>

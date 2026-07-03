@@ -16,7 +16,6 @@ import {
  * Shared by tasks/route.ts (fast path) and task-recovery.ts (queue consumer).
  * The payload is cast via unknown to satisfy the specific request types.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = any
 
 export async function submitToShanjian(

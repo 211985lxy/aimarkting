@@ -3,6 +3,7 @@
 import { useAuthStore } from "@/lib/store"
 import { getStoredAuthToken } from "@/lib/auth-storage"
 import type { HotTopic } from "@/types/content-template"
+import type { StyleGuideId } from "@/lib/style-guide-config"
 import type {
   ApiAsset,
   ApiAvatar,
@@ -447,7 +448,13 @@ export async function polishScript(input: {
   weakDimensions?: string[]
   topicTitle?: string
   persona?: string
-  mode?: "polish" | "proofread"
+  mode?: "polish" | "proofread" | "imitate"
+  /** imitate 模式必填：对标爆款原文 */
+  viralSourceText?: string
+  /** imitate 模式可选：12 风格之一，覆盖用户档案做本次腔调；不传则走用户写作风格档案 */
+  styleId?: StyleGuideId
+  /** imitate 模式可选：项目 id，用于注入项目知识库填充新内容 */
+  projectId?: string
 }): Promise<PolishResult> {
   const payload = await request<{ data: PolishResult }>("/api/scripts/polish", {
     method: "POST",
@@ -714,6 +721,31 @@ export async function generateTopics(
     }
   )
   return payload.data
+}
+
+export type TopicChatResponse = {
+  classification: { category: string; reason: string }
+  knowledgeEntry: { id: string; category: string; title: string }
+  topicSelectionId: string
+  cards: ApiTopicCard[]
+  reply: {
+    summary: string
+    recommendedTitle: string
+    opening: string
+    alternatives: string[]
+    nextActionLabel: string
+  }
+}
+
+export async function sendTopicChatMessage(input: {
+  projectId: string
+  content: string
+}): Promise<TopicChatResponse> {
+  return request<TopicChatResponse>("/api/topics/chat", {
+    method: "POST",
+    body: JSON.stringify(input),
+    timeout: 60000,
+  })
 }
 
 export async function selectTopic(

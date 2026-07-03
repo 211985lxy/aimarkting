@@ -169,7 +169,7 @@ export default function DashboardPage() {
             <p className="text-sm leading-relaxed text-muted-foreground">
               统一处理选题、脚本、朋友圈、长文和发布前质检。
             </p>
-            <Button className="w-full" nativeButton={false} render={<Link href="/aim?agent=ip_video" />}>
+            <Button className="w-full" nativeButton={false} render={<Link href="/aim?agent=content_producer" />}>
               去生产内容
               <ArrowRight className="h-4 w-4" />
             </Button>

@@ -24,6 +24,7 @@ CI=true corepack pnpm --filter @mingyuan/web build
 "${RSYNC[@]}" apps/web/public/ "$SSH_USER@$SSH_HOST:$REMOTE_DIR/apps/web/public/"
 "${RSYNC[@]}" apps/web/messages/ "$SSH_USER@$SSH_HOST:$REMOTE_DIR/apps/web/messages/"
 
+"${SSH[@]}" "if ! systemctl cat '$SERVICE_NAME' | grep -q 'ExecStart=/usr/bin/node server.js'; then sed -i 's#^ExecStart=.*#ExecStart=/usr/bin/node server.js#' /etc/systemd/system/'$SERVICE_NAME'.service && systemctl daemon-reload; fi"
 "${SSH[@]}" "systemctl restart '$SERVICE_NAME' && systemctl is-active '$SERVICE_NAME'"
 curl -fsS "$HEALTH_URL" >/dev/null
 echo "deployed: $HEALTH_URL"

@@ -106,7 +106,7 @@ export const PATCH = withAdminAuth(async (request, { params }) => {
 })
 
 // DELETE — 删除单条素材（事务内联动归档对应 KnowledgeEntry）
-export const DELETE = withAdminAuth(async (request, { params }) => {
+export const DELETE = withAdminAuth(async (_request, { params }) => {
   const itemId = params?.itemId
   if (!itemId) {
     return NextResponse.json({ error: "缺少 itemId" }, { status: 400 })

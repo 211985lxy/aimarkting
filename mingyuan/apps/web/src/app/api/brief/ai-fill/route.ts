@@ -4,7 +4,7 @@ import { withUserAuth } from "@/lib/user-auth"
 import { LLMClient } from "@/lib/llm/client"
 import type { ExpressionBlueprint, TemplateVariable } from "@/types/content-template"
 
-export const POST = withUserAuth(async (request, { user }) => {
+export const POST = withUserAuth(async (request) => {
   const body = await request.json()
   const templateId = typeof body.templateId === "string" ? body.templateId : ""
   const userInput = typeof body.userInput === "string" ? body.userInput.trim() : ""

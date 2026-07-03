@@ -38,7 +38,7 @@ const navItems = [
   { title: "用户管理", titleEn: "Users", href: "/admin/users", icon: Users },
   { title: "激活码", titleEn: "Activation Codes", href: "/admin/activation-codes", icon: KeyRound },
   { title: "知识库", titleEn: "Knowledge", href: "/admin/knowledge", icon: BookOpen },
-  { title: "对标档案", titleEn: "Benchmark", href: "/admin/benchmark-profiles", icon: Target },
+  { title: "真实档案", titleEn: "Profiles", href: "/admin/benchmark-profiles", icon: Target },
   { title: "内容模板", titleEn: "Templates", href: "/admin/templates", icon: FileText },
   { title: "系统设置", titleEn: "Settings", href: "/admin/settings", icon: Settings },
 ]

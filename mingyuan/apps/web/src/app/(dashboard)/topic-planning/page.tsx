@@ -34,9 +34,11 @@ import {
   listClientProjects,
   listKnowledge,
   selectTopic,
+  sendTopicChatMessage,
   updateKnowledge,
   type ClientProject,
   type KnowledgeEntry,
+  type TopicChatResponse,
 } from "@/lib/api/client"
 import { buildDefaultKnowledgeTags, mergeKnowledgeTags } from "@/lib/knowledge-tags"
 import { buildTopicDailyReport, type TopicDailyReport, type TopicDailyReportSource } from "@/lib/topic-daily-report"
@@ -68,9 +70,9 @@ const CATEGORY_META: Record<
   },
   user_insight: {
     label: "用户洞察",
-    description: "把客户高频问题、成交阻力、评论区疑问沉淀成稳定输入。",
-    titlePlaceholder: "例如：客户总问售后响应多久",
-    contentPlaceholder: "记录真实问题、原话、聊天片段或成交顾虑。",
+    description: "来自客户在选题策划和总聊天框里的真实输入，系统沉淀后再进入选题。",
+    titlePlaceholder: "",
+    contentPlaceholder: "",
   },
 }
 
@@ -149,7 +151,7 @@ function strongestAndWeakest(card: ApiTopicCard) {
   return { strongest: sorted[0], weakest: sorted[sorted.length - 1] }
 }
 
-// ─── 四分类分区 ──────────────────────────────────────────
+// ─── 前台四分类分区 ────────────────────────────────────────
 
 interface TopicCategoryGroup {
   key: string
@@ -157,50 +159,36 @@ interface TopicCategoryGroup {
   cards: ApiTopicCard[]
 }
 
+const TOPIC_DISPLAY_GROUPS: TopicCategoryGroup[] = [
+  { key: "know_you", label: "让客户先认识你", cards: [] },
+  { key: "point_of_view", label: "把你的观点说出来", cards: [] },
+  { key: "customer_problem", label: "把客户的问题讲透", cards: [] },
+  { key: "real_case", label: "用真实案例打消顾虑", cards: [] },
+]
+
+function getTopicDisplayGroupKey(card: ApiTopicCard) {
+  const text = [
+    card.title,
+    card.rationale,
+    card.contentLine,
+    card.scoreReason,
+  ].filter(Boolean).join(" ")
+
+  if (/人设|身份|老板|经历|故事|信任|认识/.test(text) || card.topicType === "人设型") return "know_you"
+  if (/案例|客户故事|见证|证明|前后|成交|转化/.test(text) || card.structureCode === "before_after" || card.structureCode === "proof_first") return "real_case"
+  if (/问题|痛点|顾虑|阻力|避坑|方法|方案|怎么|如何/.test(text) || card.structureCode === "pain_solution") return "customer_problem"
+  if (/观点|判断|认知|趋势|误区|反常识|立场|热点/.test(text) || card.sourceType === "行业热点" || card.topicType === "流量型") return "point_of_view"
+  return card.topicType === "转化型" ? "customer_problem" : "point_of_view"
+}
+
+function getTopicDisplayLabel(card: ApiTopicCard) {
+  return TOPIC_DISPLAY_GROUPS.find((group) => group.key === getTopicDisplayGroupKey(card))?.label ?? "把你的观点说出来"
+}
+
 function categorizeTopicCards(cards: ApiTopicCard[]): TopicCategoryGroup[] {
-  const assigned = new Set<number>()
-  const groups: TopicCategoryGroup[] = [
-    { key: "content_line", label: "内容线选题", cards: [] },
-    { key: "hot", label: "热点选题", cards: [] },
-    { key: "persona", label: "人设选题", cards: [] },
-    { key: "conversion", label: "转化选题", cards: [] },
-  ]
-
+  const groups: TopicCategoryGroup[] = TOPIC_DISPLAY_GROUPS.map((group) => ({ ...group, cards: [] }))
   for (const card of cards) {
-    const idx = cards.indexOf(card)
-    // 优先级：contentLine > 热点 > 人设 > 转化 > 流量
-    if (card.contentLine) {
-      groups[0].cards.push(card)
-      assigned.add(idx)
-    } else if (card.sourceType === "行业热点") {
-      groups[1].cards.push(card)
-      assigned.add(idx)
-    }
-  }
-
-  for (const card of cards) {
-    const idx = cards.indexOf(card)
-    if (assigned.has(idx)) continue
-    if (card.topicType === "人设型") {
-      groups[2].cards.push(card)
-      assigned.add(idx)
-    }
-  }
-
-  for (const card of cards) {
-    const idx = cards.indexOf(card)
-    if (assigned.has(idx)) continue
-    if (card.topicType === "转化型") {
-      groups[3].cards.push(card)
-      assigned.add(idx)
-    }
-  }
-
-  // 剩余（流量型等）归入转化
-  for (const card of cards) {
-    const idx = cards.indexOf(card)
-    if (assigned.has(idx)) continue
-    groups[3].cards.push(card)
+    groups.find((group) => group.key === getTopicDisplayGroupKey(card))?.cards.push(card)
   }
 
   return groups.filter((g) => g.cards.length > 0)
@@ -228,6 +216,9 @@ export default function TopicPlanningPage() {
   const [topicRefreshCount, setTopicRefreshCount] = useState(0)
   const [autoGenerating, setAutoGenerating] = useState(false)
   const [autoGenerateError, setAutoGenerateError] = useState("")
+  const [topicChatInput, setTopicChatInput] = useState("")
+  const [topicChatLoading, setTopicChatLoading] = useState(false)
+  const [topicChatReply, setTopicChatReply] = useState<TopicChatResponse | null>(null)
   const [forms, setForms] = useState<Record<TopicCategory, { title: string; content: string }>>({
     daily_inspiration: { title: "", content: "" },
     benchmark_reference: { title: "", content: "" },
@@ -528,7 +519,49 @@ export default function TopicPlanningPage() {
     }
   }
 
-  async function handleSelectTopic(card: ApiTopicCard, index: number) {
+  async function handleTopicChatSubmit() {
+    const content = topicChatInput.trim()
+    if (!selectedProjectId) {
+      toast.error("先选择一个客户项目")
+      return
+    }
+    if (content.length < 2) {
+      toast.error("先说一句具体想法")
+      return
+    }
+
+    setTopicChatLoading(true)
+    try {
+      const result = await sendTopicChatMessage({ projectId: selectedProjectId, content })
+      setTopicChatReply(result)
+      setTopicCards(result.cards)
+      setTopicSelectionId(result.topicSelectionId)
+      setSelectedTopicIndex(null)
+      setSelectedKnowledgeIds((current) => [...new Set([result.knowledgeEntry.id, ...current])])
+      setKnowledgeEntries((current) => [
+        {
+          ...result.knowledgeEntry,
+          projectId: selectedProjectId,
+          content,
+          tags: [],
+          sourceType: "manual",
+          sortOrder: 0,
+          status: "active",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        ...current,
+      ] as KnowledgeEntry[])
+      setTopicChatInput("")
+      toast.success("已生成可拍方向")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "生成失败")
+    } finally {
+      setTopicChatLoading(false)
+    }
+  }
+
+  async function handleSelectTopic(_card: ApiTopicCard, index: number) {
     if (!topicSelectionId) {
       toast.error("当前没有可采用的选题批次")
       return
@@ -545,7 +578,7 @@ export default function TopicPlanningPage() {
 
   function jumpToAim(card: ApiTopicCard) {
     const params = new URLSearchParams()
-    params.set("agent", "ip_video")
+    params.set("agent", "content_producer")
     params.set("mode", "asset_pack")
     params.set("topicTitle", card.title)
     if (card.rationale) params.set("topicRationale", card.rationale)
@@ -654,6 +687,45 @@ export default function TopicPlanningPage() {
       ) : (
         <>
           <div className="flex flex-col gap-6">
+            <Card className="order-1 border-primary/20 bg-primary/[0.02]">
+              <CardHeader className="pb-3">
+                <CardTitle>跟智能体说说你的想法</CardTitle>
+                <CardDescription>
+                  发一句客户问题、现场灵感或对标素材，系统会直接变成可拍选题。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Textarea
+                  value={topicChatInput}
+                  placeholder="比如：今天客户又问我为什么报价比别人高"
+                  className="min-h-24"
+                  onChange={(event) => setTopicChatInput(event.target.value)}
+                />
+                <div className="flex justify-end">
+                  <Button onClick={handleTopicChatSubmit} disabled={topicChatLoading || !selectedProjectId}>
+                    <Sparkles className="mr-1 h-4 w-4" />
+                    {topicChatLoading ? "生成中..." : "生成可拍方向"}
+                  </Button>
+                </div>
+                {topicChatReply ? (
+                  <div className="rounded-lg border bg-background p-3 text-sm leading-6">
+                    <p className="font-medium">{topicChatReply.reply.summary}</p>
+                    <p className="mt-2">
+                      <b>建议先拍：</b>{topicChatReply.reply.recommendedTitle}
+                    </p>
+                    <p>
+                      <b>开头：</b>{topicChatReply.reply.opening}
+                    </p>
+                    {topicChatReply.reply.alternatives.length > 0 ? (
+                      <p>
+                        <b>还能拍：</b>{topicChatReply.reply.alternatives.join("、")}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+
             <div className="order-2 rounded-xl border bg-muted/20 p-3 text-sm opacity-80">
               <div className="font-medium text-muted-foreground">
                 补充素材（可选） · 素材池 {knowledgeEntries.length} 条
@@ -671,41 +743,49 @@ export default function TopicPlanningPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid gap-3">
-                      <div className="space-y-2">
-                        <Label>标题</Label>
-                        <Input
-                          value={forms[category].title}
-                          placeholder={CATEGORY_META[category].titlePlaceholder}
-                          onChange={(event) => updateForm(category, "title", event.target.value)}
-                        />
+                    {category === "user_insight" ? (
+                      <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
+                        客户在选题策划或总聊天框里提到的偏好、顾虑和真实问题，会沉淀到这里。
                       </div>
-                      <div className="space-y-2">
-                        <Label>内容</Label>
-                        <Textarea
-                          value={forms[category].content}
-                          placeholder={CATEGORY_META[category].contentPlaceholder}
-                          className="min-h-28"
-                          onChange={(event) => updateForm(category, "content", event.target.value)}
-                        />
+                    ) : (
+                      <div className="grid gap-3">
+                        <div className="space-y-2">
+                          <Label>标题</Label>
+                          <Input
+                            value={forms[category].title}
+                            placeholder={CATEGORY_META[category].titlePlaceholder}
+                            onChange={(event) => updateForm(category, "title", event.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>内容</Label>
+                          <Textarea
+                            value={forms[category].content}
+                            placeholder={CATEGORY_META[category].contentPlaceholder}
+                            className="min-h-28"
+                            onChange={(event) => updateForm(category, "content", event.target.value)}
+                          />
+                        </div>
+                        <div className="flex justify-end">
+                          <Button
+                            onClick={() => handleCreateKnowledge(category)}
+                            disabled={savingCategory === category}
+                          >
+                            <Plus className="mr-1 h-4 w-4" />
+                            {savingCategory === category ? "保存中..." : "加入选题池"}
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex justify-end">
-                        <Button
-                          onClick={() => handleCreateKnowledge(category)}
-                          disabled={savingCategory === category}
-                        >
-                          <Plus className="mr-1 h-4 w-4" />
-                          {savingCategory === category ? "保存中..." : "加入选题池"}
-                        </Button>
-                      </div>
-                    </div>
+                    )}
 
                     <div className="space-y-3 border-t pt-4">
                       {loadingKnowledge ? (
                         <p className="text-sm text-muted-foreground">正在读取项目素材...</p>
                       ) : items.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
-                          这个分类还没有素材，先录一条，后面生成选题时就能直接带进去。
+                          {category === "user_insight"
+                            ? "还没有沉淀到用户洞察。客户多聊几轮后，可以从对话里提炼出来。"
+                            : "这个分类还没有素材，先录一条，后面生成选题时就能直接带进去。"}
                         </p>
                       ) : (
                         items.map((entry) => (
@@ -792,7 +872,7 @@ export default function TopicPlanningPage() {
                                         <div className="flex flex-wrap items-center gap-2">
                                           <Badge variant="secondary">#{index + 1}</Badge>
                                           {isSelected && <Badge>已采用</Badge>}
-                                          {card.topicType && <Badge variant="outline">{card.topicType}</Badge>}
+                                          <Badge variant="outline">{getTopicDisplayLabel(card)}</Badge>
                                           {card.sourceType && <Badge variant="outline">{card.sourceType}</Badge>}
                                           {typeof card.score === "number" && <Badge variant="outline">{card.score}分</Badge>}
                                           {card.contentLine && (
@@ -981,7 +1061,9 @@ function TopicDailyReportPanel({ report }: { report: TopicDailyReport }) {
         <div className="rounded-lg border bg-background p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-base font-semibold">今天只打这一枪</h3>
-            <Badge variant="secondary">{report.leadCard?.topicType ?? "主推"}</Badge>
+            {report.leadCard ? (
+              <Badge variant="secondary">{getTopicDisplayLabel(report.leadCard)}</Badge>
+            ) : null}
           </div>
           <div className="space-y-3 text-sm leading-6">
             <div>

@@ -14,6 +14,7 @@ import {
   type AgentApiContext,
 } from "@/lib/agent-api-auth"
 import { generateAimContent } from "@/lib/aim-generator"
+import { normalizeAimAgentId } from "@/lib/aim-ui-config"
 import { prisma } from "@/lib/prisma"
 
 async function writeAgentLog(params: {
@@ -79,6 +80,9 @@ export async function POST(request: NextRequest) {
 
     assertAgentProjectAccess(context, projectId)
     assertAgentAccess(context, agentId)
+
+    // 归一化旧别名（ip_video → content_producer），保证写入 DB / 日志 / 响应的 id 一致
+    agentId = normalizeAimAgentId(agentId)
 
     const result = await generateAimContent({
       userId: context.userId,

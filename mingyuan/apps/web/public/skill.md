@@ -61,7 +61,7 @@ Content-Type: application/json
 Authorization: Bearer maim_xxx
 
 {
-  "agentId": "ip_video",
+  "agentId": "content_producer",
   "projectId": "project_id",
   "rawInput": "把这个选题生成视频脚本、朋友圈和拍摄交接单。",
   "targetFormats": ["video_script", "moments_post", "shooting_brief"],
@@ -85,7 +85,7 @@ Authorization: Bearer maim_xxx
 ```json
 {
   "id": "generation_id",
-  "agentId": "ip_video",
+  "agentId": "content_producer",
   "projectId": "project_id",
   "results": [
     {

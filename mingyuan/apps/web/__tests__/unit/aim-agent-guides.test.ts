@@ -30,17 +30,24 @@ describe("aim agent guides", () => {
 
   it("offers the three visible content-production variants", () => {
     const labels = AIM_COPY_VARIANTS.map((variant) => variant.label)
-    const guide = getAimAgentGuide("ip_video")
+    const guide = getAimAgentGuide("content_producer")
 
     expect(labels).toEqual(expect.arrayContaining(["独白流", "结论先行", "问答型"]))
     expect(guide.copyVariants?.map((variant) => variant.label)).toEqual(labels)
   })
 
   it("builds next-action prompts with the original deliverable content", () => {
-    const action = getAimAgentGuide("ip_video").nextActions.find((item) => item.id === "publish_package")
+    const action = getAimAgentGuide("content_producer").nextActions.find((item) => item.id === "publish_package")
     const content = "这是一段已经生成好的口播文案。"
 
     expect(action).toBeTruthy()
     expect(buildAimNextActionPrompt(action!, content)).toContain(content)
+  })
+
+  it("resolves the legacy ip_video alias to the content_producer guide (backward compat)", () => {
+    const canonical = getAimAgentGuide("content_producer")
+    const aliased = getAimAgentGuide("ip_video")
+
+    expect(aliased).toBe(canonical)
   })
 })

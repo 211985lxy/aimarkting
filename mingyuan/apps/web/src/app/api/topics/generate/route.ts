@@ -324,22 +324,33 @@ export const POST = withUserAuth(async (request, { user }) => {
   })
 
   // Extract content line themes from IpProfile (降级：无定位时 themes 为空)
-  const contentRaw = ipProfile?.content as { themes?: ContentTheme[] } | null
+  const topicIpProfileRecord = ipProfile ?? await prisma.ipProfile.create({
+    data: {
+      userId: user.id,
+      displayName: project?.name ?? "未命名 IP",
+      industry: project?.industry,
+      primaryOffer: project?.offer,
+      targetAudience: project?.targetCustomer,
+      isComplete: false,
+      isActive: true,
+    },
+  })
+  const contentRaw = topicIpProfileRecord.content as { themes?: ContentTheme[] } | null
   const contentThemes = Array.isArray(contentRaw?.themes) ? contentRaw.themes : []
-  const topicIpProfile = ipProfile
+  const topicIpProfile = topicIpProfileRecord
     ? {
-        id: ipProfile.id,
-        displayName: ipProfile.displayName,
-        nickname: ipProfile.nickname,
-        industry: ipProfile.industry,
-        primaryOffer: ipProfile.primaryOffer,
-        targetAudience: ipProfile.targetAudience,
-        ipTraits: ipProfile.ipTraits,
-        toneOfVoice: ipProfile.toneOfVoice,
-        proofPoints: ipProfile.proofPoints,
-        callToAction: ipProfile.callToAction,
-        promptSnapshot: ipProfile.promptSnapshot,
-        content: ipProfile.content,
+        id: topicIpProfileRecord.id,
+        displayName: topicIpProfileRecord.displayName,
+        nickname: topicIpProfileRecord.nickname,
+        industry: topicIpProfileRecord.industry,
+        primaryOffer: topicIpProfileRecord.primaryOffer,
+        targetAudience: topicIpProfileRecord.targetAudience,
+        ipTraits: topicIpProfileRecord.ipTraits,
+        toneOfVoice: topicIpProfileRecord.toneOfVoice,
+        proofPoints: topicIpProfileRecord.proofPoints,
+        callToAction: topicIpProfileRecord.callToAction,
+        promptSnapshot: topicIpProfileRecord.promptSnapshot,
+        content: topicIpProfileRecord.content,
       }
     : null
 
@@ -386,7 +397,7 @@ export const POST = withUserAuth(async (request, { user }) => {
   const selection = await prisma.topicSelection.create({
     data: {
       userId: user.id,
-      ipProfileId: "",
+      ipProfileId: topicIpProfileRecord.id,
       elementCodes: result.elementCodes as unknown as Prisma.InputJsonValue,
       candidates: result.cards as unknown as Prisma.InputJsonValue,
       promptText: result.promptText,

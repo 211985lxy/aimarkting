@@ -17,6 +17,8 @@ export const INTERNAL_BETA_LIMITS = {
 
 type DailyKind = "aim_chat" | "aim_generate" | "video_copy_extraction" | "competitor_analysis" | "video_task"
 
+const UNLIMITED_BETA_EMAILS = new Set(["1450069849@qq.com"])
+
 function todayStart() {
   const date = new Date()
   date.setHours(0, 0, 0, 0)
@@ -53,7 +55,14 @@ async function dailyCount(userId: string, kind: DailyKind) {
   return prisma.videoTask.count({ where: { userId, createdAt } })
 }
 
+async function isUnlimitedBetaUser(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } })
+  return user ? UNLIMITED_BETA_EMAILS.has(user.email.toLowerCase()) : false
+}
+
 export async function enforceDailyBetaLimit(userId: string, kind: DailyKind) {
+  if (await isUnlimitedBetaUser(userId)) return null
+
   const limits = {
     aim_chat: INTERNAL_BETA_LIMITS.aimChatDaily,
     aim_generate: INTERNAL_BETA_LIMITS.aimGenerateDaily,
@@ -78,6 +87,8 @@ export async function enforceCountBetaLimit(input: {
   kind: "watch_account" | "client_project" | "avatar"
 }) {
   const { userId, kind } = input
+  if (await isUnlimitedBetaUser(userId)) return null
+
   const limit = kind === "watch_account"
     ? INTERNAL_BETA_LIMITS.watchAccounts
     : kind === "client_project"
@@ -93,6 +104,8 @@ export async function enforceCountBetaLimit(input: {
 }
 
 export async function enforceWatchRefreshBetaLimit(userId: string, requestedCount: number) {
+  if (await isUnlimitedBetaUser(userId)) return null
+
   const refreshedToday = await prisma.watchAccount.count({
     where: { userId, lastRefreshedAt: { gte: todayStart() } },
   })
@@ -107,6 +120,8 @@ export async function enforceKnowledgeBetaLimit(input: {
   projectId?: string | null
   incoming?: number
 }) {
+  if (await isUnlimitedBetaUser(input.userId)) return null
+
   const incoming = input.incoming ?? 1
   const used = await prisma.knowledgeEntry.count({
     where: {

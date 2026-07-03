@@ -28,12 +28,10 @@ import { buildStructurePackagingIntent } from "@/lib/video-template-config";
 import type { MaterialAssignment, PackagingMaterialSource } from "@/types/api";
 import type {
   PexelsPhoto,
-  PexelsPhotoSrc,
   PexelsVideo,
   PexelsVideoFile,
   PexelsVideoPicture,
 } from "@/types/pexels";
-import type { PixabayImage } from "@/types/pixabay";
 
 const MATERIAL_PLAN_MODEL =
   process.env.PACKAGING_MATERIAL_PLAN_MODEL || "openai/gpt-5-mini";

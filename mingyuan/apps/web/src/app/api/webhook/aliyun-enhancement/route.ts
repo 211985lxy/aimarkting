@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       );
       return NextResponse.json({ ok: true });
     }
-  } catch (error) {
+  } catch {
     console.warn(
       `[webhook:aliyun-enhancement] Redis dedup failed for jobId=${jobId}, continuing`,
     );

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { AGENT_AIM_AGENT_IDS } from "@/lib/agent-api-contract"
 import { prisma } from "@/lib/prisma"
-import { isValidAimAgent, type AimAgentId } from "@/lib/aim-ui-config"
+import { isValidAimAgent, normalizeAimAgentId, type AimAgentId } from "@/lib/aim-ui-config"
 
 const KEY_PREFIX = "maim_"
 const AGENT_AIM_AGENT_ID_SET = new Set<string>(AGENT_AIM_AGENT_IDS)
@@ -61,9 +61,11 @@ export async function authenticateAgentRequest(request: NextRequest): Promise<Ag
     apiKeyId: apiKey.id,
     userId: apiKey.userId,
     allowedProjects: readStringArray(apiKey.allowedProjects),
-    allowedAgents: readStringArray(apiKey.allowedAgents).filter(
-      (agent): agent is AimAgentId => isValidAimAgent(agent) && AGENT_AIM_AGENT_ID_SET.has(agent)
-    ),
+    allowedAgents: readStringArray(apiKey.allowedAgents)
+      .map((agent) => normalizeAimAgentId(agent))
+      .filter(
+        (agent): agent is AimAgentId => isValidAimAgent(agent) && AGENT_AIM_AGENT_ID_SET.has(agent)
+      ),
   }
 }
 
@@ -74,10 +76,12 @@ export function assertAgentProjectAccess(context: AgentApiContext, projectId: st
 }
 
 export function assertAgentAccess(context: AgentApiContext, agentId: string): asserts agentId is AimAgentId {
+  // 旧别名（ip_video）归一化为当前规范 id，兼容历史 API key 的 scope 与历史调用方
+  const normalized = normalizeAimAgentId(agentId) as AimAgentId
   if (
-    !isValidAimAgent(agentId)
-    || !AGENT_AIM_AGENT_ID_SET.has(agentId)
-    || !context.allowedAgents.includes(agentId)
+    !isValidAimAgent(normalized)
+    || !AGENT_AIM_AGENT_ID_SET.has(normalized)
+    || !context.allowedAgents.includes(normalized)
   ) {
     throw new Error("AGENT_AGENT_FORBIDDEN")
   }

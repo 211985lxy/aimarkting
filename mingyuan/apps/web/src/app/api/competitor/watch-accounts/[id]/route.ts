@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withUserAuth } from "@/lib/user-auth"
 
-export const DELETE = withUserAuth(async (request, { user, params }) => {
+export const DELETE = withUserAuth(async (_request, { user, params }) => {
   const id = params?.id
   if (!id) {
     return NextResponse.json({ error: "参数错误" }, { status: 400 })

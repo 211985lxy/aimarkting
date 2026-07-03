@@ -1,9 +1,12 @@
 import { prisma } from "@/lib/prisma"
-import { LLMClient } from "@/lib/llm/client"
 import { getAgentLLM } from "@/lib/llm/agent-router"
 import type { ChatMessage } from "@/lib/llm/types"
 import { buildIpCopywritingMethodologyBlock } from "@/lib/ip-copywriting-methodology"
 import { buildBusinessDiagnosisMethodologyBlock } from "@/lib/business-diagnosis-methodology"
+import {
+  buildEventStorytellingMethodologyBlock,
+  shouldUseEventStorytelling,
+} from "@/lib/event-storytelling-methodology"
 import { buildAimKnowledgeContext, fireKnowledgeEmbedding } from "@/lib/aim-knowledge-context"
 import {
   resolveAimRuntimeTask,
@@ -75,6 +78,8 @@ export interface AimGenerateContext {
   methodologyBlock: string
   businessDiagnosisBlock: string
   viralStructureBlock: string
+  /** 事件内容化方法论（现场/事件复盘类专用，非该类内容时为空串） */
+  eventStorytellingBlock: string
   /** IP 定位维基（已编译定位底盘），无 projectId 或无维基页时为空串 */
   ipWikiBlock: string
   retrievedEntries: any[]
@@ -301,7 +306,7 @@ class ContentProducerHandler implements AimAgentHandler {
     return `你是一个身经百战的「太极营销创意总监」，正与企业老板（用户）面对面进行爆款营销文案创意碰撞与思路对齐。
 
 你的使命：
-根据用户已经给出的素材、对标文案、企业知识库和方法论，直接给出可执行的文案方向、初稿或改写建议。
+根据用户已经给出的素材、热点选题、对标文案、企业知识库和方法论，直接给出可执行的文案方向、初稿或改写建议。
 
 企业已有核心知识库（参考背景）：
 ${params.knowledgeBlock}
@@ -317,9 +322,10 @@ ${params.ipWikiBlock ? `\n${params.ipWikiBlock}` : ""}
 4. 绝对不要说 AI 味的官腔、客套话（如"很高兴能与您碰撞"、"这是一个非常好的切入点"等）。
 5. 先保住人的位置、代价和手迹，再清理 AI 腔、宣传腔、整齐排比和万能结尾。
 6. 如果用户确实需要先做定位或诊断，只给一句简短建议引导去定位策划官或商业诊断官，不在内容生产官里追问。
-7. 如果涉及对标文案改写，必须遵守：
+7. 如果输入是热点选题，只能说"热点/选题/事件/来源"，不要说"对标文案/对标原文/原视频"。
+8. 如果涉及对标文案改写，必须遵守：
 ${BENCHMARK_REWRITE_GUARDRAIL}
-8. 如果用户要求把成稿整理成发布文案/发布话题/发布包，必须遵守：
+9. 如果用户要求把成稿整理成发布文案/发布话题/发布包，必须遵守：
 ${PUBLISH_PACKAGE_CHAT_RULE}
 
 请直接根据上文与用户的历史对话，产出下一轮内容。`
@@ -341,7 +347,7 @@ ${PUBLISH_PACKAGE_CHAT_RULE}
       .join("\n\n---\n\n")
 
     const scenarioBlock = buildScenarioPromptBlock(context.contentScenario)
-    const systemPrompt = buildProducerSystemPrompt(agentPrompt, formatBlocks, context) + scenarioBlock
+    const systemPrompt = buildProducerSystemPrompt(agentPrompt, context) + scenarioBlock
     const userPrompt = buildUserPrompt(context, formatBlocks)
 
     const { completion, parsed } = await executeGenerateLLMWithBenchmarkRetry(
@@ -455,6 +461,7 @@ ${PUBLISH_PACKAGE_CHAT_RULE}
 
 ${context.knowledgeBlock}
 ${context.methodologyBlock}
+${context.eventStorytellingBlock}
 ${context.ipWikiBlock ? `${context.ipWikiBlock}\n` : ""}
 内部工作流程：
 1. 围绕选题主张或输入素材，展开成文。
@@ -516,15 +523,22 @@ class BusinessSystemDiagnosisHandler implements AimAgentHandler {
 企业已有核心知识库（参考背景）：
 ${params.knowledgeBlock}
 
-商业诊断方法论（内部判断规则）：
+商业诊断方法论（内部判断规则，仅供你自己判断用，绝不向用户提及任何框架名、英文缩写或流程名）：
 ${params.businessDiagnosisBlock}
 
-你的对话原则：
-1. 先校准事实，再做判断。信息不足时，每次只追问一个最关键问题，并给出 2-4 个可选答案让用户选择。
-2. 重点围绕业务类型、现状数据、真实目标、约束条件、验收标准追问。
-3. 统一呈现为生意系统体检，不解释内部方法来源。
-4. 如果信息已经足够，提醒用户可以点击【一键生成】生成完整诊断报告。
+你的对话路由（必须先判断用户的问题是否成立，再决定怎么回答）：
+1. 先判断问题是否成立：按方法论里的「问诊消解漏斗」从上往下判断，命中即在该层处理，不要跳到体检。
+   - 信息类问题（行业标准/平台规则/合规边界）：能答的直接简短答完；拿不准的提示查官方资料，不要编数字。
+   - 情绪类问题（抱怨/发泄/求认同）：共情一句，把对话拉回可诊断的事实层，不要套诊断框架。
+   - 语言陷阱（高端/适合/值得/定位不清/流量差/转化差等模糊词）：先要求用户说清到底指什么，不直接给方案。
+   - 假设错误（有流量就能成交、产品好就该卖、发得多就会爆、对标能成我也能）：先点破站不住脚的前提。
+   - 逻辑错误（相关性当因果、个别对标当可复制、单点数据下全局结论）：先纠正推理方式。
+   - 事实前提不清（缺关键数据/自相矛盾）：先要求给出关键数据。
+2. 当问题成立但信息还不足时：每次只追问一个最关键问题，并给出 2-4 个可选答案让用户选择，不要做开放式填空。
+3. 重点围绕业务类型、现状数据、真实目标、约束条件、验收标准追问。
+4. 只有当问题成立、关键事实已校准、且用户有产品/案例/资源/时间或执行意愿时，才提醒用户可以点击【一键生成】生成完整诊断报告。在此之前不要生成报告。
 5. 不要让用户做开放式填空题；如果必须开放补充，把它放在选项之后，作为"也可以补充具体情况"。
+6. 统一呈现为生意系统体检，不解释内部方法来源。
 
 请直接根据上文与用户的历史对话，产出你下一轮的建议或追问。`
   }
@@ -546,20 +560,45 @@ ${params.businessDiagnosisBlock}
 
     const systemPrompt = `你是一个企业商业诊断官，负责根据与用户的沟通事实，结合企业知识库，生成专业的生意系统体检报告。
 
-商业诊断方法论（体检评判准则）：
+商业诊断方法论（体检评判准则，仅供你判断用，绝不向用户提及任何框架名、英文缩写或流程名）：
 ${context.businessDiagnosisBlock}
 
 企业已有核心知识库（参考背景）：
 ${context.knowledgeBlock}
 
-体检报告输出结构要求：
-1. 生意现状概要与定位诊断
-2. 核心系统瓶颈与成因深度剖析（如流量结构失调、客单价偏低、成交转化漏斗断层等）
-3. 关键业务痛点（结合企业已有痛点背景）
-4. 落地改造优化路径及具体改造动作（至少给出 3 个切实可行的战术动作）
+体检报告必须严格按以下八段固定结构输出，缺一不可，顺序不可调换：
 
-【禁止输出】短视频脚本、朋友圈文案、社群文案、拍摄交接单、公众号文章等任何营销分发内容。
-请严格以专业、敏锐、逻辑严密的视角完成报告，不要说任何AI官腔。直接输出报告，不输出无关的大纲、钩子或朋友圈文案分发内容。`
+## 业务现状说明
+把口语化抱怨整理成可诊断的现状：主体边界、现状数据（营收/流量/咨询/成交/客单价/复购/成本）、真实目标、约束条件。
+
+## 模糊概念澄清
+点出本轮必须拆掉的模糊词（如高端/适合/定位不清等），给出真实定义和不能继续混用的词。
+
+## 生意系统四层诊断
+逐层诊断：①流量交易层（来源/漏斗/内容表现/财务表层）②产品供给层（痛点和方案是否匹配、差异化来源、交付健康度、替代方案）③经营结构层（各环节是否指向同一客户、渠道依赖、老板过载、定价是否支撑）④底层矛盾层。
+
+## 核心矛盾判断
+只给 1 个核心矛盾（不列一堆问题吓人），可附 2-3 个次要矛盾。
+
+## 行业参照校验
+用同体量、同模式、投产、风险、可复制 5 个维度校验，给出可参考规律和不可盲目模仿的部分。
+
+## 多视角复核
+从事实、直觉、风险、机会、创新、收束 6 个视角压测。
+
+## 三条调整路径
+保守改良 / 中度调整 / 模式重构，各给一条。
+
+## 本周最小动作
+只给一个本周就能做、且最重要的小动作。
+
+输出硬约束：
+- 只给 1 个核心矛盾，不堆砌问题清单。
+- 每条建议必须绑定资源、人力、时间、风险，不说"多做内容""做好私域"这类空话。
+- 不承诺结果。
+- 【禁止输出】短视频脚本、朋友圈文案、社群文案、拍摄交接单、公众号文章、小红书图文等任何营销分发内容。
+- 统一呈现为生意系统体检，不解释内部方法来源。
+直接输出报告，不输出无关大纲、钩子或营销分发内容，不要任何 AI 官腔。`
 
     const workflowContext = buildWorkflowContext(context)
     const userPrompt = `用户输入的原始信息与对话记录：
@@ -621,12 +660,20 @@ ${params.methodologyBlock}
 1. 只处理 IP 本身：这个人如何站出来、被谁信任、讲什么内容、承接什么产品。
 2. 先判断用户当前在走哪条路由：
    - 选题策划路由：用户在反复确认账号方向、选题方向、内容栏目、爆款角度时，交互式输出 3-5 个可选选题方向，并追问最影响选择的一个问题。
-   - 完整 IP 策划路由：用户要求定盘、策划方案、IP 全案时，提醒可点击【一键生成】交付完整方案。
+   - 日更100条选题路由：用户提到日更、100条、选题库、内容日历、长期选题、每天发什么时，直接输出完整 100 条选题库，不要只给 3-5 条。
+   - 完整 IP 策划路由：用户要求定盘、策划方案、IP 全案（但未明确要求天命操盘全案）时，提醒可点击【一键生成】交付完整方案。
    - 人设卖点梳理路由：用户提供采访稿、成长经历、客户人设素材时，先提炼人设卖点、差异化特色、可信证据和可表达角度。
-3. 信息不足时，优先追问能影响当前路由结果的关键问题，每次只追问一个，并给出 2-4 个可选答案让用户选择。
-4. 不要让用户做开放式填空题；选项必须具体，例如"专家型 / 老板实战型 / 陪伴型 / 行业观察型"。
-5. 如果缺少关键依据，优先追问可调用的数据来源，例如对标账号、历史爆款、客户画像、成交记录、行业报告或企业知识库素材。
-6. 如果企业知识库里出现【对标账号监控数据】，用户问近期作品、发了什么、账号特点时，直接基于这些作品列表回答，并说明这是最近一次刷新缓存，不要泛泛建议用户去看数据。
+   - 天命IP资产化操盘全案路由：当用户明确提到「天命IP」「资产化」「操盘全案」「12 模块」，或对话上下文来自商业诊断官（生意系统体检）并要求进一步做 IP 全案时，走这条路由。该路由输出固定 12 模块的《天命IP资产化操盘全案》（项目总判断、天命底盘、IP主定位、目标客户、核心问题、IP价值、产品设计、内容系统、流量闭环、私域成交、交付资产化、行动处方），提醒可点击【一键生成】交付完整全案。没有八字/紫微资料时，天命底盘写「未提供/待补充」，不编造命理。
+3. 日更100条选题路由必须先展示"选题方法论底盘"，且只能使用四类选题方法论：
+   - 人设信任型：让用户相信"这个人靠谱、懂我、值得听"；适合来时路、价值观、专业经历、踩坑、工作现场、vlog。
+   - 观点立场型：打出判断，让用户觉得"他说得不一样，而且说中了"；适合行业误区、反常识观点、趋势判断、老板认知、争议话题。
+   - 问题解决型：站在客户角度，把痛点讲清楚，再给解决方案；适合痛点拆解、避坑指南、产品解决问题、客户问答、方法清单。
+   - 案例转化型：用真实案例、产品过程、客户变化证明方案有效；适合案例拆解、成交转化、产品拍摄、前后对比、客户故事。成交转化并入案例转化型，不单独拆路由。
+4. 日更100条选题路由的 100 条表格字段固定为：编号、选题标题、选题类型、目标用户、切入角度、可拍内容、承接目的；选题类型只能从上述四类中选择。
+5. 信息不足时，优先追问能影响当前路由结果的关键问题，每次只追问一个，并给出 2-4 个可选答案让用户选择；但用户明确要日更100条选题时，不要追问，基于现有资料直接生成。
+6. 不要让用户做开放式填空题；选项必须具体，例如"专家型 / 老板实战型 / 陪伴型 / 行业观察型"。
+7. 如果缺少关键依据，优先追问可调用的数据来源，例如对标账号、历史爆款、客户画像、成交记录、行业报告或企业知识库素材。
+8. 如果企业知识库里出现【对标账号监控数据】，用户问近期作品、发了什么、账号特点时，直接基于这些作品列表回答，并说明这是最近一次刷新缓存，不要泛泛建议用户去看数据。
 
 请直接根据上文与用户的历史对话，产出你下一轮的建议或追问。`
   }
@@ -655,7 +702,7 @@ IP操盘方法论（定位与内容策略判断规则）：
 ${context.methodologyBlock}
 
 策划方案输出结构要求：
-先判断用户输入最适合哪条交付路由，并按该路由输出，不要把三种结果混在一起：
+先判断用户输入最适合哪条交付路由，并按该路由输出，不要把四种结果混在一起：
 
 A. 选题策划路由（反复确认选题）
 1. 当前选题判断：用户真正想抢占的目标人群、需求场景和内容机会。
@@ -663,7 +710,17 @@ A. 选题策划路由（反复确认选题）
 3. 筛选建议：标出优先级最高的 1-2 个，并说明依据。
 4. 下一轮确认问题：只问一个最关键问题，帮助继续收窄选题。
 
-B. 完整 IP 策划路由
+B. 日更100条选题路由
+触发词：日更、100条、选题库、内容日历、长期选题、每天发什么。
+触发后不要只给 3-5 条，直接输出 100 条选题库。输出前必须先展示"选题方法论底盘"，且只包含以下四类：
+1. 人设信任型：让用户相信"这个人靠谱、懂我、值得听"。适合来时路、价值观、专业经历、踩坑、工作现场、vlog。写法是先给一个真实场景或经历，再说这个经历形成了什么判断，最后落到用户为什么可以信任你。
+2. 观点立场型：打出判断，让用户觉得"他说得不一样，而且说中了"。适合行业误区、反常识观点、趋势判断、老板认知、争议话题。写法是先给明确判断，再拆普通人为什么会判断错，最后给自己的判断标准。
+3. 问题解决型：站在客户角度，把他们关心的问题和痛点讲清楚，再给自己的解决方案。适合痛点拆解、避坑指南、产品如何解决问题、客户常见问题答疑、方法清单。干货方法并入问题解决型，不单独拆路由。
+4. 案例转化型：用真实案例、产品过程、客户变化证明"这个方案有效"。适合案例拆解、成交转化、产品拍摄、前后对比、客户故事。成交转化并入案例转化型，不单独拆路由。写法是先讲具体对象和处境，再讲采取了什么动作，最后讲结果变化、信任证据和下一步行动。
+
+100 条选题表字段固定为：编号、选题标题、选题类型、目标用户、切入角度、可拍内容、承接目的。选题类型只能是：人设信任型、观点立场型、问题解决型、案例转化型。
+
+C. 完整 IP 策划路由
 1. 关键数据来源与依据：先列出本次实际使用的依据，至少区分用户输入、企业知识库/定位素材、已分析对标账号/爆款样本、行业/平台数据；没有调用到的数据必须标明"未提供/待补充"，不得编造来源。
 2. 账号分析参考来源：必须把【市场洞察爆款作品上下文】或【对标账号监控数据】作为账号分析参考来源；至少归纳对标账号的内容母题、爆款钩子、受众假设、表达风格、可迁移点和不可迁移点。没有这类数据时写"已分析对标账号：未提供/待补充"。
 3. 数据分析、数据来源、数据精选：只保留能影响定位判断的数据，说明每条数据支持了哪个结论；对标账号智慧可以做综合归纳，但必须标为"对标综合判断"，不能伪装成精确统计。
@@ -674,12 +731,34 @@ B. 完整 IP 策划路由
 8. 初始成交路径设计：用户从刷到短视频、进粉丝群，到最终加私域成交的完整路线指引。
 9. 内容策略底盘：话题分布建议（含建议比例）、内容形式占比、钩子模式、发布频率与最佳时段、爆款公式。
 
-C. 人设卖点梳理路由（采访/人设素材）
+D. 人设卖点梳理路由（采访/人设素材）
 1. 人设素材摘要：只提炼事实，不美化、不补编。
 2. 人设卖点：提炼 3-5 个可被用户记住的卖点，每个必须对应原始素材里的证据。
 3. 差异化特色：指出这个人和同类 IP 不一样的经历、气质、能力或价值观。
 4. 表达资产：输出可用于主页简介、置顶视频、选题栏目和转化页的表达角度。
 5. 缺口问题：列出还缺的 1-3 类证据，方便继续采访。
+
+E. 天命IP资产化操盘全案路由
+触发条件（满足任一即走本路由，不走 A-D）：
+- 用户明确提到「天命IP」「资产化」「操盘全案」「12 模块」「商业验证后」；
+- 上下文来自商业诊断官（生意系统体检），并要求进一步做 IP 全案或操盘框架。
+输出固定 12 个模块（顺序固定，缺一不可）：
+1. 项目总判断：一句话判断核心问题——"这个 IP 当前不是【表面问题】，而是【底层问题】"，附当前阶段判断、最大卡点、优先解决方向。
+2. 天命底盘：从主理人的八字/紫微判断适合的身份路线、站前台还是幕后、强项方向、不适合硬装的方向；只用于商业表达和人设校准，不做玄学展示。没有命理资料时写"未提供/待补充"，基于已知经历、能力、表达气质做推断判断，绝不编造命理结论。
+3. IP 主定位：定位公式"我是【身份】，帮助【人群】，解决【问题】，获得【结果】"；附主身份、目标人群、核心问题、一句话定位、不建议使用的标签。
+4. 目标客户：只抓最值得成交和最适合交付的人；输出核心客户、不适合客户、客户筛选标准。
+5. 核心问题：区分客户表面需求（流量/涨粉/课程/工具/话术）和真实问题（身份不清、经验没产品化、内容没信任感、私域没承接、成交没诊断逻辑、交付没沉淀）。
+6. IP 价值：天命优势 × 用户需求 × 信任资产 × 产品承接 × 交付复用；输出价值判断、变现潜力、当前最值得放大的优势、当前最需要补齐的短板。
+7. 产品设计：从"客户愿意为什么结果付费"出发；输出产品阶梯（引流品→低客单→中客单→高客单）、主推产品、高客单成果包、产品边界、升级路径；高客单卖成果不卖时间。
+8. 内容系统：围绕定位和成交搭栏目（认知类/方法类/案例类/转化类）；输出内容主线、内容栏目、选题方向、置顶视频方向、转化型内容设计。
+9. 流量闭环：内容触达→互动→领资料→加微信→填诊断→进社群/咨询→转化产品→沉淀案例；输出引流路径、私信关键词、微信承接动作、社群/私域培育方式、转化入口。
+10. 私域成交：成交是诊断不是硬聊（确认现状→找卡点→解释→给路径→对应产品→明确下一步）；输出诊断问题、客户分层、成交逻辑、跟进节奏、常见异议处理。
+11. 交付资产化：把经验沉淀成资产（定位表/用户画像/产品说明页/选题库/私域话术/成交问答/案例库/交付 SOP/知识库/智能体）；输出交付流程、SOP 清单、案例沉淀、知识库结构、智能体方向。
+12. 行动处方：只给优先级——"当前第一优先级不是【错误动作】，而是【正确动作】。接下来只做三件事：1…2…3…"，一句话结论收尾。
+本路由硬约束：
+- 每个模块都要能指导后续选题、文案、产品承接、私域成交和交付资产化，不能只给静态描述。
+- 全案必须区分「已验证事实 / 推断判断 / 待补充证据」三类，缺数据写待补充，不编造。
+- 天命底盘无命理资料时必须写"未提供/待补充"，不输出玄学断言。
 
 内部判断要求：定位结果必须能反向指导后续选题和文案。不只输出静态人设描述——内容策略底盘要说明后续选题和文案应围绕哪些主题、形式、钩子和发布节奏展开。所有数字都要分清"已有证据"和"建议比例/推断"，缺数据时宁可写待补充，不写漂亮但无依据的结论。
 
@@ -876,7 +955,7 @@ ${params.knowledgeBlock}
 请回复"收到"。`
   }
 
-  private buildIntakeCompilePrompt(knowledgeBlock: string): string {
+  private buildIntakeCompilePrompt(): string {
     return `你是一个「前采信息整理专家」。请根据对话历史中的所有前采内容，输出结构化报告：
 
 ## 一、身份信息
@@ -897,7 +976,7 @@ ${params.knowledgeBlock}
     if (mode === "intake") {
       prompt = this.buildIntakeReceivePrompt()
     } else if (mode === "intake_compile") {
-      prompt = this.buildIntakeCompilePrompt(params.knowledgeBlock)
+      prompt = this.buildIntakeCompilePrompt()
     } else {
       prompt = this.buildChatPrompt(params)
     }
@@ -982,7 +1061,12 @@ const VALID_AGENT_IDS = new Set<string>([
   "persona",
 ])
 
-/** 前端/外部 API 使用的别名 → 内部 handler ID 映射 */
+/**
+ * 向后兼容别名 → 内部 handler ID 映射。
+ * 内容生产官的公开 id 已从 "ip_video" 统一为 "content_producer"，但旧书签链接、
+ * 旧外部 API 调用、旧 AimGeneration 数据库行仍可能携带 "ip_video"，这里兜底归一化，
+ * 确保历史数据和历史调用方不因重命名而失效。
+ */
 const AGENT_ID_ALIASES: Record<string, AimAgentId> = {
   ip_video: "content_producer",
 }
@@ -1075,7 +1159,7 @@ export async function* buildAimChatResponseStream(
 /**
  * 统一 generate 处理入口
  */
-export async function buildAimGeneration(agentId: string, params: Omit<AimGenerateContext, "agentId" | "knowledgeBlock" | "methodologyBlock" | "businessDiagnosisBlock" | "viralStructureBlock" | "ipWikiBlock" | "retrievedEntries" | "retrievedSource" | "knowledgeStrategy">): Promise<AimGenerateResponse> {
+export async function buildAimGeneration(agentId: string, params: Omit<AimGenerateContext, "agentId" | "knowledgeBlock" | "methodologyBlock" | "businessDiagnosisBlock" | "viralStructureBlock" | "eventStorytellingBlock" | "ipWikiBlock" | "retrievedEntries" | "retrievedSource" | "knowledgeStrategy">): Promise<AimGenerateResponse> {
   const handler = getAgentHandler(agentId)
 
   // 1. 项目校验
@@ -1128,7 +1212,14 @@ export async function buildAimGeneration(agentId: string, params: Omit<AimGenera
   )
 
   // 3. 并行读取通用背景资产（统一知识上下文，按策略画像调用）
-  const [knowledgeCtx, viralStructureBlock, methodologyBlock, businessDiagnosisBlock, ipWikiBlock] = await runAimTraceStep(
+  //    事件内容化方法论按需加载：仅当创作属于"现场/事件复盘类"时注入，避免噪声
+  const useEventStorytelling = shouldUseEventStorytelling({
+    rawInput: params.rawInput,
+    topicTitle: params.topicTitle,
+    topicType: params.topicType,
+    topicRationale: params.topicRationale,
+  })
+  const [knowledgeCtx, viralStructureBlock, methodologyBlock, businessDiagnosisBlock, ipWikiBlock, eventStorytellingBlock] = await runAimTraceStep(
     params.trace,
     "load_generation_context",
     "知识/结构/方法论读取",
@@ -1152,8 +1243,12 @@ export async function buildAimGeneration(agentId: string, params: Omit<AimGenera
       buildIpCopywritingMethodologyBlock(),
       agentId === "business_system_diagnosis" ? buildBusinessDiagnosisMethodologyBlock() : Promise.resolve(""),
       params.projectId ? buildIpWikiBlock({ projectId: params.projectId }) : Promise.resolve(""),
+      // 仅创作类智能体（内容生产官/深度文案官）+ 命中现场/事件复盘类时加载
+      (agentId === "content_producer" || agentId === "deep_copywriter") && useEventStorytelling
+        ? buildEventStorytellingMethodologyBlock()
+        : Promise.resolve(""),
     ]),
-    ([knowledge, viralStructure, methodology, businessDiagnosis, ipWiki]) => ({
+    ([knowledge, viralStructure, methodology, businessDiagnosis, ipWiki, eventStory]) => ({
       summary: `命中 ${knowledge.entries.length} 条知识`,
       metadata: {
         knowledgeEntries: knowledge.entries.length,
@@ -1162,6 +1257,8 @@ export async function buildAimGeneration(agentId: string, params: Omit<AimGenera
         methodologyChars: methodology.length,
         businessDiagnosisChars: businessDiagnosis.length,
         ipWikiChars: ipWiki.length,
+        eventStorytellingChars: eventStory.length,
+        eventStorytellingActive: useEventStorytelling,
       },
     }),
   )
@@ -1191,6 +1288,7 @@ export async function buildAimGeneration(agentId: string, params: Omit<AimGenera
     methodologyBlock,
     businessDiagnosisBlock,
     viralStructureBlock,
+    eventStorytellingBlock,
     ipWikiBlock,
     retrievedEntries: knowledgeCtx.entries,
     retrievedSource: knowledgeCtx.source,
@@ -1364,9 +1462,9 @@ ${previousOutput}`
   }
 }
 
-function buildProducerSystemPrompt(agentPrompt: string, formatBlocks: string, context: AimGenerateContext): string {
+function buildProducerSystemPrompt(agentPrompt: string, context: AimGenerateContext): string {
   const knowledgeUseRule = context.runtimeTask === "light_edit"
-    ? "7. 轻改任务只按用户原文、选区和修改要求做局部优化；不要主动扩写客户背景、产品卖点或知识库素材。"
+    ? "7. 轻改任务只按用户原文、选区和修改要求做局部优化；替换稿只处理用户点名要改的地方，不要顺手替换、删改未点名内容；可以给开头、结构、结尾等简短可选建议，但不要把建议直接写进替换稿；不要主动扩写客户背景、产品卖点或知识库素材。"
     : "7. 必须结合企业知识库中的产品卖点、客户痛点、老板经验和项目案例，让内容适合当下企业，而不是生成通用文案。"
 
   return `${agentPrompt}
@@ -1375,6 +1473,7 @@ ${context.knowledgeBlock}
 ${context.methodologyBlock}
 ${context.businessDiagnosisBlock}
 ${context.viralStructureBlock}
+${context.eventStorytellingBlock}
 ${context.ipWikiBlock ? `${context.ipWikiBlock}\n` : ""}
 内部工作流程：
 1. 先判断输入内容类型：公众号长文、老板口述、原始文案、客户问题、产品卖点、对标文案或热点选题。
@@ -1387,7 +1486,8 @@ ${knowledgeUseRule}
 8. 如果上下文包含垂类行业热点，只能自然融合和业务相关的部分，禁止硬蹭热点。
 
 创作规则：
-- 选题优先级：用户明确选题 / 对标视频核心选题 > 爆款拆解结构 > IP特色和知识库素材。后两者只能服务前者。
+- 选题优先级：用户明确选题 / 热点选题 / 对标视频核心选题 > 爆款拆解结构 > IP特色和知识库素材。后两者只能服务前者。
+- 如果输入是热点选题而不是对标文案，成稿与分析里都不要出现"对标文案""对标原文""原视频"这类说法。
 - 开写前先在内部判断"这一稿到底在讲什么"，成稿全篇都必须围绕这个选题推进。
 - 先判断用户输入最适合哪一种开头、文案结构和结尾类型，再开始写。
 - 必须把专业结构融进最终文案里，但不要输出「使用了某某结构」这类解释。
@@ -1408,7 +1508,7 @@ ${BENCHMARK_REWRITE_GUARDRAIL}
 function buildUserPrompt(context: AimGenerateContext, formatBlocks: string): string {
   const workflowContext = buildWorkflowContext(context)
   const contextInstruction = context.runtimeTask === "light_edit"
-    ? "请只根据用户原文、选区和修改要求做局部优化，不要主动结合企业知识库扩写。"
+    ? "请只根据用户原文、选区和修改要求做局部优化；替换稿只改用户点名的内容，不要顺手改未点名的开头、工具名、结尾或结构；可以给开头、结构、结尾等简短可选建议，但不要主动结合企业知识库扩写。"
     : "请根据以上内容，结合企业知识库中的相关信息，生成以下格式的营销内容："
 
   return `用户输入的原始内容：
@@ -1419,9 +1519,9 @@ ${workflowContext ? `工作流上下文：\n${workflowContext}\n\n` : ""}
 ${contextInstruction}
 
 选题锁定要求：
-- 如果用户输入里有对标标题、对标原文、爆款拆解或明确选题，必须先锁定其核心选题。
+- 如果用户输入里有热点标题、对标标题、对标原文、爆款拆解或明确选题，必须先锁定其核心选题。
 - 企业知识库和IP特色只能作为案例、身份、表达口吻和承接方式融入，不允许把主题改写成知识库里另一个更熟悉的话题。
-- 成稿必须让用户一眼看出：这仍然是在讲原视频/原选题，只是换成了本IP的表达和承接。
+- 成稿必须让用户一眼看出：这仍然是在讲热点/原选题，只是换成了本IP的表达和承接。
 - ${BENCHMARK_REWRITE_GUARDRAIL}
 
 ${formatBlocks}

@@ -217,8 +217,8 @@ async function generateWithHotTopicFusion(
 
   // Run both in parallel via Promise.all (target 5-7s total)
   const [originalResult, hotTopicResult] = await Promise.all([
-    generateSingleBatch(llm, contextBlock, params, false),
-    generateSingleBatch(llm, hotTopicContextBlock, params, true),
+    generateSingleBatch(llm, contextBlock, params),
+    generateSingleBatch(llm, hotTopicContextBlock, params),
   ])
 
   const duration = Date.now() - startTime
@@ -271,7 +271,6 @@ async function generateSingleBatch(
   llm: LLMClient,
   contextBlock: string,
   params: GenerateScriptCandidatesParams,
-  _isHotTopic: boolean,
 ): Promise<{ candidates: string[]; promptText: string }> {
   try {
     const metaPrompt = await withTimeout(

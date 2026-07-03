@@ -2,10 +2,61 @@ import { NextResponse } from "next/server"
 import { withUserAuth } from "@/lib/user-auth"
 import { LLMClient } from "@/lib/llm"
 import { getStyleProfileBlock } from "@/lib/style-profile"
+import { getStylePromptBlock, STYLE_GUIDE_IDS, type StyleGuideId } from "@/lib/style-guide-config"
+import { prisma } from "@/lib/prisma"
 
 export const maxDuration = 60
 
 const POLISH_MODEL = process.env.SCRIPT_GENERATION_MODEL || "openai/gpt-5.4"
+
+// 文案禁用词黑名单（AI 味/营销黑话），各润色模式共用
+const FORBIDDEN_TERMS =
+  "赋能、闭环、抓手、颗粒度、对齐、拉通、打通、沉淀、复盘、迭代、链路、触达、心智、赛道"
+
+/**
+ * 读取项目知识库（老板经验/产品卖点/客户痛点/项目案例/客户问答），
+ * 供 imitate 仿写模式填充新内容。从 aim-agents/script-agent.ts 迁移而来。
+ */
+async function loadProjectKnowledge(
+  userId: string,
+  projectId?: string
+): Promise<string> {
+  const entries = await prisma.knowledgeEntry.findMany({
+    where: {
+      userId,
+      status: "active",
+      ...(projectId ? { OR: [{ projectId }, { projectId: null }] } : {}),
+    },
+    orderBy: { sortOrder: "asc" },
+    take: 200,
+  })
+
+  if (entries.length === 0) return ""
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    boss_experience: "老板经验",
+    product_usp: "产品卖点",
+    customer_pain: "客户痛点",
+    project_case: "项目案例",
+    customer_qa: "客户问答",
+  }
+
+  const grouped = new Map<string, typeof entries>()
+  for (const entry of entries) {
+    const list = grouped.get(entry.category) || []
+    list.push(entry)
+    grouped.set(entry.category, list)
+  }
+
+  let block = "\n=== 企业知识库 ===\n"
+  for (const [category, items] of grouped) {
+    block += `\n【${CATEGORY_LABELS[category] || category}】\n`
+    for (const item of items) {
+      block += `- ${item.title}：${item.content}\n`
+    }
+  }
+  return block
+}
 
 export const POST = withUserAuth(async (request, { user }) => {
   const body = await request.json()
@@ -13,7 +64,20 @@ export const POST = withUserAuth(async (request, { user }) => {
   const weakDimensions = Array.isArray(body.weakDimensions) ? body.weakDimensions as string[] : []
   const topicTitle = typeof body.topicTitle === "string" ? body.topicTitle : null
   const persona = typeof body.persona === "string" ? body.persona : null
-  const mode = body.mode === "proofread" ? "proofread" : "polish"
+  const projectId =
+    typeof body.projectId === "string" && body.projectId ? body.projectId : undefined
+  const viralSourceText =
+    typeof body.viralSourceText === "string" ? body.viralSourceText.trim() : ""
+  const styleId =
+    typeof body.styleId === "string" && (STYLE_GUIDE_IDS as string[]).includes(body.styleId)
+      ? (body.styleId as StyleGuideId)
+      : undefined
+  const mode =
+    body.mode === "proofread"
+      ? "proofread"
+      : body.mode === "imitate"
+        ? "imitate"
+        : "polish"
 
   if (!content || content.length < 30) {
     return NextResponse.json({ error: "文案内容不能为空" }, { status: 400 })
@@ -22,6 +86,91 @@ export const POST = withUserAuth(async (request, { user }) => {
   const llm = LLMClient.shared()
   if (!llm.available) {
     return NextResponse.json({ error: "AI 服务暂时不可用" }, { status: 503 })
+  }
+
+  // imitate 模式：跨行业爆款结构迁移——分析对标爆款的钩子/节奏/结尾逻辑，
+  // 用当前 IP 的知识库和文风重写成同结构、本行业内容的新稿。
+  if (mode === "imitate") {
+    if (!viralSourceText || viralSourceText.length < 30) {
+      return NextResponse.json({ error: "请提供对标爆款原文" }, { status: 400 })
+    }
+    if (!content || content.length < 30) {
+      return NextResponse.json({ error: "草稿内容不能为空" }, { status: 400 })
+    }
+
+    // 用户级写作风格档案打底（这个 IP 真实文风）+ 可选 12 风格覆盖
+    const [styleProfileBlock, knowledgeBlock] = await Promise.all([
+      getStyleProfileBlock(user.id).catch(() => ""),
+      loadProjectKnowledge(user.id, projectId),
+    ])
+    const styleOverrideBlock = getStylePromptBlock(styleId)
+
+    const contextBlock = [
+      knowledgeBlock,
+      styleProfileBlock,
+      persona ? `\nIP 人设：${persona}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n")
+
+    const result = await llm.complete({
+      model: POLISH_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: [
+            "你是一个「爆款文案仿写专家」。你的任务是把一条对标爆款文案的底层结构逻辑，迁移到当前 IP 所在的行业，输出可直接使用的新稿。",
+            "",
+            contextBlock,
+            "",
+            "仿写规则：",
+            "1. 先分析对标爆款的钩子类型、中段推进节奏、结尾收束方式。",
+            "2. 保留爆款的钩子力度、情绪节奏和信息推进顺序，内容完全替换成当前 IP 行业的。",
+            "3. 必须用上方企业知识库里的产品卖点、客户痛点、老板经验填充新内容；知识库没有的，基于草稿和 IP 人设合理补全，不要编造不存在的数据。",
+            "4. 场景和细节必须是当前 IP 行业的真实场景，保持爆点力度。",
+            "5. 严格贴合上方写作风格档案——仿写稿要像这个 IP 本人在说话，而不是通用的爆款腔。",
+            `6. 禁止保留对标原文的行业特定词汇，全部替换；禁止使用：${FORBIDDEN_TERMS}。`,
+            "7. 直接输出仿写成稿纯文本，不要解释分析过程，不要加格式标记。",
+            styleOverrideBlock,
+          ].join("\n"),
+        },
+        {
+          role: "user",
+          content: [
+            "请把以下对标爆款的结构逻辑迁移到当前 IP，重写我的草稿：",
+            "",
+            "【对标爆款原文】",
+            viralSourceText,
+            "",
+            "【我的草稿（行业/方向参考）】",
+            content,
+            ...(topicTitle ? [`\n选题方向：${topicTitle}`] : []),
+            "",
+            "直接输出仿写后的成稿：",
+          ].join("\n"),
+        },
+      ],
+      temperature: 0.7,
+      maxTokens: 2000,
+    })
+
+    const polished = result.content
+      .replace(/^【[^】]+】\s*/g, "")
+      .replace(/^仿写后[：:]\s*/gi, "")
+      .replace(/^修改后[：:]\s*/gi, "")
+      .trim()
+
+    if (!polished || polished.length < 30) {
+      return NextResponse.json({ error: "仿写结果无效，请重试" }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      data: {
+        original: content,
+        polished,
+        polishedDimensions: styleId ? ["imitate", styleId] : ["imitate"],
+      },
+    })
   }
 
   if (mode === "proofread") {

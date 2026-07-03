@@ -265,7 +265,6 @@ function buildSummary(
 
   // 逐条处理消息
   let summaryContent = ""
-  let lastRole = ""
   let lastContent = ""
 
   for (const msg of messages) {
@@ -308,8 +307,6 @@ function buildSummary(
         }
       }
     }
-
-    lastRole = msg.role
   }
 
   // 控制字符预算

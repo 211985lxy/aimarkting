@@ -76,7 +76,7 @@ const footerItems: NavItem[] = [
 const coreAimAgentIds: AimAgentId[] = [
   "business_system_diagnosis",
   "business_diagnosis",
-  "ip_video",
+  "content_producer",
   "deep_copywriter",
   "content_review",
   "persona",
@@ -159,10 +159,10 @@ export function AppSidebar() {
   const deleteHistory = useAimWorkspaceStore((s) => s.deleteHistory)
   const requestLoad = useAimWorkspaceStore((s) => s.requestLoad)
 
-  // 进入 /aim 时拉取最近生成记录
+  // 进入 /aim 时拉取当前智能体最近生成记录
   useEffect(() => {
-    if (isAim) fetchHistory().catch(() => {})
-  }, [isAim, fetchHistory])
+    if (isAim) fetchHistory({ agentId: activeAgent }).catch(() => {})
+  }, [activeAgent, isAim, fetchHistory])
 
   const closeMobile = () => setOpenMobile(false)
 

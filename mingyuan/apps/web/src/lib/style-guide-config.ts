@@ -1,6 +1,7 @@
 /**
  * 风格指令配置模块
- * 12 种内置文案风格，供 polishCopy agent 使用。
+ * 12 种内置文案风格，供 /api/scripts/polish 的 imitate（跨行业爆款仿写）模式使用：
+ * 用户在仿写时可选择一种风格覆盖默认的「用户写作风格档案」做本次腔调。
  * 每种风格对应一段中文 prompt，注入到 system prompt 尾部。
  */
 

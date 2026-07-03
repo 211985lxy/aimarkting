@@ -69,12 +69,6 @@ const KIND_COLORS: Record<string, string> = {
   video: "bg-emerald-50 text-emerald-600",
 }
 
-function formatFollowerCount(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return ""
-  if (n >= 10000) return `${(n / 10000).toFixed(1)}万`
-  return String(n)
-}
-
 // ── 类型 ──
 
 interface ProfileItem {
@@ -527,7 +521,7 @@ export default function BenchmarkProfileDetailPage() {
             </div>
           </div>
 
-          {/* 对标账号专属字段 */}
+          {/* 真实账号专属字段 */}
           {isAccount && (
             <div className="space-y-4 pt-2 border-t">
               <div className="space-y-2">

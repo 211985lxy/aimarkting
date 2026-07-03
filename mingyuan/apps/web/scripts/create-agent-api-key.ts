@@ -16,7 +16,7 @@ import { PrismaClient } from "../src/generated/prisma/client"
 const DEFAULT_AGENTS = [
   "business_system_diagnosis",
   "business_diagnosis",
-  "ip_video",
+  "content_producer",
   "content_review",
 ]
 

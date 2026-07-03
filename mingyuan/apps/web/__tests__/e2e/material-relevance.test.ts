@@ -6,7 +6,6 @@ import {
   DETERMINISTIC_YIELD_THRESHOLD,
   LLM_PASS_SCORE,
   INDUSTRY_ABSTRACT_QUERY_MAP,
-  type ScoredMediaRow,
   type ScorableMediaRow,
 } from "@/lib/material-relevance";
 
@@ -234,7 +233,7 @@ describe("FBACK-02: Tone-appropriate abstract queries", () => {
 
   it("all INDUSTRY_ABSTRACT_QUERY_MAP entries have exactly 3 SafeRole query entries", () => {
     const roles = ["product_detail", "store_environment", "process"] as const;
-    Object.entries(INDUSTRY_ABSTRACT_QUERY_MAP).forEach(([archetype, entry]) => {
+    Object.values(INDUSTRY_ABSTRACT_QUERY_MAP).forEach((entry) => {
       roles.forEach(role => {
         expect(entry.abstractQueries).toHaveProperty(role);
         expect(entry.abstractQueries[role]).toBeTruthy();

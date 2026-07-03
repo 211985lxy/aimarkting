@@ -38,17 +38,17 @@ const AGENT_ROUTES: Record<string, AgentModelRoute[]> = {
   // DeepSeek 官方直连价格最低，不走中转站加价；直连不可用时才回退到中转站
   content_producer: [
     { name: "deepseek" },
-    { name: "jiekou", model: "deepseek-chat" },
+    { name: "jiekou" },
     { name: "glm" },
   ],
   business_system_diagnosis: [
     { name: "deepseek" },
-    { name: "jiekou", model: "deepseek-chat" },
+    { name: "jiekou" },
     { name: "glm" },
   ],
   content_review: [
     { name: "deepseek" },
-    { name: "jiekou", model: "deepseek-chat" },
+    { name: "jiekou" },
     { name: "glm" },
   ],
 }

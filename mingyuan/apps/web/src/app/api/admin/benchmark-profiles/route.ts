@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 
 const ALLOWED_PLATFORMS = new Set(["douyin", "xiaohongshu", "bilibili", "kuaishou"])
 
-// GET — 对标档案列表（支持按项目/状态/平台/搜索筛选 + 分页）
+// GET — 真实档案列表（支持按项目/状态/平台/搜索筛选 + 分页）
 export const GET = withAdminAuth(async (request) => {
   const { searchParams } = new URL(request.url)
   const projectId = searchParams.get("projectId") ?? ""
@@ -32,6 +32,11 @@ export const GET = withAdminAuth(async (request) => {
           select: { id: true, name: true, companyName: true, industry: true, status: true },
         },
         user: { select: { id: true, name: true, email: true } },
+        items: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+          take: 2,
+          select: { id: true, kind: true, title: true, content: true },
+        },
         _count: { select: { items: true } },
       },
     }),
@@ -41,8 +46,8 @@ export const GET = withAdminAuth(async (request) => {
   return NextResponse.json({ data: profiles, total, page, pageSize })
 })
 
-// POST — 新建对标档案（必须指定 projectId，去重时返回 duplicate flag）
-export const POST = withAdminAuth(async (request, { admin }) => {
+// POST — 新建真实档案（必须指定 projectId，去重时返回 duplicate flag）
+export const POST = withAdminAuth(async (request) => {
   const body = await request.json()
   const {
     name,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Bot, CalendarDays, Copy, KeyRound, Link2, LogOut, Video } from "lucide-react"
+import { Bot, CalendarDays, Copy, KeyRound, Link2, LogIn, LogOut, Video } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -46,6 +46,11 @@ export default function AccountPage() {
   function handleLogout() {
     clearSession()
     router.push("/login")
+  }
+
+  function handleSwitchAccount() {
+    clearSession()
+    router.push("/login?switch=1")
   }
 
   function formatDate(dateStr: string) {
@@ -229,12 +234,20 @@ export default function AccountPage() {
         </CardContent>
       </Card>
 
-      {/* Section 4 — 退出登录 */}
+      {/* Section 4 — 登录状态 */}
       <Card>
         <CardHeader>
-          <CardTitle>退出登录</CardTitle>
+          <CardTitle>登录状态</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-3">
+          <Button
+            variant="outline"
+            onClick={handleSwitchAccount}
+            className="cursor-pointer"
+          >
+            <LogIn className="h-4 w-4 mr-2" />
+            切换账号登录
+          </Button>
           <Button
             variant="destructive"
             onClick={handleLogout}

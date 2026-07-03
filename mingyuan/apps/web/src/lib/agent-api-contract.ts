@@ -7,7 +7,7 @@ export const AGENT_API_VERSION = "0.1.0"
 export const AGENT_AIM_AGENT_IDS: AimAgentId[] = [
   "business_system_diagnosis",
   "business_diagnosis",
-  "ip_video",
+  "content_producer",
   "deep_copywriter",
   "content_review",
 ]

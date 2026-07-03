@@ -6,7 +6,6 @@ import {
   SCENARIO_CONFIGS,
   SCENARIO_LABELS,
   type ContentScenario,
-  type ScenarioConfig,
 } from "@/lib/content-scenario-config"
 
 const ALL_SCENARIOS: ContentScenario[] = [
