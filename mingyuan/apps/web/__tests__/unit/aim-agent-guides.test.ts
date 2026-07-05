@@ -36,6 +36,16 @@ describe("aim agent guides", () => {
     expect(guide.copyVariants?.map((variant) => variant.label)).toEqual(labels)
   })
 
+  it("keeps meeting-minutes asset pack grounded and non-generic", () => {
+    const skill = getAimAgentGuide("business_diagnosis").skills.find((item) => item.id === "meeting_minutes_asset_pack")
+
+    expect(skill?.prompt).toContain("高密度《会议纪要内容资产包》")
+    expect(skill?.prompt).toContain("关键信息抽取表")
+    expect(skill?.prompt).toContain("至少 12 条")
+    expect(skill?.prompt).toContain("会议证据")
+    expect(skill?.prompt).toContain("不要结尾反问")
+  })
+
   it("builds next-action prompts with the original deliverable content", () => {
     const action = getAimAgentGuide("content_producer").nextActions.find((item) => item.id === "publish_package")
     const content = "这是一段已经生成好的口播文案。"

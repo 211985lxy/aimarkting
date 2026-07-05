@@ -154,6 +154,18 @@ describe("定位策划官 prompt 保护", () => {
     expect(systemPrompt).toContain("下一轮确认问题")
     expect(systemPrompt).toContain("人设卖点")
   })
+
+  it("chat prompt makes meeting minutes asset packs evidence-dense", async () => {
+    const handler = getAgentHandler("business_diagnosis")
+    await handler.chat(buildChatParams())
+
+    const systemPrompt = capturedSystemPrompt()
+    expect(systemPrompt).toContain("会议纪要内容资产包路由必须高密度")
+    expect(systemPrompt).toContain("关键信息抽取表")
+    expect(systemPrompt).toContain("至少 12 条")
+    expect(systemPrompt).toContain("会议证据")
+    expect(systemPrompt).toContain("禁止结尾反问")
+  })
 })
 
 describe("商业诊断官 business_system_diagnosis 方法论 block", () => {
