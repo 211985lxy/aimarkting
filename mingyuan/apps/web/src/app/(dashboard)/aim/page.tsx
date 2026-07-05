@@ -7,15 +7,11 @@ import {
   Check,
   Clipboard,
   FileText,
-  Image as ImageIcon,
   Loader2,
-  MessageCircle,
-  Mic,
   Sparkles,
   ShieldCheck,
   Plus,
   ArrowRight,
-  BookOpen,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -35,6 +31,7 @@ import {
   getVideoCopyExtraction,
   checkScriptQuality,
   polishScript,
+  uploadImageForAimChat,
   chatAim,
   chatAimStream,
   createKnowledge,
@@ -47,6 +44,7 @@ import {
   type AimGenerateResponse,
   type AimGeneration,
   type AimChatToolAction,
+  type AimChatContent,
   type ClientProject,
   type ContentFormat,
   type QualityCheckReport,
@@ -66,6 +64,7 @@ import {
   getAimAgentGuide,
   type AimAgentGuide,
   type AimNextAction,
+  type AimWorkbenchSkill,
 } from "@/lib/aim-agent-guides"
 import { useAimWorkspaceStore } from "@/lib/aim-workspace-store"
 import { buildBenchmarkLengthRule, buildBenchmarkRecreationSopBlock } from "@/lib/aim-benchmark-length"
@@ -103,7 +102,6 @@ const FORMAT_LABELS: Record<ContentFormat, string> = {
   xiaohongshu_post: "小红书图文",
 }
 
-const LOADING_MESSAGES = ["分析输入...", "检索知识库...", "生成内容..."]
 const SOFT_ACTION_CLASS = "h-7 rounded-md border-0 bg-muted/45 px-2 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground"
 const ACTIVE_SOFT_ACTION_CLASS = "h-7 rounded-md border-0 bg-primary/10 px-2 text-xs text-primary shadow-none hover:bg-primary/15"
 const RESEARCH_HINT_AGENT_IDS = new Set<AimAgentId>(["business_system_diagnosis", "business_diagnosis"])
@@ -132,7 +130,7 @@ function cleanChoiceText(text: string) {
   return text.replace(/^#+\s*/, "").replace(/\*\*/g, "").trim()
 }
 
-/** 从人设故事官的回复里解析【进度 XX%】，用于顶部进度条 */
+/** 从人设故事梳理的回复里解析【进度 XX%】，用于顶部进度条 */
 function extractProgress(content: string): number | null {
   const m = content.match(/【进度\s*(\d+)\s*%】/)
   if (!m) return null
@@ -191,10 +189,19 @@ interface ChatMessage {
   id: string
   role: "user" | "assistant"
   content: string
+  images?: AimImageAttachment[]
   agentId?: string | null
   deliverables?: AimGenerateResponse | null
   qualityReport?: QualityCheckReport | null
   editorApply?: { range: TextSelectionRange } | null
+}
+
+interface AimImageAttachment {
+  id: string
+  name: string
+  assetUrl: string
+  readUrl: string
+  previewUrl: string
 }
 
 function ChoiceStepper({
@@ -362,6 +369,25 @@ function getHistoryContents(item: AimGeneration) {
     item.shootingBrief ? { format: "shooting_brief" as const, content: item.shootingBrief } : null,
     item.rawCopy ? { format: "raw_copy" as const, content: item.rawCopy } : null,
   ].filter(Boolean) as Array<{ format: ContentFormat; content: string }>
+}
+
+function buildHistoryRawInput(baseInput: string, currentInput: string, messages: ChatMessage[]) {
+  const turns = messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => {
+      const text = message.content.trim()
+      const deliverableNote = message.deliverables?.results.length
+        ? `生成了：${message.deliverables.results.map((result) => FORMAT_LABELS[result.format] || result.format).join("、")}`
+        : ""
+      const content = [text, deliverableNote].filter(Boolean).join("\n")
+      if (!content) return ""
+      return `${message.role === "user" ? "用户" : "助手"}：${content}`
+    })
+    .filter(Boolean)
+
+  const current = currentInput.trim() ? [`用户：${currentInput.trim()}`] : []
+  if (turns.length === 0 && current.length === 0) return baseInput
+  return [`【本轮对话】`, ...turns, ...current, "", `【本次生成输入】`, baseInput].join("\n")
 }
 
 interface EditorSelection {
@@ -601,6 +627,7 @@ const ZhuJianContent = memo(function ZhuJianContent({ text }: { text: string }) 
 /** 交付物气泡：在对话中渲染 generateAimContent 的多格式结果 */
 function DeliverableBubble({
   deliverables,
+  agentId,
   nextActions,
   onRepurpose,
   onQuality,
@@ -611,6 +638,7 @@ function DeliverableBubble({
   onCompileToWiki,
 }: {
   deliverables: AimGenerateResponse
+  agentId: AimAgentId
   nextActions?: AimNextAction[]
   onRepurpose: (format: ContentFormat) => void
   onQuality: () => void
@@ -645,6 +673,33 @@ function DeliverableBubble({
   const hasXiaohongshu = deliverables.results.some((r) => r.format === "xiaohongshu_post")
   const hasCommunity = deliverables.results.some((r) => r.format === "community_message")
   const hasShooting = deliverables.results.some((r) => r.format === "shooting_brief")
+  const canRunPublishCheck = agentId === "content_producer" || agentId === "deep_copywriter" || agentId === "content_review"
+  const primaryNextActions = nextActions?.filter((action) => action.id === "publish_package" || action.id === "publish_check") ?? []
+  const secondaryNextActions = nextActions?.filter((action) => action.id !== "publish_package" && action.id !== "publish_check") ?? []
+  const hasMoreActions = Boolean(
+    (!hasKoubo && hasVideo)
+    || (!hasXiaohongshu && hasVideo)
+    || (!hasShooting && hasVideo)
+    || (!hasMoments && hasVideo)
+    || (!hasCommunity && hasVideo)
+    || (!hasWechat && hasVideo)
+    || onCompileToWiki
+    || secondaryNextActions.length > 0,
+  )
+
+  function runMoreAction(value: string | null) {
+    if (!value) return
+    if (value.startsWith("format:")) {
+      onRepurpose(value.replace("format:", "") as ContentFormat)
+      return
+    }
+    if (value === "compile_wiki") {
+      onCompileToWiki?.()
+      return
+    }
+    const action = secondaryNextActions.find((item) => `action:${item.id}` === value)
+    if (action && activeResult) onNextAction?.(action, activeResult.content)
+  }
 
   return (
     <div className="mt-2 w-full">
@@ -727,47 +782,12 @@ function DeliverableBubble({
         </Tabs>
 
         <ActionStrip>
-          {!hasKoubo && hasVideo && (
-            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => onRepurpose("koubo_script")} disabled={isBusy}>
-              <Mic className="h-3.5 w-3.5 mr-1" /> 口播文案
-            </Button>
-          )}
-          {!hasXiaohongshu && hasVideo && (
-            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => onRepurpose("xiaohongshu_post")} disabled={isBusy}>
-              <ImageIcon className="h-3.5 w-3.5 mr-1" /> 小红书图文
-            </Button>
-          )}
-          {!hasShooting && hasVideo && (
-            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => onRepurpose("shooting_brief")} disabled={isBusy}>
-              <FileText className="h-3.5 w-3.5 mr-1" /> 拍摄交接单
-            </Button>
-          )}
-          {!hasMoments && hasVideo && (
-            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => onRepurpose("moments_post")} disabled={isBusy}>
-              <MessageCircle className="h-3.5 w-3.5 mr-1" /> 朋友圈文案
-            </Button>
-          )}
-          {!hasCommunity && hasVideo && (
-            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => onRepurpose("community_message")} disabled={isBusy}>
-              <MessageCircle className="h-3.5 w-3.5 mr-1" /> 社群运营
-            </Button>
-          )}
-          {!hasWechat && hasVideo && (
-            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={() => onRepurpose("wechat_article")} disabled={isBusy}>
-              <FileText className="h-3.5 w-3.5 mr-1" /> 公众号文章
-            </Button>
-          )}
-          {onCompileToWiki && (
-            <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={onCompileToWiki} disabled={isBusy}>
-              <BookOpen className="h-3.5 w-3.5 mr-1" /> 编译进 IP 维基
-            </Button>
-          )}
-          {nextActions?.map((action) => (
+          {primaryNextActions.map((action) => (
             <Button
               key={action.id}
               size="sm"
-              variant="ghost"
-              className={SOFT_ACTION_CLASS}
+              variant={action.id === "publish_package" ? "default" : "ghost"}
+              className={action.id === "publish_package" ? "h-7 rounded-md px-2 text-xs" : SOFT_ACTION_CLASS}
               onClick={() => {
                 if (action.id === "publish_check") {
                   onQuality()
@@ -781,11 +801,30 @@ function DeliverableBubble({
               {action.label}
             </Button>
           ))}
-          {!nextActions?.some((action) => action.id === "publish_check") && (
+          {canRunPublishCheck && !nextActions?.some((action) => action.id === "publish_check") && (
             <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={onQuality} disabled={isBusy || !hasPublishScript}>
               <ShieldCheck className="h-3.5 w-3.5 mr-1" /> 发布前自查
             </Button>
           )}
+          <Select onValueChange={runMoreAction} disabled={isBusy || !hasMoreActions}>
+            <SelectTrigger className="h-7 w-[88px] border-0 bg-muted/45 text-xs text-muted-foreground shadow-none hover:bg-muted">
+              <SelectValue placeholder="更多" />
+            </SelectTrigger>
+            <SelectContent>
+              {!hasKoubo && hasVideo && <SelectItem value="format:koubo_script">口播文案</SelectItem>}
+              {!hasXiaohongshu && hasVideo && <SelectItem value="format:xiaohongshu_post">小红书图文</SelectItem>}
+              {!hasShooting && hasVideo && <SelectItem value="format:shooting_brief">拍摄交接单</SelectItem>}
+              {!hasMoments && hasVideo && <SelectItem value="format:moments_post">朋友圈文案</SelectItem>}
+              {!hasCommunity && hasVideo && <SelectItem value="format:community_message">社群运营</SelectItem>}
+              {!hasWechat && hasVideo && <SelectItem value="format:wechat_article">公众号文章</SelectItem>}
+              {onCompileToWiki && <SelectItem value="compile_wiki">编译进 IP 维基</SelectItem>}
+              {secondaryNextActions.map((action) => (
+                <SelectItem key={action.id} value={`action:${action.id}`} disabled={!activeResult?.content.trim()}>
+                  {action.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select onValueChange={(value) => { if (typeof value === "string") onMarkStatus(value) }}>
             <SelectTrigger className="h-7 w-[88px] border-0 bg-muted/45 text-xs text-muted-foreground shadow-none hover:bg-muted">
               <SelectValue placeholder="状态" />
@@ -817,6 +856,8 @@ export default function AimPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<AimAgentId>(() => agentParam ? activeAgentId : initialDraft?.selectedAgentId || activeAgentId)
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialDraft?.messages || [])
   const [input, setInput] = useState(() => initialDraft?.input || "")
+  const [imageAttachments, setImageAttachments] = useState<AimImageAttachment[]>([])
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
   const [sourceVideoCopyExtractionId, setSourceVideoCopyExtractionId] = useState<string | undefined>(() => initialDraft?.videoCopyExtractionId)
   const [sourceOriginalText, setSourceOriginalText] = useState(() => initialDraft?.sourceOriginalText || "")
   const [sourceAnalysisText, setSourceAnalysisText] = useState(() => initialDraft?.sourceAnalysisText || "")
@@ -832,7 +873,6 @@ export default function AimPage() {
   const [isThinking, setIsThinking] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isQualityChecking, setIsQualityChecking] = useState(false)
-  const [loadingIndex, setLoadingIndex] = useState(0)
   const [projects, setProjects] = useState<ClientProject[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState(() => initialDraft?.selectedProjectId || "")
   const [wikiDialog, setWikiDialog] = useState<{ open: boolean; context: IpWikiDialogContext | null }>({
@@ -861,8 +901,8 @@ export default function AimPage() {
       const isHotTopicAsset = sourceTopicTitle.trim().length > 0 && !sourceVideoCopyExtractionId
       return {
         ...baseAgent,
-        title: "内容生产官 · 内容资产包",
-        intro: "我是内容生产官的内容资产包模式。先生成短视频脚本，拍摄交接单、朋友圈、社群运营、公众号文章可按需点击派生。",
+        title: "内容文案创作 · 内容资产包",
+        intro: "这里是内容文案创作的资产包模式。先生成短视频脚本，拍摄交接单、朋友圈、社群运营、公众号文章可按需点击派生。",
         placeholder: isHotTopicAsset
           ? "这个热点要怎么讲？补充你的观点、客户场景或产品承接，我先生成主脚本..."
           : "说说今天要生产什么内容：选题、原始想法、老板口述、客户问题都可以，我先生成主脚本...",
@@ -877,9 +917,9 @@ export default function AimPage() {
     if (selectedAgentId === "content_producer") {
       return {
         ...baseAgent,
-        title: "内容生产官 · 单篇创作",
+        title: "内容文案创作 · 单篇创作",
         defaultFormats: ["video_script" as const],
-        placeholder: "说说今天要生产什么内容：选题、原始想法、老板口述、客户问题都可以…",
+        placeholder: "粘贴选题、原始想法、老板口述、现有文案或爆款拆解，我来生成可发布内容…",
         primaryActionLabel: "生成口播文案",
       }
     }
@@ -897,16 +937,16 @@ export default function AimPage() {
   )
 
   const workStage = selectedAgentId === "business_diagnosis"
-    ? "选题定位策划"
+    ? "灵感选题策划"
     : selectedAgentId === "persona"
-      ? "来时路梳理"
+      ? "人设故事梳理"
       : selectedAgentId === "content_review"
-        ? "发布质检"
+        ? "发布前质检"
         : selectedAgentId === "business_system_diagnosis"
-          ? "商业诊断"
+          ? "商业模式诊断"
           : selectedAgentId === "deep_copywriter"
-            ? "深度文案"
-            : "内容生产"
+            ? "深度长文创作"
+            : "内容文案创作"
 
   const hasEditorSelection = Boolean(referenceSelection.text.trim() || draftSelection.text.trim())
 
@@ -1154,12 +1194,6 @@ export default function AimPage() {
     clearLoadTarget()
   }, [clearLoadTarget, loadTargetId, openEditorFromResult, router, searchParams, selectedAgentId, storeHistory])
 
-  useEffect(() => {
-    if (!isGenerating) return
-    const timer = setInterval(() => setLoadingIndex((v) => (v + 1) % LOADING_MESSAGES.length), 1400)
-    return () => clearInterval(timer)
-  }, [isGenerating])
-
   // 自动滚到底部
   useEffect(() => {
     const el = scrollRef.current
@@ -1177,7 +1211,7 @@ export default function AimPage() {
     el.scrollTop = el.scrollHeight
   }, [messages, isThinking, isGenerating])
 
-  /** 人设故事官：取最近一条助手回复的【进度 XX%】驱动顶部进度条 */
+  /** 人设故事梳理：取最近一条助手回复的【进度 XX%】驱动顶部进度条 */
   const personaProgress = useMemo(() => {
     if (agent.id !== "persona") return null
     const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")
@@ -1291,6 +1325,44 @@ export default function AimPage() {
       `对标原文：\n${original}`,
       currentDraft ? `我当前不满意的稿子：\n${currentDraft}` : null,
     ].filter(Boolean).join("\n\n")
+  }
+
+  function buildChatContent(text: string, images: AimImageAttachment[]): AimChatContent {
+    if (images.length === 0) return text
+    return [
+      { type: "text", text: text.trim() || "请分析这张图片。" },
+      ...images.map((image) => ({ type: "image_url" as const, image_url: { url: image.readUrl } })),
+    ]
+  }
+
+  async function handleAddImages(files: FileList) {
+    const nextImages: AimImageAttachment[] = []
+    setIsUploadingImage(true)
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith("image/")) {
+          toast.error(`${file.name} 不是图片文件`)
+          continue
+        }
+        if (file.size > 8 * 1024 * 1024) {
+          toast.error(`${file.name} 超过 8MB`)
+          continue
+        }
+        const uploaded = await uploadImageForAimChat(file)
+        nextImages.push({
+          id: nextId("img"),
+          name: file.name,
+          assetUrl: uploaded.assetUrl,
+          readUrl: uploaded.readUrl,
+          previewUrl: uploaded.readUrl,
+        })
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "图片上传失败")
+    } finally {
+      setIsUploadingImage(false)
+    }
+    if (nextImages.length) setImageAttachments((current) => [...current, ...nextImages].slice(-4))
   }
 
   function buildBenchmarkQualityMessage() {
@@ -1488,30 +1560,49 @@ export default function AimPage() {
     options?: {
       editorContext?: AimEditorContext
       editorApplyRange?: TextSelectionRange
+      images?: AimImageAttachment[]
     }
   ) {
-    if (!text) return
+    const images = options?.images ?? []
+    if (!text && images.length === 0) return
     const workbenchCommand = detectAimWorkbenchCommand(text)
     if (workbenchCommand && runWorkbenchCommand(workbenchCommand)) return
     const controller = new AbortController()
     requestAbortRef.current = controller
-    const userMsg: ChatMessage = { id: nextId(), role: "user", content: text }
+    const userMsg: ChatMessage = { id: nextId(), role: "user", content: text || "请分析这张图片。", images }
     const thread = [...messages, userMsg]
-    setMessages(thread)
+    const assistantId = nextId()
+    setMessages([
+      ...thread,
+      {
+        id: assistantId,
+        role: "assistant",
+        content: "正在思考，会先读取上下文和资料，再给出回复…",
+        editorApply: options?.editorApplyRange ? { range: options.editorApplyRange } : null,
+      },
+    ])
     setInput("")
+    if (images.length) setImageAttachments([])
     setIsThinking(true)
     try {
       const toolAction = detectLarkToolAction(text)
       if (toolAction && projectEnabled && !selectedProjectId) {
-        toast.error("你的 IP 营销全案还在配置中")
+        setMessages((prev) => prev.map((message) =>
+          message.id === assistantId ? { ...message, content: "需要先选择 IP 营销全案，才能执行这个飞书同步动作。" } : message
+        ))
         return
       }
       const resultId = toolAction === "export_lark_generation" ? latestDeliverableId() : undefined
       if (toolAction === "export_lark_generation" && !resultId) {
-        toast.error("当前没有可同步到飞书的 AIM 生成结果")
+        setMessages((prev) => prev.map((message) =>
+          message.id === assistantId ? { ...message, content: "当前没有可同步到飞书的 AIM 生成结果。" } : message
+        ))
         return
       }
-      const chatMessages = thread.map((m) => ({ role: m.role, content: m.content }))
+      const chatMessages = thread.map((m) => ({
+        role: m.role,
+        content: m.role === "user" && m.images?.length ? buildChatContent(m.content, m.images) : m.content,
+      }))
       if (toolAction) {
         const { content } = await chatAim(chatMessages, {
           agentId: selectedAgentId,
@@ -1521,21 +1612,13 @@ export default function AimPage() {
           editorContext: options?.editorContext,
           signal: controller.signal,
         })
-        setMessages((prev) => [...prev, { id: nextId(), role: "assistant", content }])
+        setMessages((prev) => prev.map((message) =>
+          message.id === assistantId ? { ...message, content } : message
+        ))
         return
       }
 
-      const assistantId = nextId()
       let hasContent = false
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: assistantId,
-          role: "assistant",
-          content: "",
-          editorApply: options?.editorApplyRange ? { range: options.editorApplyRange } : null,
-        },
-      ])
       await chatAimStream(chatMessages, {
         agentId: selectedAgentId,
         projectId: projectEnabled ? selectedProjectId || undefined : undefined,
@@ -1543,7 +1626,6 @@ export default function AimPage() {
         signal: controller.signal,
         onDelta: (_delta, content) => {
           hasContent = content.length > 0
-          setIsThinking(false)
           setMessages((prev) =>
             prev.map((message) =>
               message.id === assistantId ? { ...message, content } : message
@@ -1552,11 +1634,16 @@ export default function AimPage() {
         },
       })
       if (!hasContent) {
-        setMessages((prev) => prev.filter((message) => message.id !== assistantId))
+        setMessages((prev) => prev.map((message) =>
+          message.id === assistantId ? { ...message, content: "没有收到模型回复，请重试。" } : message
+        ))
       }
     } catch (error) {
-      if (error instanceof ApiError && error.status === 499) toast.info("已停止")
-      else toast.error(error instanceof Error ? error.message : "对话失败，请稍后重试")
+      const stopped = controller.signal.aborted || (error instanceof ApiError && error.status === 499)
+      const message = stopped ? "已停止本次回复。" : `对话失败：${error instanceof Error ? error.message : "请稍后重试"}`
+      setMessages((prev) => prev.map((item) =>
+        item.id === assistantId ? { ...item, content: message } : item
+      ))
     } finally {
       if (requestAbortRef.current === controller) requestAbortRef.current = null
       setIsThinking(false)
@@ -1677,11 +1764,31 @@ export default function AimPage() {
     [agent.title, router, searchParams, selectedAgentId, selectedProjectId],
   )
 
+  const handleUseSkill = useCallback((skill: AimWorkbenchSkill) => {
+    const hasCurrentContext = Boolean(
+      editorText.trim() ||
+      sourceOriginalText.trim() ||
+      sourceAnalysisText.trim() ||
+      sourceTopicTitle.trim() ||
+      messages.some((message) => message.role === "assistant" && (message.content.trim() || message.deliverables)),
+    )
+    const prompt = hasCurrentContext && !skill.prompt.includes("当前")
+      ? `请基于当前内容，${skill.prompt.replace(/^请/, "")}`
+      : skill.prompt
+
+    setInput((current) => {
+      const text = current.trim()
+      return text ? `${prompt}\n\n---\n${text}\n---` : prompt
+    })
+    toast.success("技能指令已填入")
+  }, [editorText, messages, sourceAnalysisText, sourceOriginalText, sourceTopicTitle])
+
   async function handleSend() {
     await sendText(input.trim(), hasEditorSelection ? {
       editorContext: buildEditorContext("用户追问"),
       editorApplyRange: draftSelection.text.trim() ? draftSelection.range : undefined,
-    } : undefined)
+      images: imageAttachments,
+    } : { images: imageAttachments })
   }
 
   async function generateWithInput(currentInput: string) {
@@ -1696,18 +1803,29 @@ export default function AimPage() {
     }
     const controller = new AbortController()
     requestAbortRef.current = controller
+    const assistantMessageId = nextId()
+    pendingScrollMessageIdRef.current = assistantMessageId
+    setMessages((prev) => [
+      ...prev,
+      ...(currentInput ? [{ id: nextId(), role: "user" as const, content: currentInput }] : []),
+      {
+        id: assistantMessageId,
+        role: "assistant" as const,
+        content: `正在${agent.primaryActionLabel}，会先读取项目资料、匹配知识库，再生成交付物…`,
+        agentId: agent.id,
+      },
+    ])
+    if (currentInput) setInput("")
     setIsGenerating(true)
-    setLoadingIndex(0)
     try {
       const response = await generateAimContent({
         agentId: selectedAgentId,
-        rawInput,
+        rawInput: buildHistoryRawInput(rawInput, currentInput, messages),
         targetFormats: agent.defaultFormats,
         projectId: projectEnabled ? selectedProjectId || undefined : undefined,
         videoCopyExtractionId: sourceVideoCopyExtractionId,
         topicTitle: sourceTopicTitle.trim() || undefined,
         topicRationale: sourceTopicRationale.trim() || undefined,
-        polishInstruction: agent.defaultInstruction,
         taskType: "write_script",
         useMarketViralVideos: selectedAgentId === "business_diagnosis",
       }, controller.signal)
@@ -1736,20 +1854,17 @@ export default function AimPage() {
       const extractedAnalysisText = extractBenchmarkAnalysisText(currentInput)
       if (extractedOriginalText) setSourceOriginalText(extractedOriginalText)
       if (extractedAnalysisText) setSourceAnalysisText(extractedAnalysisText)
-      const assistantMessageId = nextId()
       const mainResult = response.results[0]
-      pendingScrollMessageIdRef.current = assistantMessageId
-      setMessages((prev) => [
-        ...prev,
-        ...(currentInput ? [{ id: nextId(), role: "user" as const, content: currentInput }] : []),
-        {
-          id: assistantMessageId,
-          role: "assistant",
+      setMessages((prev) => prev.map((message) =>
+        message.id === assistantMessageId
+          ? {
+            ...message,
           content: `${agent.title} 交付物已生成，可直接复制使用，也能继续在下方对话里让我改写。`,
           agentId: agent.id,
           deliverables: correctedResponse,
-        },
-      ])
+          }
+          : message
+      ))
       if (mainResult) {
         const correctedMainResult = correctedResponse.results[0] ?? mainResult
         openEditorFromResult(
@@ -1758,12 +1873,14 @@ export default function AimPage() {
           correctedMainResult.content,
         )
       }
-      if (currentInput) setInput("")
       refreshHistory({ force: true, agentId: selectedAgentId })
       toast.success(`${agent.primaryActionLabel}完毕`)
     } catch (error) {
-      if (error instanceof ApiError && error.status === 499) toast.info("已停止")
-      else toast.error(error instanceof Error ? error.message : "生成失败，请稍后重试")
+      const stopped = controller.signal.aborted || (error instanceof ApiError && error.status === 499)
+      const message = stopped ? "已停止本次生成。" : `生成失败：${error instanceof Error ? error.message : "请稍后重试"}`
+      setMessages((prev) => prev.map((item) =>
+        item.id === assistantMessageId ? { ...item, content: message } : item
+      ))
     } finally {
       if (requestAbortRef.current === controller) requestAbortRef.current = null
       setIsGenerating(false)
@@ -1771,7 +1888,7 @@ export default function AimPage() {
   }
 
   async function handleGenerate() {
-    if (hasEditorSelection) {
+    if (hasEditorSelection || imageAttachments.length > 0) {
       await handleSend()
       return
     }
@@ -1785,7 +1902,6 @@ export default function AimPage() {
   const handleRepurpose = useCallback(
     (msgId: string) => async (fmt: ContentFormat) => {
         setIsGenerating(true)
-        setLoadingIndex(0)
         try {
           if (projectEnabled && !selectedProjectId) {
           toast.error("你的 IP 营销全案还在配置中")
@@ -2028,7 +2144,21 @@ export default function AimPage() {
                           )
                         })()
                       ) : (
-                        <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                        <>
+                          {m.images?.length ? (
+                            <div className="mb-2 flex max-w-64 flex-wrap gap-2">
+                              {m.images.map((image) => (
+                                <img
+                                  key={image.id}
+                                  src={image.previewUrl}
+                                  alt={image.name}
+                                  className="h-20 w-20 rounded-md border object-cover"
+                                />
+                              ))}
+                            </div>
+                          ) : null}
+                          <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                        </>
                       )}
                     </div>
 
@@ -2056,6 +2186,7 @@ export default function AimPage() {
                       <div className="w-full mt-2">
                         <DeliverableBubble
                           deliverables={m.deliverables}
+                          agentId={isValidAimAgent(m.agentId) ? m.agentId : selectedAgentId}
                           nextActions={getAimAgentGuide(isValidAimAgent(m.agentId) ? m.agentId : selectedAgentId).nextActions}
                           onRepurpose={handleRepurpose(m.id)}
                           onQuality={handleQuality(m.id)}
@@ -2172,23 +2303,6 @@ export default function AimPage() {
                 </div>
               ))}
 
-              {/* 思考中占位 */}
-              {isThinking && (
-                <div className="flex justify-start">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-1 bg-transparent p-0">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    思考中…
-                  </div>
-                </div>
-              )}
-              {isGenerating && (
-                <div className="flex justify-start">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-1 bg-transparent p-0">
-                    <Sparkles className="h-4 w-4 animate-pulse text-primary" />
-                    {LOADING_MESSAGES[loadingIndex]}
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -2206,18 +2320,23 @@ export default function AimPage() {
             busy={busy}
             isRecording={isRecording}
             isTranscribing={isTranscribing}
-            isGenerating={isGenerating}
+            isGenerating={isGenerating || isUploadingImage}
             canGenerate={
-              Boolean(selectedProjectId) &&
-              (hasEditorSelection ? input.trim().length > 0 : messages.some((m) => m.role === "user") || input.trim().length > 0)
+              (input.trim().length > 0 || imageAttachments.length > 0) &&
+              (!projectEnabled || Boolean(selectedProjectId)) &&
+              !isUploadingImage
             }
             primaryActionLabel={hasEditorSelection ? editorPanelLabels.selectActionLabel : agent.primaryActionLabel}
             onChange={setInput}
-            onSend={handleSend}
             onGenerate={handleGenerate}
             onStop={handleStop}
             onStartRecording={startRecording}
             onStopRecording={stopRecording}
+            skills={agent.skills}
+            onUseSkill={handleUseSkill}
+            imageAttachments={imageAttachments}
+            onAddImages={(files) => void handleAddImages(files)}
+            onRemoveImage={(id) => setImageAttachments((current) => current.filter((image) => image.id !== id))}
           />
         </footer>
       </section>
