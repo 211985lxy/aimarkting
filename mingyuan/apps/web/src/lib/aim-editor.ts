@@ -3,9 +3,9 @@ export interface TextSelectionRange {
   end: number
 }
 
-export const EDITOR_PANEL_MIN_WIDTH = 320
-export const EDITOR_PANEL_MAX_WIDTH = 1600
-export const EDITOR_PANEL_DEFAULT_WIDTH = 460
+export const EDITOR_PANEL_MIN_WIDTH = 280
+export const EDITOR_PANEL_MAX_WIDTH = 460
+export const EDITOR_PANEL_DEFAULT_WIDTH = 360
 
 export function applySelectionReplacement(
   text: string,

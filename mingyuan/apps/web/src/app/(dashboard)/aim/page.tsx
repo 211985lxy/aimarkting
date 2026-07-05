@@ -712,7 +712,7 @@ function DeliverableBubble({
                   </div>
                 </details>
               )}
-              <div className="max-h-[600px] overflow-y-auto py-1">
+              <div className="py-1">
                 {item.format === "video_script" ? (
                   <ZhuJianContent text={display.result} />
                 ) : (
@@ -1990,7 +1990,7 @@ export default function AimPage() {
         )}
 
         {/* 消息流 */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-2 py-4 sm:px-3">
           {messages.length === 0 ? (
             <div className="mx-auto flex w-full max-w-3xl flex-col py-6">
               <div className="max-w-2xl text-left">
@@ -1999,10 +1999,10 @@ export default function AimPage() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto flex max-w-6xl w-full flex-col gap-4">
+            <div className="mx-auto flex w-full max-w-none flex-col gap-4">
               {messages.map((m) => (
                 <div key={m.id} data-message-id={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`${m.deliverables ? "w-full max-w-full" : "max-w-[88%]"} ${m.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
+                  <div className={`${m.deliverables ? "w-full max-w-full" : "max-w-[96%]"} ${m.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
                     <div
                       className={`leading-relaxed ${
                         m.role === "user"
