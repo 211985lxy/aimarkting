@@ -9,6 +9,7 @@ import {
   Users,
   KeyRound,
   FileText,
+  Rss,
   Settings,
   BookOpen,
   LogOut,
@@ -43,6 +44,7 @@ const navItems = [
   { title: "知识库", titleEn: "Knowledge", href: "/admin/knowledge", icon: BookOpen },
   { title: "真实档案", titleEn: "Profiles", href: "/admin/benchmark-profiles", icon: Target },
   { title: "内容模板", titleEn: "Templates", href: "/admin/templates", icon: FileText },
+  { title: "热点信源", titleEn: "Hot Sources", href: "/admin/hot-sources", icon: Rss },
   { title: "系统设置", titleEn: "Settings", href: "/admin/settings", icon: Settings },
 ]
 

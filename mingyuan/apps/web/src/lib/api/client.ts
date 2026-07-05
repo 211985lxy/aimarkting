@@ -37,6 +37,7 @@ import type {
   ApiEndingType,
   ApiCompetitorAnalysis,
   CompetitorReportsResponse,
+  ApiAccountHotSources,
   ApiAiHotBriefing,
   ApiHotDecisionResponse,
   ApiHotDecisionSource,
@@ -177,6 +178,11 @@ export async function listAgentApiKeys(): Promise<ApiAgentApiKeySummary[]> {
   return payload.items
 }
 
+export async function getAccountHotSources(): Promise<ApiAccountHotSources> {
+  const payload = await request<{ data: ApiAccountHotSources }>("/api/account/hot-sources")
+  return payload.data
+}
+
 export async function activateUser(code: string): Promise<ApiUser> {
   const payload = await request<{ user: ApiUser }>("/api/auth/activate", {
     method: "POST",
@@ -202,8 +208,9 @@ export async function listHotTopics(input?: { source?: string }): Promise<HotTop
   return payload.data
 }
 
-export async function getTodayAiHotBriefing(): Promise<ApiAiHotBriefing> {
-  const payload = await request<{ data: ApiAiHotBriefing }>("/api/aihot-briefing/today")
+export async function getTodayAiHotBriefing(input?: { accountEmail?: string }): Promise<ApiAiHotBriefing> {
+  const query = input?.accountEmail ? `?accountEmail=${encodeURIComponent(input.accountEmail)}` : ""
+  const payload = await request<{ data: ApiAiHotBriefing }>(`/api/aihot-briefing/today${query}`)
   return payload.data
 }
 
@@ -508,7 +515,7 @@ export async function listAssets(
 }
 
 export async function createAssetUploadUrl(fileName: string, contentType: string) {
-  const payload = await request<{ data: { uploadUrl: string; assetUrl: string; expiresAt: string } }>(
+  const payload = await request<{ data: { uploadUrl: string; assetUrl: string; readUrl?: string; expiresAt: string } }>(
     "/api/assets/upload-url",
     {
       method: "POST",
@@ -534,6 +541,26 @@ export async function uploadFileToStorage(file: File) {
   }
 
   return signed.assetUrl
+}
+
+export async function uploadImageForAimChat(file: File) {
+  const signed = await createAssetUploadUrl(file.name, file.type || "application/octet-stream")
+  const upload = await fetch(signed.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+    },
+    body: file,
+  })
+
+  if (!upload.ok) {
+    throw new ApiError("Failed to upload image", upload.status, null)
+  }
+
+  return {
+    assetUrl: signed.assetUrl,
+    readUrl: signed.readUrl || signed.assetUrl,
+  }
 }
 
 export async function registerAsset(input: {
@@ -1181,7 +1208,7 @@ export async function generateAimContent(data: AimGenerateRequest, signal?: Abor
   return request<AimGenerateResponse>("/api/aim/generate", {
     method: "POST",
     body: JSON.stringify(data),
-    timeout: 60000,
+    timeout: 180000,
     signal,
   })
 }
@@ -1411,8 +1438,15 @@ export async function uploadKnowledgeDocument(
 
 export interface AimChatMessage {
   role: "user" | "assistant"
-  content: string
+  content: AimChatContent
 }
+
+export type AimChatContent =
+  | string
+  | Array<
+      | { type: "text"; text: string }
+      | { type: "image_url"; image_url: { url: string } }
+    >
 
 export interface AimEditorContext {
   action: string

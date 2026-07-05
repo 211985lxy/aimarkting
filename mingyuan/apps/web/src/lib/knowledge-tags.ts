@@ -97,6 +97,9 @@ export function buildDefaultKnowledgeTags(category: string): string[] {
   if (category === "daily_inspiration" || category === "hot_topic") {
     return ["kb_scope:project", "asset_role:inspiration", "usable_for:topic", "confidence:user_claim"]
   }
+  if (category === "meeting_minutes") {
+    return ["kb_scope:project", "asset_role:judgment", "usable_for:topic", "usable_for:video", "usable_for:sales", "confidence:user_claim"]
+  }
   if (category === "benchmark_reference") {
     return ["kb_scope:project", "asset_role:benchmark", "usable_for:topic", "confidence:user_claim"]
   }

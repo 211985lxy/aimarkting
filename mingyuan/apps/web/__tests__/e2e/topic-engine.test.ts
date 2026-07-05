@@ -408,6 +408,25 @@ describe("Topic Generation Prompts", () => {
     expect(prompt).toContain("不要过度依赖单日新闻")
   })
 
+  it("user prompt uses meeting minutes without making them global priority", () => {
+    const prompt = buildTopicUserPrompt(
+      {
+        elements: TOPIC_ELEMENTS.slice(0, 2),
+        topicSources: [
+          {
+            category: "meeting_minutes",
+            title: "客户复盘会",
+            content: "客户原话：为什么我们的报价比别人高？",
+          },
+        ],
+      },
+      TOPIC_ELEMENTS.slice(0, 2).map((item) => item.code),
+    )
+
+    expect(prompt).toContain("会议纪要参与规则")
+    expect(prompt).toContain("不要默认压过其他资料")
+  })
+
   it("user prompt includes IP profile fields", () => {
     const prompt = buildTopicUserPrompt(
       {

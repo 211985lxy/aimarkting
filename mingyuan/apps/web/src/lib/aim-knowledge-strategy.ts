@@ -149,11 +149,15 @@ export function resolveAimRuntimeTask(input: ResolveAimRuntimeTaskInput): AimRun
 
   const asksForExternalContext =
     includesAny(text, ["结合", "参考", "用上", "调用"]) &&
-    includesAny(text, ["案例", "产品", "客户", "对标", "知识库", "老板经历", "卖点", "痛点"])
+    includesAny(text, ["会议纪要", "访谈", "案例", "产品", "客户", "对标", "知识库", "老板经历", "卖点", "痛点"])
+  const asksForLocalCopyPart =
+    includesAny(text, ["优化", "改", "润色", "换个说法", "调整"]) &&
+    includesAny(text, ["开头", "前3秒", "前三秒", "第一句话", "钩子", "起手", "开场", "标题", "结尾", "收尾"])
 
   if (
     !asksForExternalContext &&
     (
+      asksForLocalCopyPart ||
       input.taskType === "polish_copy" ||
       Boolean(input.polishInstruction?.trim()) ||
       includesAny(text, ["润色", "顺一下", "自然点", "口语化", "换个说法", "改得", "改成", "这里改", "这句话"])

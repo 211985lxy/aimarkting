@@ -1,4 +1,4 @@
-import { LLMClient } from "@/lib/llm"
+import { getAgentLLM } from "@/lib/llm/agent-router"
 import {
   TopicCardsSchema,
   VALID_OPENING_CODES,
@@ -12,7 +12,7 @@ import type { DerivationStrategy } from "@/lib/topic-element-logic"
 import { normalizeDefamiliarization } from "@/lib/topic-defamiliarization"
 import type { TopicElement } from "@/generated/prisma/client"
 
-const TOPIC_MODEL = process.env.TOPIC_GENERATION_MODEL || "openai/gpt-5.4"
+const TOPIC_MODEL = process.env.TOPIC_GENERATION_MODEL
 
 export type RecommendationMode = "normal" | "daily" | "weekly"
 
@@ -57,6 +57,7 @@ export interface TopicGenerationInput {
 
 const TOPIC_SOURCE_LABELS: Record<string, string> = {
   daily_inspiration: "日常灵感",
+  meeting_minutes: "会议纪要",
   benchmark_reference: "对标参考",
   user_insight: "用户洞察",
   boss_experience: "老板经验",
@@ -169,9 +170,9 @@ export function buildTopicSystemPrompt(
   let prompt = basePrompt + strategyInstructions[strategy]
 
   if (recommendationMode === "daily") {
-    prompt += `\n\n【今日推荐模式】优先结合最近 24 小时热点、客户资料和执行可行性，推荐今天最适合拍摄或发布的选题。评分维度固定为：账号适配度、转化价值、流量潜力、素材支撑、执行难度。每张卡片优先补充 hook（开头钩子）、angle（展开角度）、cta（结尾行动）。`
+    prompt += `\n\n【今日推荐模式】推荐优先级固定为：当前账号资料/资料库 > 对标账号/对标文案 > 行业热点/AI HOT。热点只能作为行业线索和时效角度，不要让通用 AI 热点覆盖账号本身的行业、客户和产品。评分维度固定为：账号适配度、转化价值、流量潜力、素材支撑、执行难度。每张卡片优先补充 hook（开头钩子）、angle（展开角度）、cta（结尾行动），并按热点类、人设类、问题解答类、观点类的口径组织。`
   } else if (recommendationMode === "weekly") {
-    prompt += `\n\n【本周选题模式】生成一组适合作为本周内容池的选题，热点只作为角度参考，不要过度依赖单日新闻。评分维度固定为：账号适配度、转化价值、流量潜力、素材支撑、执行难度。`
+    prompt += `\n\n【本周选题模式】生成一组适合作为本周内容池的选题，账号资料、对标账号、对标文案和资料库内容优先，热点只作为角度参考，不要过度依赖单日新闻。评分维度固定为：账号适配度、转化价值、流量潜力、素材支撑、执行难度，并按热点类、人设类、问题解答类、观点类的口径组织。`
   }
 
   // Anti-repetition: inject recent titles for dedup
@@ -242,8 +243,15 @@ export function buildTopicUserPrompt(
 - 如果同时提供 AI HOT 或行业热点，它们只能补充时效角度，不能覆盖对标主线。
 - 每个借鉴对标的选题，都要在 rationale 或 angle 中体现：这个 IP 应该怎么开头、旧认知怎么改、方法模块怎么迁移、结尾如何承接自己的产品。`
     : ""
+  const meetingMinutesInstruction = topicSources?.some((source) => source.category === "meeting_minutes")
+    ? `## 会议纪要参与规则
+本次素材包含会议纪要。请把会议纪要作为真实业务语料参与选题，但不要默认压过其他资料。
+- 问题解答类可从会议里的真实问题、客户原话、分歧、案例、客户顾虑和下一步动作中提炼。
+- 转化类仍要结合产品卖点、项目案例和成交承接；人设类仍要结合老板经历和定位素材；热点类仍要结合行业信源和对标动态。
+- 如果某张选题来自会议纪要，请在 rationale 或 angle 中点明对应的会议问题或原话。`
+    : ""
 
-  return `${profileSection ? profileSection + "\n\n" : ""}${contentThemeSection ? contentThemeSection + "\n\n" : ""}${sourceSection ? sourceSection + "\n\n" : ""}${benchmarkRewriteInstruction ? benchmarkRewriteInstruction + "\n\n" : ""}${elementSection}\n\n请基于以上${profileSection ? " IP 档案、" : ""}${sourceSection ? "选题素材和" : ""}营销元素，生成4个差异化的短视频选题卡片。每个选题都要巧妙融入指定的营销元素，并推荐最匹配的开场类型和文案结构。${modeInstruction}`
+  return `${profileSection ? profileSection + "\n\n" : ""}${contentThemeSection ? contentThemeSection + "\n\n" : ""}${sourceSection ? sourceSection + "\n\n" : ""}${benchmarkRewriteInstruction ? benchmarkRewriteInstruction + "\n\n" : ""}${meetingMinutesInstruction ? meetingMinutesInstruction + "\n\n" : ""}${elementSection}\n\n请基于以上${profileSection ? " IP 档案、" : ""}${sourceSection ? "选题素材和" : ""}营销元素，生成4个差异化的短视频选题卡片。每个选题都要巧妙融入指定的营销元素，并推荐最匹配的开场类型和文案结构。${modeInstruction}`
 }
 
 function inferTopicType(card: TopicCard, index: number): TopicCard["topicType"] {
@@ -262,6 +270,7 @@ function inferSourceType(
   const categories = new Set((topicSources ?? []).map((source) => source.category))
   if (categories.has("benchmark_reference")) return "对标参考"
   if ((recommendationMode === "daily" || recommendationMode === "weekly") && categories.has("industry_hot")) return "行业热点"
+  if (categories.has("meeting_minutes")) return "客户资料"
   if (categories.has("daily_inspiration")) return "个人灵感"
   if (categories.has("product_usp")) return "公司卖点"
   return "客户资料"
@@ -422,7 +431,7 @@ function revisionAdviceFor(
 export async function generateTopicCards(
   input: TopicGenerationInput,
 ): Promise<TopicGenerationResult> {
-  const llm = LLMClient.shared()
+  const llm = getAgentLLM("business_diagnosis")
   const temperatures = [0.7, 0.5, 0.3]
   const maxAttempts = 3
 
@@ -539,7 +548,7 @@ export async function generateTopicCards(
     cards: normalizeTopicCards(fallbackTopicCards(input, selectedCodes), input),
     elementCodes: selectedCodes,
     promptText: fullPromptText,
-    model: `${TOPIC_MODEL}:fallback`,
+    model: `${TOPIC_MODEL || "business_diagnosis-route"}:fallback`,
     strategy,
   }
 }

@@ -295,8 +295,29 @@ export interface ApiAiHotBriefingItem {
   timeText: string;
   summary: string;
   url: string;
-  category: "ai-models" | "ai-products" | "industry" | "paper" | "tip";
+  category: "ai-models" | "ai-products" | "industry" | "paper" | "tip" | "creator" | "client-industry";
   categoryLabel: string;
+}
+
+export interface ApiAiHotBriefingAccount {
+  email: string;
+  label: string;
+  selected: boolean;
+  sourceCount: number;
+}
+
+export interface ApiAiHotBriefingSource {
+  source_name: string;
+  source_url: string;
+  source_type?: string;
+  status?: string;
+  note?: string;
+}
+
+export interface ApiAccountHotSources {
+  accountEmail: string;
+  sourceCount: number;
+  sources: ApiAiHotBriefingSource[];
 }
 
 export interface ApiAiHotBriefing {
@@ -306,6 +327,12 @@ export interface ApiAiHotBriefing {
   windowStart: string;
   windowEnd: string;
   markdown: string;
+  audience?: "self_media" | "client_industry";
+  accountEmail?: string;
+  accounts?: ApiAiHotBriefingAccount[];
+  sources?: ApiAiHotBriefingSource[];
+  projectId?: string;
+  projectName?: string;
   items: ApiAiHotBriefingItem[];
 }
 

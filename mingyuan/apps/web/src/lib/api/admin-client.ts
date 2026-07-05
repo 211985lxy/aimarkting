@@ -230,6 +230,17 @@ export async function createAdminSetting(input: { key: string; value: string; ty
   })
 }
 
+export async function getAdminHotSources() {
+  return request<{ data: AdminHotSourceItem[] }>("/api/admin/hot-sources")
+}
+
+export async function saveAdminHotSource(input: AdminHotSourceInput) {
+  return request<{ data: SettingItem }>("/api/admin/hot-sources", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
 // ─── Types ───────────────────────────────────────────────
 
 export interface AdminUserItem {
@@ -319,4 +330,25 @@ export interface SettingItem {
   description: string | null
   updatedBy: string | null
   updatedAt: string
+}
+
+export interface AdminHotSourceItem {
+  key: string
+  email: string
+  sourceName: string
+  sourceUrl: string
+  sourceType: string
+  enabled: boolean
+  note: string
+  isBuiltIn: boolean
+  updatedAt: string | null
+}
+
+export interface AdminHotSourceInput {
+  email: string
+  sourceName: string
+  sourceUrl: string
+  sourceType?: string
+  enabled: boolean
+  note?: string
 }

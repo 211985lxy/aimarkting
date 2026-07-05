@@ -45,7 +45,7 @@ import { buildTopicDailyReport, type TopicDailyReport, type TopicDailyReportSour
 import { buildTopicPoolDraftFromSearchParams } from "@/lib/topic-pool-draft"
 import type { ApiAiHotBriefingItem, ApiTopicCard, ApiTopicRecommendationMode } from "@/types/api"
 
-type TopicCategory = "daily_inspiration" | "benchmark_reference" | "user_insight"
+type TopicCategory = "daily_inspiration" | "meeting_minutes" | "benchmark_reference" | "user_insight"
 
 const CATEGORY_META: Record<
   TopicCategory,
@@ -61,6 +61,12 @@ const CATEGORY_META: Record<
     description: "老板随口一句、客户现场一句话、想到的切入角度，都先收进来。",
     titlePlaceholder: "例如：老板晨会金句",
     contentPlaceholder: "记录原话、场景或你想到的选题切口。",
+  },
+  meeting_minutes: {
+    label: "会议纪要",
+    description: "把客户访谈、内部复盘、项目会议纪要粘贴进来，提炼真实问题和可拍选题。",
+    titlePlaceholder: "例如：7月客户复盘会",
+    contentPlaceholder: "粘贴会议纪要、访谈记录、讨论要点。保留原话、问题、分歧、案例和下一步动作。",
   },
   benchmark_reference: {
     label: "参考素材",
@@ -78,6 +84,7 @@ const CATEGORY_META: Record<
 
 const CATEGORY_ORDER: TopicCategory[] = [
   "daily_inspiration",
+  "meeting_minutes",
   "benchmark_reference",
   "user_insight",
 ]
@@ -160,10 +167,10 @@ interface TopicCategoryGroup {
 }
 
 const TOPIC_DISPLAY_GROUPS: TopicCategoryGroup[] = [
-  { key: "know_you", label: "让客户先认识你", cards: [] },
-  { key: "point_of_view", label: "把你的观点说出来", cards: [] },
-  { key: "customer_problem", label: "把客户的问题讲透", cards: [] },
-  { key: "real_case", label: "用真实案例打消顾虑", cards: [] },
+  { key: "hot_topic", label: "热点类", cards: [] },
+  { key: "persona", label: "人设类", cards: [] },
+  { key: "question_answer", label: "问题解答类", cards: [] },
+  { key: "point_of_view", label: "观点类", cards: [] },
 ]
 
 function getTopicDisplayGroupKey(card: ApiTopicCard) {
@@ -174,15 +181,14 @@ function getTopicDisplayGroupKey(card: ApiTopicCard) {
     card.scoreReason,
   ].filter(Boolean).join(" ")
 
-  if (/人设|身份|老板|经历|故事|信任|认识/.test(text) || card.topicType === "人设型") return "know_you"
-  if (/案例|客户故事|见证|证明|前后|成交|转化/.test(text) || card.structureCode === "before_after" || card.structureCode === "proof_first") return "real_case"
-  if (/问题|痛点|顾虑|阻力|避坑|方法|方案|怎么|如何/.test(text) || card.structureCode === "pain_solution") return "customer_problem"
-  if (/观点|判断|认知|趋势|误区|反常识|立场|热点/.test(text) || card.sourceType === "行业热点" || card.topicType === "流量型") return "point_of_view"
-  return card.topicType === "转化型" ? "customer_problem" : "point_of_view"
+  if (/人设|身份|老板|经历|故事|信任|认识/.test(text) || card.topicType === "人设型") return "persona"
+  if (/热点/.test(text) || card.sourceType === "行业热点") return "hot_topic"
+  if (/观点|判断|认知|趋势|误区|反常识|立场/.test(text) || card.topicType === "流量型") return "point_of_view"
+  return "question_answer"
 }
 
 function getTopicDisplayLabel(card: ApiTopicCard) {
-  return TOPIC_DISPLAY_GROUPS.find((group) => group.key === getTopicDisplayGroupKey(card))?.label ?? "把你的观点说出来"
+  return TOPIC_DISPLAY_GROUPS.find((group) => group.key === getTopicDisplayGroupKey(card))?.label ?? "问题解答类"
 }
 
 function categorizeTopicCards(cards: ApiTopicCard[]): TopicCategoryGroup[] {
@@ -221,6 +227,7 @@ export default function TopicPlanningPage() {
   const [topicChatReply, setTopicChatReply] = useState<TopicChatResponse | null>(null)
   const [forms, setForms] = useState<Record<TopicCategory, { title: string; content: string }>>({
     daily_inspiration: { title: "", content: "" },
+    meeting_minutes: { title: "", content: "" },
     benchmark_reference: { title: "", content: "" },
     user_insight: { title: "", content: "" },
   })
@@ -1138,8 +1145,8 @@ function TopicDailyReportPanel({ report }: { report: TopicDailyReport }) {
           <div className="space-y-3">
             <h3 className="text-base font-semibold">来源证据台</h3>
             <div className="grid gap-2">
-              {report.evidence.map((item) => (
-                <div key={item.url} className="rounded-lg border bg-background p-3">
+              {report.evidence.map((item, index) => (
+                <div key={item.url || `${item.source}-${item.title}-${index}`} className="rounded-lg border bg-background p-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{item.status}</Badge>
                     <a

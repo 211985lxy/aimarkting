@@ -39,6 +39,13 @@ describe("AIM runtime task routing", () => {
     })).toBe("light_edit")
   })
 
+  it("treats opening-only optimization as light_edit", () => {
+    expect(resolveAimRuntimeTask({
+      agentId: "content_producer",
+      input: "只优化开头，不要改正文",
+    })).toBe("light_edit")
+  })
+
   it("uses knowledge context when the user asks to combine customer cases", () => {
     const task = resolveAimRuntimeTask({
       agentId: "content_producer",
@@ -46,6 +53,16 @@ describe("AIM runtime task routing", () => {
     })
 
     expect(task).toBe("new_copy")
+    expect(shouldUseKnowledgeContextForTask(task)).toBe(true)
+  })
+
+  it("uses knowledge context when the user asks to call meeting minutes", () => {
+    const task = resolveAimRuntimeTask({
+      agentId: "content_producer",
+      input: "调用会议纪要帮我生成选题",
+    })
+
+    expect(task).toBe("positioning_topic")
     expect(shouldUseKnowledgeContextForTask(task)).toBe(true)
   })
 

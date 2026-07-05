@@ -70,6 +70,15 @@ describe("AIM evolved preferences retrieval", () => {
 
     expect(ranked[0].id).toBe("strategy")
   })
+
+  it("does not globally prioritize meeting minutes for topic planning", () => {
+    const ranked = rankKnowledgeEntriesForAgent("business_diagnosis", [
+      { id: "product", category: "product_usp", title: "产品", content: "产品卖点", score: 0.8, tags: ["kb_scope:project"] },
+      { id: "meeting", category: "meeting_minutes", title: "会议纪要", content: "客户原话和真实顾虑", score: 0.8, tags: ["kb_scope:project"] },
+    ])
+
+    expect(ranked[0].id).toBe("product")
+  })
 })
 
 describe("AIM knowledge strategy integration", () => {

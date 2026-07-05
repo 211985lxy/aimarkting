@@ -24,6 +24,8 @@ const CATEGORY_ORDER = [
   "行业动态",
   "论文研究",
   "技巧与观点",
+  "自媒体热榜",
+  "客户行业热点",
 ]
 
 function formatBeijingDateTime(value: string) {
@@ -37,19 +39,30 @@ function formatBeijingDateTime(value: string) {
   }).format(new Date(value))
 }
 
+function buildTopicPlanningHref(item: ApiAiHotBriefingItem) {
+  const params = new URLSearchParams({
+    idea: item.title,
+    source: item.source,
+    summary: item.summary,
+  })
+  return `/topic-planning?${params.toString()}`
+}
+
 export default function AiHotBriefingPage() {
   const [briefing, setBriefing] = useState<ApiAiHotBriefing | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectedAccountEmail, setSelectedAccountEmail] = useState("")
 
-  async function loadBriefing() {
+  async function loadBriefing(accountEmail = selectedAccountEmail) {
     setError(null)
     try {
-      const data = await getTodayAiHotBriefing()
+      const data = await getTodayAiHotBriefing(accountEmail ? { accountEmail } : undefined)
       setBriefing(data)
+      setSelectedAccountEmail(data.accountEmail || accountEmail)
     } catch {
-      setError("AI HOT 简报暂时不可用，请稍后再试。")
+      setError("热点简报暂时不可用，请稍后再试。")
     } finally {
       setLoading(false)
     }
@@ -59,7 +72,9 @@ export default function AiHotBriefingPage() {
     setRefreshing(true)
     setError(null)
     try {
-      const data = await refreshTodayAiHotBriefing()
+      const data = briefing?.audience === "client_industry"
+        ? await getTodayAiHotBriefing(selectedAccountEmail ? { accountEmail: selectedAccountEmail } : undefined)
+        : await refreshTodayAiHotBriefing()
       setBriefing(data)
     } catch {
       setError("刷新失败，请稍后再试。")
@@ -70,7 +85,11 @@ export default function AiHotBriefingPage() {
 
   useEffect(() => {
     loadBriefing()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const sourceLabel = briefing?.sources?.[0]?.source_name || briefing?.projectName || "当前账号"
+  const hasAccountChoices = (briefing?.accounts?.length ?? 0) > 1
 
   const groupedItems = useMemo(() => {
     const groups = new Map<string, ApiAiHotBriefingItem[]>()
@@ -105,16 +124,41 @@ export default function AiHotBriefingPage() {
   return (
     <div className="space-y-6 pb-10">
       <WorkbenchHero
-        title="AI HOT · 今日 9 点"
-        subtitle="每天 9 点整理 AI HOT 精选动态，按模型、产品、行业、论文和技巧观点归类，适合直接进入选题和内容判断。"
-        badge={<Badge variant="secondary">最近 24 小时精选</Badge>}
+        title={briefing?.audience === "client_industry" ? `${sourceLabel}热点` : "每日选题雷达"}
+        subtitle={
+          briefing?.audience === "client_industry"
+            ? "切换账号后自动读取该账号绑定的信源，热点中心只展示对应行业线索。"
+            : "先看今天可用的行业线索，再进入选题中心结合当前账号资料、对标账号、对标文案和资料库生成账号专属选题。热点只做辅助，不直接当最终选题。"
+        }
+        badge={<Badge variant="secondary">{briefing?.audience === "client_industry" ? "账号信源热点" : "账号资料优先"}</Badge>}
         actions={
           <>
-          {briefing ? (
-            <p className="text-xs text-muted-foreground">
-              生成时间：{formatBeijingDateTime(briefing.generatedAt)} · 共 {briefing.items.length} 条
-            </p>
-          ) : null}
+            {hasAccountChoices ? (
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm md:w-[260px]"
+                value={selectedAccountEmail}
+                onChange={(event) => {
+                  const email = event.target.value
+                  setSelectedAccountEmail(email)
+                  setLoading(true)
+                  loadBriefing(email)
+                }}
+              >
+                {(briefing?.accounts ?? []).map((account) => (
+                  <option key={account.email} value={account.email}>
+                    {account.label}{account.sourceCount > 0 ? ` · ${account.sourceCount} 个信源` : ""}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            {briefing ? (
+              <p className="text-xs text-muted-foreground">
+                {briefing.accountEmail ? `${briefing.accountEmail} · ` : ""}生成时间：{formatBeijingDateTime(briefing.generatedAt)} · 共 {briefing.items.length} 条
+              </p>
+            ) : null}
+            <Button className="w-full md:w-auto" nativeButton={false} render={<Link href="/topic-planning" />}>
+              生成账号专属选题
+            </Button>
             <Button
               variant="outline"
               className="w-full md:w-auto"
@@ -142,7 +186,7 @@ export default function AiHotBriefingPage() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center text-muted-foreground">
             <Newspaper className="h-9 w-9 opacity-50" />
-            <p className="text-sm">今天最近 24 小时内暂时没有 AI HOT 精选条目。</p>
+            <p className="text-sm">今天暂时没有可用线索。也可以直接去选题中心，基于账号资料和对标素材生成选题。</p>
           </CardContent>
         </Card>
       ) : (
@@ -174,16 +218,26 @@ export default function AiHotBriefingPage() {
                             </div>
                           </div>
                           <p className="text-sm leading-6 text-muted-foreground">{item.summary}</p>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8"
-                            nativeButton={false}
-                            render={<Link href={item.url} target="_blank" rel="noreferrer" />}
-                          >
-                            看原文
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </Button>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8"
+                              nativeButton={false}
+                              render={<Link href={item.url} target="_blank" rel="noreferrer" />}
+                            >
+                              看原文
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-8"
+                              nativeButton={false}
+                              render={<Link href={buildTopicPlanningHref(item)} />}
+                            >
+                              带入选题中心
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </article>

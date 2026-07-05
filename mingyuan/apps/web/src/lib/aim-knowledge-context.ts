@@ -34,6 +34,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   project_case: "项目案例",
   customer_qa: "客户问答",
   daily_inspiration: "日常灵感",
+  meeting_minutes: "会议纪要",
   benchmark_reference: "对标参考",
   user_insight: "用户洞察",
   hot_topic: "热点素材",
