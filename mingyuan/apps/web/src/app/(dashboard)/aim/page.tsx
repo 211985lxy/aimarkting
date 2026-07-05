@@ -62,7 +62,6 @@ import {
   type AimAgentMeta,
 } from "@/lib/aim-ui-config"
 import {
-  buildAimGuideTemplate,
   buildAimNextActionPrompt,
   getAimAgentGuide,
   type AimAgentGuide,
@@ -242,66 +241,6 @@ function ChoiceStepper({
             </Button>
           )
         })}
-      </div>
-    </div>
-  )
-}
-
-function AgentGuidePanel({
-  agent,
-  onUseTemplate,
-  onUseVariant,
-}: {
-  agent: AimAgentOption
-  onUseTemplate: () => void
-  onUseVariant: (prompt: string) => void
-}) {
-  return (
-    <div className="w-full space-y-3 rounded-xl border bg-card/50 p-3 text-left">
-      <div>
-        <p className="mb-1 text-xs font-medium text-muted-foreground">适合场景</p>
-        <div className="flex flex-wrap gap-1.5">
-          {agent.scenarios.map((item) => (
-            <Badge key={item} variant="secondary" className="text-[10px]">{item}</Badge>
-          ))}
-        </div>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-muted-foreground">输入模板</p>
-            <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={onUseTemplate}>
-              填入
-            </Button>
-          </div>
-          <div className="space-y-1 text-xs text-muted-foreground">
-            {agent.inputTemplate.map((field) => (
-              <p key={field.label}><span className="text-foreground/80">{field.label}</span>：{field.placeholder}</p>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="mb-1 text-xs font-medium text-muted-foreground">输出资产</p>
-          <div className="space-y-1 text-xs text-muted-foreground">
-            {agent.outputAssets.map((item) => <p key={item}>- {item}</p>)}
-          </div>
-          {agent.copyVariants && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {agent.copyVariants.map((variant) => (
-                <Button
-                  key={variant.id}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => onUseVariant(variant.prompt)}
-                >
-                  {variant.label}
-                </Button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   )
@@ -946,14 +885,6 @@ export default function AimPage() {
             : "内容生产"
 
   const hasEditorSelection = Boolean(referenceSelection.text.trim() || draftSelection.text.trim())
-
-  const materialStatus = [
-    projectEnabled && selectedProject ? "客户资料已读取" : projectEnabled ? "客户资料待选择" : "纯文案模式",
-    selectedAgentId === "business_diagnosis" ? "市场洞察可匹配" : null,
-    sourceTopicTitle.trim() ? "热点选题已带入" : null,
-    sourceVideoCopyExtractionId ? `${editorPanelLabels.referenceTitle}已带入` : null,
-    editorText.trim() ? `${editorPanelLabels.currentLabel}可编辑` : null,
-  ].filter(Boolean) as string[]
 
   const analysisTextCandidates = useMemo(() => {
     const candidates = []
@@ -1940,20 +1871,13 @@ export default function AimPage() {
                 <span className="text-[11px] font-medium text-muted-foreground">AIM 工作台</span>
                 <span className="text-xs text-muted-foreground">/</span>
                 <p className="truncate text-sm font-semibold text-foreground">{agent.title}</p>
-                <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-[10px] font-medium">
+                <Badge variant="secondary" className="hidden h-5 rounded-md px-1.5 text-[10px] font-medium sm:inline-flex">
                   {workStage}
                 </Badge>
               </div>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              <p className="mt-0.5 hidden truncate text-xs text-muted-foreground lg:block">
                 {selectedProject?.name || (projectEnabled ? "未选择 IP 全案" : "未绑定项目")} · {agent.description}
               </p>
-              <div className="mt-1 hidden flex-wrap gap-1.5 sm:flex">
-                {materialStatus.map((item) => (
-                  <span key={item} className="rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                    {item}
-                  </span>
-                ))}
-              </div>
             </div>
 
           </div>
@@ -1978,7 +1902,8 @@ export default function AimPage() {
               disabled={isThinking || isGenerating || isEvolving || messages.length < 2}
               title="从当前对话提炼客户偏好 + 更新全局写作风格档案"
             >
-              {isEvolving ? "提炼中" : "沉淀偏好与风格"}
+              <Sparkles className="h-4 w-4" />
+              <span className="sr-only">{isEvolving ? "提炼中" : "沉淀偏好与风格"}</span>
             </Button>
             <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => resetConversation()} title="新对话">
               <Plus className="h-4 w-4" />
@@ -2043,31 +1968,10 @@ export default function AimPage() {
         {/* 消息流 */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4 sm:px-5">
           {messages.length === 0 ? (
-            <div className="mx-auto flex max-w-xl flex-col items-center gap-4 py-10 text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <agent.icon className="h-6 w-6" />
-              </span>
-              <div>
-                <p className="text-base font-semibold text-foreground">{agent.title}</p>
-                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{agent.intro}</p>
-              </div>
-              <AgentGuidePanel
-                agent={agent}
-                onUseTemplate={() => setInput(buildAimGuideTemplate(agent.inputTemplate))}
-                onUseVariant={(prompt) => setInput((prev) => prev.trim() ? `${prev.trim()}\n${prompt}` : prompt)}
-              />
-              <div className="flex w-full flex-col gap-2">
-                <p className="self-start text-xs font-medium text-muted-foreground">试试这样开头：</p>
-                {agent.quickPrompts.map((p, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setInput(p)}
-                    className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2 text-left text-xs text-foreground/90 transition-colors hover:border-primary/30 hover:bg-primary/5"
-                  >
-                    {p}
-                  </button>
-                ))}
+            <div className="mx-auto flex w-full max-w-3xl flex-col py-6">
+              <div className="max-w-2xl text-left">
+                <p className="text-sm font-semibold text-foreground">{agent.title}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{agent.intro}</p>
               </div>
             </div>
           ) : (
@@ -2253,7 +2157,7 @@ export default function AimPage() {
         {/* 输入区 */}
         <footer className="border-t px-3 py-2 sm:px-5">
           {RESEARCH_HINT_AGENT_IDS.has(selectedAgentId) && (
-            <p className="mx-auto mb-2 max-w-2xl text-xs text-muted-foreground">
+            <p className="mx-auto mb-2 hidden max-w-2xl text-xs text-muted-foreground lg:block">
               可以直接把官网链接、竞品资料、客户资料或 Research Agent 资料包粘贴到聊天框里，系统会作为诊断上下文使用。
             </p>
           )}
