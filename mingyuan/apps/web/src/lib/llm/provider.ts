@@ -1,4 +1,5 @@
 import OpenAI from "openai"
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions"
 import type {
   CompletionOptions,
   CompletionResult,
@@ -32,7 +33,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     const response = await this.client.chat.completions.create({
       model,
-      messages: options.messages,
+      messages: options.messages as ChatCompletionMessageParam[],
       temperature: options.temperature,
       max_tokens: options.maxTokens,
       response_format: options.responseFormat,
@@ -63,7 +64,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     const response = await this.client.chat.completions.create({
       model,
-      messages: options.messages,
+      messages: options.messages as ChatCompletionMessageParam[],
       temperature: options.temperature,
       max_tokens: options.maxTokens,
       response_format: options.responseFormat,
