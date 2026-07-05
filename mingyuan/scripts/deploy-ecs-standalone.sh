@@ -15,7 +15,7 @@ RSYNC=(rsync -az --delete -e "ssh -i $SSH_KEY -o BatchMode=yes -o StrictHostKeyC
 cd "$ROOT_DIR"
 
 CI=true corepack pnpm --dir apps/web exec prisma generate
-CI=true corepack pnpm --filter @mingyuan/web build
+CI=true corepack pnpm --filter @mingyuan/web exec next build --webpack
 
 "${SSH[@]}" "mkdir -p '$REMOTE_DIR/apps/web/.next/static' '$REMOTE_DIR/apps/web/public' '$REMOTE_DIR/apps/web/messages'"
 

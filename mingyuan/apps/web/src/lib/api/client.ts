@@ -916,6 +916,52 @@ export interface WatchRefreshResponse {
   summary: { total: number; success: number; failed: number }
 }
 
+export type WatchVideoRecommendationCategory =
+  | "问题解答"
+  | "人设故事"
+  | "客户案例"
+  | "观点判断"
+  | "方法清单"
+  | "待判断"
+
+export interface WatchVideoRecommendation {
+  id: string
+  watchAccountId: string
+  accountName: string
+  accountUrl: string
+  platform: string
+  videoId: string
+  videoUrl: string
+  title: string
+  coverUrl: string
+  createTime: number
+  metrics: {
+    views: number
+    likes: number
+    comments: number
+    shares: number
+    collects: number
+    engagementScore: number
+  }
+  category: WatchVideoRecommendationCategory
+  score: number
+  recommendationReason: string
+  migrationAngle: string
+  suggestedHook: string
+  suggestedCta: string
+  source: "viral" | "latest"
+  lastRefreshedAt: string | null
+}
+
+export interface WatchVideoRecommendationsResponse {
+  items: WatchVideoRecommendation[]
+  generatedAt: string
+  sourceSummary: {
+    accountCount: number
+    videoCount: number
+  }
+}
+
 export async function listWatchAccounts(): Promise<WatchAccountsResponse> {
   return request<WatchAccountsResponse>(
     "/api/competitor/watch-accounts"
@@ -940,6 +986,23 @@ export async function refreshWatchAccounts(accountId?: string): Promise<WatchRef
     body: JSON.stringify(accountId ? { accountId } : {}),
     timeout: 300000,
   })
+}
+
+export async function recommendWatchAccountVideos(input?: {
+  projectId?: string
+  intent?: string
+  categories?: WatchVideoRecommendationCategory[]
+  limit?: number
+}): Promise<WatchVideoRecommendationsResponse> {
+  const payload = await request<{ data: WatchVideoRecommendationsResponse }>(
+    "/api/competitor/watch-accounts/recommendations",
+    {
+      method: "POST",
+      body: JSON.stringify(input ?? {}),
+      timeout: 20000,
+    },
+  )
+  return payload.data
 }
 
 export async function extractWatchAccountVideo(input: {
