@@ -1920,16 +1920,17 @@ export default function AimPage() {
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
             {/* 小屏智能体切换 */}
             <div className="md:hidden">
-              <Select value={selectedAgentId} onValueChange={(v) => { if (v !== selectedAgentId) router.push(`/aim?agent=${v}`) }}>
-                <SelectTrigger className="h-9 w-[130px]">
-                  <span className="truncate">{agent.title}</span>
-                </SelectTrigger>
-                <SelectContent>
-                  {AGENT_OPTIONS.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                value={selectedAgentId}
+                onChange={(event) => {
+                  if (event.target.value !== selectedAgentId) router.push(`/aim?agent=${event.target.value}`)
+                }}
+                className="h-9 w-[130px] rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                {AGENT_OPTIONS.map((a) => (
+                  <option key={a.id} value={a.id}>{a.title}</option>
+                ))}
+              </select>
             </div>
             <span className="hidden h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary md:flex">
               <agent.icon className="h-4 w-4" />
