@@ -10,8 +10,9 @@ import {
   Settings,
   BriefcaseBusiness,
   BarChart2,
+  Bell,
+  ListChecks,
   Target,
-  Flame,
   ChevronRight,
   MoreHorizontal,
   Trash2,
@@ -58,13 +59,24 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
   {
-    label: "创作中心",
+    label: "工作台",
     items: [
       { title: "工作总览", href: "/home", icon: LayoutDashboard },
-      { title: "热点中心", href: "/hot-topics", icon: Flame },
       { title: "IP营销全案", href: "/projects", icon: BriefcaseBusiness },
-      { title: "市场洞察", href: "/competitor", icon: BarChart2 },
+    ],
+  },
+  {
+    label: "内容生产",
+    items: [
+      { title: "每日选题雷达", href: "/ai-hot", icon: Bell },
       { title: "选题中心", href: "/topic-planning", icon: Target },
+      { title: "市场洞察", href: "/competitor", icon: BarChart2 },
+    ],
+  },
+  {
+    label: "运营管理",
+    items: [
+      { title: "定时任务清单", href: "/scheduled-tasks", icon: ListChecks },
     ],
   },
 ]
