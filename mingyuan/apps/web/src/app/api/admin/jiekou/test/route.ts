@@ -108,6 +108,8 @@ export const POST = withAdminAuth(async (request: NextRequest) => {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
           Connection: "keep-alive",
+          // 关闭 nginx 代理缓冲，确保 SSE 事件即时下发，避免长耗时时 504
+          "X-Accel-Buffering": "no",
         },
       })
     } else {

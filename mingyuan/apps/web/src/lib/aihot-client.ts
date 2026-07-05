@@ -9,7 +9,7 @@ export interface AiHotItem {
   source: string
   publishedAt?: string | null
   summary?: string | null
-  category?: "ai-models" | "ai-products" | "industry" | "paper" | "tip" | null
+  category?: "ai-models" | "ai-products" | "industry" | "paper" | "tip" | "creator" | null
 }
 
 export interface AiHotResponse {

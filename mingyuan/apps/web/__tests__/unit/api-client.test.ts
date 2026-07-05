@@ -11,6 +11,14 @@ describe("api client error messages", () => {
     expect(getApiErrorMessage(null, 404, "Not Found")).toBe("404 Not Found")
   })
 
+  it("hides upstream HTML timeout pages", () => {
+    expect(getApiErrorMessage(
+      { error: "<html><head><title>504 Gateway Time-out</title></head></html>" },
+      504,
+      "Gateway Time-out",
+    )).toBe("AI 服务响应超时，请稍后重试")
+  })
+
   it("passes the agent filter when listing AIM history", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

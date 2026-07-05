@@ -155,7 +155,7 @@ export type TransferFromUrlResult = {
 export async function generateUploadUrl(
   fileName: string,
   contentType: string,
-): Promise<{ uploadUrl: string; assetUrl: string; expiresAt: string } | null> {
+): Promise<{ uploadUrl: string; assetUrl: string; readUrl: string; expiresAt: string } | null> {
   if (!isConfigured()) return null;
 
   const client = getClient();
@@ -176,9 +176,10 @@ export async function generateUploadUrl(
     .map((s) => encodeURIComponent(s))
     .join("/");
   const assetUrl = `https://${OSS_BUCKET}.${OSS_REGION}.aliyuncs.com/${encodedPath}`;
+  const readUrl = client.signatureUrl(key, { method: "GET", expires: 7200 });
   const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
 
-  return { uploadUrl: url, assetUrl, expiresAt };
+  return { uploadUrl: url, assetUrl, readUrl, expiresAt };
 }
 
 /**

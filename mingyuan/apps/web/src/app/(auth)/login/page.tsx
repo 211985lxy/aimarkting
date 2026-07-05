@@ -3,7 +3,7 @@
 import React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Loader2, Mail, Lock } from "lucide-react"
+import { Loader2, Mail, Lock, UserRound } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -22,12 +22,18 @@ import { getSubscriptionStatus } from "@/lib/subscription"
 export default function LoginPage() {
   const router = useRouter()
   const setSession = useAuthStore((s) => s.setSession)
+  const switchSession = useAuthStore((s) => s.switchSession)
+  const sessions = useAuthStore((s) => s.sessions)
 
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
   const [errors, setErrors] = React.useState<{ email?: string; password?: string }>({})
   const [loading, setLoading] = React.useState(false)
   const [submitError, setSubmitError] = React.useState<string | null>(null)
+
+  function goAfterLogin(expiresAt?: string | null) {
+    router.push(getSubscriptionStatus(expiresAt ?? null) === "active" ? "/home" : "/activate")
+  }
 
   function validate(): boolean {
     const next: { email?: string; password?: string } = {}
@@ -57,11 +63,7 @@ export default function LoginPage() {
     try {
       const session = await loginUser(email, password)
       setSession(session.token, session.user)
-      router.push(
-        getSubscriptionStatus(session.user.expiresAt ?? null) === "active"
-          ? "/home"
-          : "/activate"
-      )
+      goAfterLogin(session.user.expiresAt)
     } catch (error) {
       setSubmitError(
         error instanceof ApiError ? error.message : "登录失败，请稍后重试"
@@ -79,6 +81,35 @@ export default function LoginPage() {
       </CardHeader>
 
       <CardContent>
+        {sessions.length > 0 ? (
+          <div className="mb-5 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">快速切换</p>
+            <div className="grid gap-2">
+              {sessions.map((session) => (
+                <button
+                  key={session.user.id}
+                  type="button"
+                  onClick={() => {
+                    switchSession(session.token)
+                    goAfterLogin(session.user.expiresAt)
+                  }}
+                  className="flex items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50"
+                >
+                  <UserRound className="h-4 w-4 text-muted-foreground" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">
+                      {session.user.name || session.user.email}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {session.user.email}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email">

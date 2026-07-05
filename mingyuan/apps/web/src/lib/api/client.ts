@@ -61,7 +61,11 @@ class ApiError extends Error {
 
 export function getApiErrorMessage(payload: unknown, status: number, statusText: string): string {
   if (typeof (payload as { error?: unknown } | null)?.error === "string") {
-    return (payload as { error: string }).error
+    const error = (payload as { error: string }).error
+    if (/<html[\s>]/i.test(error) || /504 Gateway Time-?out/i.test(error)) {
+      return "AI 服务响应超时，请稍后重试"
+    }
+    return error
   }
   return statusText ? `${status} ${statusText}` : `Request failed: ${status}`
 }
@@ -1165,6 +1169,7 @@ export interface AimGenerateRequest {
   hotTopic?: string
   polishInstruction?: string
   useMarketViralVideos?: boolean
+  existingGenerationId?: string
 }
 
 export interface AimGenerateResult {

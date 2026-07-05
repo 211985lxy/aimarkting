@@ -11,10 +11,8 @@ build/
 
 # Environment files
 .env
-.env.local
-.env.*.local
-.env.production
-.env.development
+.env.*
+!.env.example
 
 # AI news radar private source inputs
 feeds/follow.opml
@@ -49,8 +47,8 @@ __pycache__/
 venv/
 *.egg-info/
 
-# Prisma
-clipflow/apps/web/prisma/*.db
+# Prisma local DB
+mingyuan/apps/web/prisma/*.db
 
 # Test
 test-results/
@@ -67,10 +65,10 @@ uploads/
 social-auto-upload/cookies/
 
 # Generated Prisma client
-clipflow/apps/web/src/generated/
+mingyuan/apps/web/src/generated/
 
 # QR code cache
-clipflow/apps/web/public/qrcodes/
+mingyuan/apps/web/public/qrcodes/
 
 # Python uv lock (keep if needed)
 # social-auto-upload/uv.lock

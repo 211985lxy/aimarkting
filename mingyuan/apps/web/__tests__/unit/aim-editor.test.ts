@@ -60,6 +60,7 @@ describe("aim editor helpers", () => {
     expect(prompt).toContain("帮助客户沉淀可以进化的知识库资产")
     expect(prompt).toContain("替换稿只处理用户点名要改的地方")
     expect(prompt).toContain("不要替换、删改用户没有点名的词句")
+    expect(prompt).toContain("替换稿只能包含新的开头段落")
     expect(prompt).toContain("修改思路可以给开头、结构、结尾等简短意见")
     expect(prompt).toContain("不要把未点名建议直接写进替换稿")
     expect(prompt).toContain("确实需要整段重写时要说明原因")

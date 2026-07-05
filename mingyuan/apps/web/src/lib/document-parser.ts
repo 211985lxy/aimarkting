@@ -1,3 +1,8 @@
+import { execFile } from "node:child_process"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { promisify } from "node:util"
 import pdfParse from "pdf-parse"
 import mammoth from "mammoth"
 import * as XLSX from "xlsx"
@@ -10,8 +15,18 @@ const SUPPORTED_EXTENSIONS = new Set([
   ".csv",
   ".pdf",
   ".docx",
+  ".xls",
   ".xlsx",
+  ".pptx",
+  ".html",
+  ".htm",
+  ".json",
+  ".xml",
+  ".rtf",
 ])
+
+const MARKITDOWN_EXTENSIONS = new Set([".pdf", ".docx", ".xls", ".xlsx", ".pptx", ".html", ".htm", ".json", ".xml", ".rtf"])
+const execFileAsync = promisify(execFile)
 
 /** 分块阈值：超过此字数按段落边界拆分 */
 const CHUNK_THRESHOLD = 5000
@@ -46,7 +61,9 @@ export async function parseDocument(
 
   let fullText: string
 
-  switch (ext) {
+  if (MARKITDOWN_EXTENSIONS.has(ext)) {
+    fullText = await parseWithMarkitdown(buffer, ext)
+  } else switch (ext) {
     case ".txt":
     case ".md":
     case ".markdown":
@@ -82,6 +99,23 @@ export async function parseDocument(
 }
 
 // ─── 格式解析器 ─────────────────────────────────────────────
+
+async function parseWithMarkitdown(buffer: Buffer, ext: string): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "aim-markitdown-"))
+  const input = path.join(dir, `input${ext}`)
+  try {
+    await writeFile(input, buffer)
+    const { stdout } = await execFileAsync("markitdown", [input], { timeout: 60_000, maxBuffer: 5 * 1024 * 1024 })
+    return String(stdout)
+  } catch (error) {
+    if (ext === ".pdf") return parsePdf(buffer)
+    if (ext === ".docx") return parseDocx(buffer)
+    if (ext === ".xls" || ext === ".xlsx") return parseXlsx(buffer)
+    throw new Error(error instanceof Error ? `MarkItDown 转换失败: ${error.message}` : "MarkItDown 转换失败")
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
 
 async function parsePdf(buffer: Buffer): Promise<string> {
   const data = await pdfParse(buffer)

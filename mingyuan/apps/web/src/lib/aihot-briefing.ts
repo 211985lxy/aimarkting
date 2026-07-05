@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma"
+import { fetchAiNewsRadarCreatorItems } from "@/lib/ai-news-radar-client"
 import { AIHOT_USER_AGENT } from "@/lib/aihot-constants"
 import type { AiHotItem, AiHotResponse } from "@/lib/aihot-client"
 
-export const AIHOT_BRIEFING_TITLE = "AI HOT · 今日 9 点"
+export const AIHOT_BRIEFING_TITLE = "每日选题雷达 · 今日 9 点"
 
 const AIHOT_ITEMS_URL = "https://aihot.virxact.com/api/public/items"
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000
@@ -14,6 +15,7 @@ const CATEGORY_LABELS = {
   industry: "行业动态",
   paper: "论文研究",
   tip: "技巧与观点",
+  creator: "自媒体热榜",
 } as const
 
 const CATEGORY_ORDER: AiHotBriefingCategory[] = [
@@ -22,6 +24,7 @@ const CATEGORY_ORDER: AiHotBriefingCategory[] = [
   "industry",
   "paper",
   "tip",
+  "creator",
 ]
 
 export type AiHotBriefingCategory = keyof typeof CATEGORY_LABELS
@@ -125,7 +128,15 @@ export async function fetchSelectedItems(windowStart: Date, fetchImpl: typeof fe
   }
 
   const data = (await res.json()) as AiHotResponse
-  return Array.isArray(data.items) ? data.items : []
+  const aiHotItems = Array.isArray(data.items) ? data.items : []
+
+  try {
+    const creatorItems = await fetchAiNewsRadarCreatorItems(fetchImpl)
+    return [...creatorItems, ...aiHotItems]
+  } catch (error) {
+    console.warn("[aihot-briefing] AI News Radar creator source unavailable:", (error as Error).message)
+    return aiHotItems
+  }
 }
 
 export function selectBriefingItems(items: AiHotItem[], now = new Date()) {
@@ -152,11 +163,15 @@ export function selectBriefingItems(items: AiHotItem[], now = new Date()) {
 }
 
 export function buildAiHotBriefingMarkdown(items: AiHotBriefingItem[]) {
-  const lines = [`# ${AIHOT_BRIEFING_TITLE}`]
+  const lines = [
+    `# ${AIHOT_BRIEFING_TITLE}`,
+    "",
+    "推荐优先级：当前账号资料/资料库 > 对标账号/对标文案 > 行业热点/AI HOT。下面内容只是今日选题线索，不是最终推荐选题；进入选题中心后会结合账号资料、对标素材和行业热点生成可拍选题。",
+  ]
   let index = 1
 
   if (items.length === 0) {
-    lines.push("", "今天最近 24 小时内暂时没有 AI HOT 精选条目。")
+    lines.push("", "今天最近 24 小时内暂时没有可用的 AI HOT 线索。")
     return lines.join("\n")
   }
 

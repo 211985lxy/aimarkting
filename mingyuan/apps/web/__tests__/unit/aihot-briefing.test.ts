@@ -38,6 +38,7 @@ describe("AI HOT briefing formatting", () => {
       item("industry", "industry"),
       item("paper", "paper"),
       item("tip", "tip"),
+      item("creator", "creator"),
       item("unknown", null),
       ...Array.from({ length: 20 }, (_, index) => item(`extra-${index}`, "industry")),
     ]
@@ -52,18 +53,21 @@ describe("AI HOT briefing formatting", () => {
       "论文研究",
       "技巧与观点",
     ])
+    expect(selected[5].categoryLabel).toBe("自媒体热榜")
   })
 
   it("keeps Markdown user-facing and free of transport details", () => {
     const selected = selectBriefingItems(
-      [item("model", "ai-models"), item("paper", "paper")],
+      [item("model", "ai-models"), item("paper", "paper"), item("creator", "creator")],
       new Date("2099-01-01T01:00:00.000Z")
     )
     const markdown = buildAiHotBriefingMarkdown(selected)
 
     expect(markdown).toContain(`# ${AIHOT_BRIEFING_TITLE}`)
+    expect(markdown).toContain("当前账号资料/资料库 > 对标账号/对标文案 > 行业热点/AI HOT")
     expect(markdown).toContain("## 模型发布/更新")
     expect(markdown).toContain("## 论文研究")
+    expect(markdown).toContain("## 自媒体热榜")
     expect(markdown).not.toMatch(/api\/public|mode=|cursor|HTTP 状态码|状态码|限流|take=/i)
   })
 

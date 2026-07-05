@@ -229,8 +229,9 @@ export default function CompetitorReportPage() {
   }, [params.id])
 
   // Poll until terminal state
+  const analysisStatus = analysis?.status
   useEffect(() => {
-    if (!analysis || TERMINAL_STATUSES.has(analysis.status)) return
+    if (!analysisStatus || TERMINAL_STATUSES.has(analysisStatus)) return
     const interval = setInterval(async () => {
       try {
         const data = await getCompetitorAnalysis(params.id)
@@ -241,7 +242,7 @@ export default function CompetitorReportPage() {
       }
     }, POLL_INTERVAL)
     return () => clearInterval(interval)
-  }, [analysis?.status, params.id])
+  }, [analysisStatus, params.id])
 
   if (loading) return <FullPageSkeleton />
   if (notFound) return <NotFoundState onBack={() => router.push("/competitor")} />

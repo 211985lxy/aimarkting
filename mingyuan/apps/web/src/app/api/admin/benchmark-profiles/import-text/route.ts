@@ -8,7 +8,7 @@ interface ImportedTextFile {
   text: string
 }
 
-export function formatImportedTextFile(file: ImportedTextFile): string {
+function formatImportedTextFile(file: ImportedTextFile): string {
   return `【文件：${file.name}】\n${file.text}`
 }
 

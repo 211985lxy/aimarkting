@@ -27,12 +27,19 @@ describe("video copy analysis", () => {
     const messages = buildVideoCopyAnalysisMessages({
       title: "视频标题",
       platform: "bilibili",
+      videoDuration: "00:48",
       transcript: "这是视频文案。",
     })
 
     expect(messages[0].content).toContain("纯 Markdown")
-    expect(messages[0].content).toContain("只挑最关键的 2-3 个独立节点")
+    expect(messages[0].content).toContain("结构拆解是重点")
+    expect(messages[0].content).toContain("每 12 秒左右输出一个 ### 节点")
+    expect(messages[0].content).toContain("不设置 6-8 个节点上限")
+    expect(messages[0].content).toContain("时间段 + 结构动作")
+    expect(messages[0].content).toContain("每个枚举点都要单独成节点")
     expect(messages[0].content).toContain("每个结构子节点只保留两项")
+    expect(messages[0].content).toContain("文案动作 / 用户心理 / 商业意图 / 可复用模板")
+    expect(messages[0].content).toContain("不要只写\"制造好奇\"、\"建立信任\"这种空话")
     expect(messages[0].content).toContain("核心选题、开头机制、观点冲突和情绪触发点")
     expect(messages[0].content).toContain("完成爆款选题再创作")
     expect(messages[0].content).toContain("可借什么、必须重构什么、原创风险是什么")
@@ -40,6 +47,7 @@ describe("video copy analysis", () => {
     expect(messages[0].content).toContain("不要使用 ** 星号加粗")
     expect(messages[1].content).toContain("视频标题")
     expect(messages[1].content).toContain("bilibili")
+    expect(messages[1].content).toContain("00:48")
     expect(messages[1].content).toContain("这是视频文案。")
   })
 
@@ -179,6 +187,10 @@ describe("video copy analysis", () => {
     expect(analysis.markdown).toContain("## 商业拆解")
     expect(analysis.markdown).toContain("## 迁移应用")
     expect(analysis.markdown).toContain("### 再创作建议")
+    expect(analysis.markdown).toContain("约0-12秒")
+    expect(analysis.markdown).toContain("约12-24秒")
+    expect(analysis.markdown).toContain("结尾收束")
+    expect(analysis.markdown).not.toContain("正文-1")
     expect(analysis.markdown).toContain("必须重构")
     expect(analysis.markdown).toContain("原创风险")
   })
@@ -194,11 +206,14 @@ describe("video copy analysis", () => {
       ].join(""),
     })
 
-    expect(analysis.markdown).toContain("### 第一个狩猎法")
-    expect(analysis.markdown).toContain("### 第二，反推法")
-    expect(analysis.markdown).toContain("### 第三招，辩论法")
+    expect(analysis.markdown).toContain("约0-12秒：开头钩子")
+    expect(analysis.markdown).toContain("约12-24秒：第一个狩猎法")
+    expect(analysis.markdown).toContain("约24-36秒：第二，反推法")
+    expect(analysis.markdown).toContain("约36-48秒：第三招，辩论法")
+    expect(analysis.markdown).not.toContain("正文-1")
     expect(analysis.markdown).toContain("原文片段")
     expect(analysis.markdown).toContain("结构作用")
+    expect(analysis.markdown).toContain("可复用模板")
     expect(analysis.markdown).not.toContain("迁移保留点")
   })
 })

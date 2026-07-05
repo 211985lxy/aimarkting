@@ -82,7 +82,7 @@ const CONTENT_PRODUCER_SKILLS: AimWorkbenchSkill[] = [
     id: "viral_recreation",
     label: "对标爆款再创作",
     description: "学习选题、钩子和冲突，不照搬原句。",
-    prompt: "请基于当前对标内容做爆款再创作：只学习选题逻辑、开头机制、观点冲突和情绪触发，用我的立场、人设、案例和业务场景重构，字数控制在对标原文 95%-105%。",
+    prompt: "请基于当前对标内容做爆款再创作：只学习选题逻辑、开头机制、观点冲突和情绪触发，用我的立场、人设、案例和业务场景重构；如果我没有另写明确字数，字数再参考对标原文 95%-105%。",
     agentId: "content_producer",
   },
   {
@@ -336,7 +336,7 @@ export const AIM_AGENT_GUIDES: Record<AimAgentId, AimAgentGuide> = {
     outputAssets: ["商业诊断报告", "核心矛盾", "调整路径", "本周动作"],
     skills: BUSINESS_SYSTEM_SKILLS,
     nextActions: [
-      { id: "to_business_diagnosis", label: "带入灵感选题策划", targetAgentId: "business_diagnosis", prompt: "请基于下面商业诊断结果，生成一份《天命IP资产化操盘全案》，走天命IP资产化操盘全案路由（12 模块）：项目总判断、天命底盘、IP主定位、目标客户、核心问题、IP价值、产品设计、内容系统、流量闭环、私域成交、交付资产化、行动处方。天命底盘没有命理资料时写「未提供/待补充」，不编造。每个模块要能指导后续选题、文案、产品承接、私域成交和交付资产化。" },
+      { id: "to_business_diagnosis", label: "带入灵感选题策划", targetAgentId: "business_diagnosis", prompt: "请基于下面商业诊断结果和客户知识库，生成一份《天命IP资产化操盘全案》。走天命IP资产化操盘全案路由，按 12 个客户结果段输出：项目总判断、天命底盘、IP主定位、目标客户、核心问题、IP价值、产品设计、内容系统、流量闭环、私域成交、交付资产化、行动处方。方法论只做后台推理，不要把定位公式、方法论名称、模块解释或占位模板原样呈现给用户。天命底盘没有命理资料时写「未提供/待补充」，不编造。每段都要结合客户事实，能指导后续选题、文案、产品承接、私域成交和交付资产化。" },
       { id: "save_knowledge", label: "保存为档案素材", prompt: "保存为 AIM 档案素材。" },
     ],
   },

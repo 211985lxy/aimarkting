@@ -11,7 +11,7 @@ vi.mock("@/lib/prisma", () => ({
 }))
 
 const { buildRawInputWithMarketViralContext, buildRawInputWithVideoCopyContext } = await import(
-  "@/app/api/aim/generate/route"
+  "@/lib/aim-generate-context"
 )
 
 describe("buildRawInputWithMarketViralContext", () => {
@@ -105,7 +105,7 @@ describe("buildRawInputWithVideoCopyContext", () => {
     expect(result).toContain("结构化拆解：\n## 结构拆解")
     expect(result).toContain("这是可读拆解")
     expect(result).toContain("爆款选题再创作 SOP")
-    expect(result).toContain("核心选题、开头机制、观点冲突和情绪触发点")
+    expect(result).toContain("核心选题、开头机制、观点冲突、情绪触发")
     expect(result).toContain("内部建立观点池")
     expect(result).toContain("结构重构、观点重构、表达重构")
     expect(result).not.toContain('"markdown"')

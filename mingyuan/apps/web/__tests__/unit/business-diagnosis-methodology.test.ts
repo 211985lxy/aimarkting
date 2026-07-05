@@ -394,16 +394,28 @@ describe("定位策划官 天命IP资产化操盘全案路由 (E)", () => {
     expect(systemPrompt).toContain("待补充证据")
   })
 
+  it("generate prompt 要求基于客户知识库输出而不是展示方法论公式", async () => {
+    const handler = getAgentHandler("business_diagnosis")
+    await handler.generate(buildGenerateContext())
+
+    const systemPrompt = capturedSystemPrompt()
+    expect(systemPrompt).toContain("客户知识库/客户资料/本轮上下文是正文依据")
+    expect(systemPrompt).toContain("禁止把方法论名称、定位公式、模块解释、占位符模板原样呈现给用户")
+    expect(systemPrompt).not.toContain("定位公式\"我是【身份】")
+  })
+
   it("商业诊断官 to_business_diagnosis 按钮生成天命全案", async () => {
     const guide = AIM_AGENT_GUIDES.business_system_diagnosis
     const action = guide.nextActions.find((a) => a.id === "to_business_diagnosis")
 
     expect(action).toBeDefined()
-    expect(action?.label).toBe("带入定位策划官")
+    expect(action?.label).toBe("带入灵感选题策划")
     expect(action?.targetAgentId).toBe("business_diagnosis")
     expect(action?.prompt).toContain("天命IP资产化操盘全案")
-    expect(action?.prompt).toContain("12 模块")
+    expect(action?.prompt).toContain("12 个客户结果段")
     expect(action?.prompt).toContain("交付资产化")
     expect(action?.prompt).toContain("未提供/待补充")
+    expect(action?.prompt).toContain("客户知识库")
+    expect(action?.prompt).toContain("不要把定位公式")
   })
 })

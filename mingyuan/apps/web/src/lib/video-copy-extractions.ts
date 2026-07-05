@@ -13,6 +13,8 @@ import type { Platform } from "@/lib/tikhub/types"
 import { parseUrl } from "@/lib/tikhub/url-parser"
 import type { NormalizedComment } from "@/lib/tikhub/types"
 
+const VIDEO_COPY_ANALYSIS_VERSION = "timeline-12s-v1"
+
 type VideoCopyExtractionRecord = NonNullable<
   Awaited<ReturnType<typeof prisma.videoCopyExtraction.findUnique>>
 >
@@ -220,18 +222,23 @@ export async function syncVideoCopyExtraction(
 
   const latest = await getVideoCopyExtractionForUser(userId, id)
   if (!latest?.transcript) return latest
-  if (latest.analysisResult) return latest
+  const currentAnalysis = latest.analysisResult as { analysisVersion?: unknown } | null
+  if (currentAnalysis?.analysisVersion === VIDEO_COPY_ANALYSIS_VERSION) return latest
 
   try {
     const analysis = await analyzeVideoCopy({
       title: latest.videoTitle,
       platform: latest.platform,
+      videoDuration: latest.videoDuration,
       transcript: latest.transcript,
     })
 
     // 分析完成后，抓取热评一并存进 analysisResult JSON
     const comments = await fetchTopComments(latest.platform, latest.sourceUrl)
-    const newAnalysisResult: Record<string, unknown> = { markdown: analysis.markdown }
+    const newAnalysisResult: Record<string, unknown> = {
+      markdown: analysis.markdown,
+      analysisVersion: VIDEO_COPY_ANALYSIS_VERSION,
+    }
     if (comments.length > 0) {
       newAnalysisResult.topComments = comments
     }

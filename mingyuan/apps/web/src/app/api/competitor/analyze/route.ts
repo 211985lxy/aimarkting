@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { withUserAuth } from '@/lib/user-auth'
-import { parseUrl } from '@/lib/tikhub/url-parser'
+import { checkUrlType, parseUrl } from '@/lib/tikhub/url-parser'
 import { runCompetitorAnalysisPipeline } from '@/lib/competitor-analysis/pipeline'
 import { getCompetitorPlatformGate } from '@/lib/competitor-analysis/platform-scope'
 import { logger } from '@/lib/logger'
@@ -24,6 +24,11 @@ export const POST = withUserAuth(async (request, { user }) => {
   const rawUrl = typeof body.url === 'string' ? body.url.trim() : ''
   if (!rawUrl) {
     return NextResponse.json({ error: 'INVALID_URL' }, { status: 400 })
+  }
+
+  const urlTypeError = checkUrlType(rawUrl)
+  if (urlTypeError) {
+    return NextResponse.json({ error: urlTypeError }, { status: 400 })
   }
 
   const parsed = parseUrl(rawUrl)

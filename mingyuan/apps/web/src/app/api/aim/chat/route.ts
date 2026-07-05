@@ -35,12 +35,25 @@ function normalizeMemoryMessages(messages: unknown): AimMemoryMessage[] {
     .map((item) => {
       const role = (item as { role?: unknown })?.role
       const content = (item as { content?: unknown })?.content
-      if ((role !== "user" && role !== "assistant") || typeof content !== "string") return null
-      const trimmed = content.trim()
+      if (role !== "user" && role !== "assistant") return null
+      const trimmed = extractTextContent(content).trim()
       if (!trimmed) return null
       return { role, content: trimmed } as AimMemoryMessage
     })
     .filter((item): item is AimMemoryMessage => item !== null)
+}
+
+function extractTextContent(content: unknown): string {
+  if (typeof content === "string") return content
+  if (!Array.isArray(content)) return ""
+  return content
+    .map((part) => {
+      if (!part || typeof part !== "object") return ""
+      const item = part as { type?: unknown; text?: unknown }
+      return item.type === "text" && typeof item.text === "string" ? item.text : ""
+    })
+    .filter(Boolean)
+    .join("\n")
 }
 
 function streamChatContent(chunks: AsyncIterable<string>, trace?: AimTraceRecorder) {
@@ -81,6 +94,9 @@ function streamChatContent(chunks: AsyncIterable<string>, trace?: AimTraceRecord
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
+        // 关闭 nginx 代理缓冲，确保流式 token 即时下发到客户端，
+        // 否则 nginx 会攒齐整个响应，长耗时时易触发 504。
+        "X-Accel-Buffering": "no",
       },
     },
   )
@@ -112,7 +128,7 @@ export async function POST(request: NextRequest) {
       projectId: projectId || null,
       agentId: agentId || null,
       action: toolAction ? "tool_action" : "chat",
-      inputSummary: messages[messages.length - 1]?.content,
+      inputSummary: extractTextContent(messages[messages.length - 1]?.content),
     })
     await addAimTraceStep(trace, {
       key: "route_request",
@@ -140,7 +156,7 @@ export async function POST(request: NextRequest) {
 
     // ── 普通聊天：使用统一知识上下文 ──
     const lastMessage = messages[messages.length - 1]
-    const query = typeof lastMessage?.content === "string" ? lastMessage.content.slice(0, 500) : ""
+    const query = extractTextContent(lastMessage?.content).slice(0, 500)
     const runtimeTask = resolveAimRuntimeTask({
       agentId,
       input: query,

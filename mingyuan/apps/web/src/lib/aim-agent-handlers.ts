@@ -31,6 +31,7 @@ import {
   type AimTraceRecorder,
 } from "@/lib/aim-observability"
 import { buildScenarioPromptBlock, type ContentScenario } from "@/lib/content-scenario-config"
+import { buildExplicitWordCountPriorityRule } from "@/lib/aim-benchmark-length"
 
 // ─── 类型定义 ──────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ export interface AimGenerateContext {
   hotTopic?: string
   polishInstruction?: string
   videoCopyExtractionId?: string
+  existingGenerationId?: string
   runtimeTask?: AimRuntimeTask
 
   // 共享数据上下文
@@ -475,6 +477,7 @@ ${BENCHMARK_REWRITE_GUARDRAIL}
 请严格按照格式输出。不要添加任何附加的大纲、平台栏目、私域话术、拆分方向、解释、点评或确认尾句。`
 
     const workflowContext = buildWorkflowContext(context)
+    const explicitWordCountRule = buildExplicitWordCountPriorityRule(context.rawInput)
     const userPrompt = `用户输入的原始内容：
 "${context.rawInput}"
 
@@ -483,7 +486,7 @@ ${workflowContext}
 
 ` : ""}
 
-请根据上下文判断：如果还没有明确文案框架，先输出文案框架；如果已经确认框架，直接输出正文。正文最后一句写完就停止，不要包含解释性文字、拆分方向、私域话术或确认尾句。`
+${explicitWordCountRule ? `字数冲突处理：${explicitWordCountRule}\n\n` : ""}请根据上下文判断：如果还没有明确文案框架，先输出文案框架；如果已经确认框架，直接输出正文。正文最后一句写完就停止，不要包含解释性文字、拆分方向、私域话术或确认尾句。`
 
     const { completion, parsed } = await executeGenerateLLMWithBenchmarkRetry(
       this.agentId,
@@ -653,7 +656,7 @@ class BusinessDiagnosisHandler implements AimAgentHandler {
 企业已有核心知识库（参考背景）：
 ${params.knowledgeBlock}
 
-IP操盘方法论（定位与内容策略判断规则）：
+IP操盘方法论（内部判断规则，只能用于推理，不得原样展示给用户）：
 ${params.methodologyBlock}
 
 你的对话原则：
@@ -666,7 +669,7 @@ ${params.methodologyBlock}
    - 工具包单项路由：用户只要求任务清单、采访清单、问卷表或脚本模板中的某一种时，只输出该单项工具，不顺手展开完整资产包。
    - 完整 IP 策划路由：用户要求定盘、策划方案、IP 全案（但未明确要求天命操盘全案）时，提醒可点击【一键生成】交付完整方案。
    - 人设卖点梳理路由：用户提供采访稿、成长经历、客户人设素材时，先提炼人设卖点、差异化特色、可信证据和可表达角度。
-   - 天命IP资产化操盘全案路由：当用户明确提到「天命IP」「资产化」「操盘全案」「12 模块」，或对话上下文来自商业诊断官（生意系统体检）并要求进一步做 IP 全案时，走这条路由。该路由输出固定 12 模块的《天命IP资产化操盘全案》（项目总判断、天命底盘、IP主定位、目标客户、核心问题、IP价值、产品设计、内容系统、流量闭环、私域成交、交付资产化、行动处方），提醒可点击【一键生成】交付完整全案。没有八字/紫微资料时，天命底盘写「未提供/待补充」，不编造命理。
+   - 天命IP资产化操盘全案路由：当用户明确提到「天命IP」「资产化」「操盘全案」「12 模块」，或对话上下文来自商业诊断官（生意系统体检）并要求进一步做 IP 全案时，走这条路由。该路由输出固定 12 个客户结果段（项目总判断、天命底盘、IP主定位、目标客户、核心问题、IP价值、产品设计、内容系统、流量闭环、私域成交、交付资产化、行动处方），每段都必须基于客户知识库/客户资料/本轮上下文推导；方法论只做后台判断，不得把方法论名称、公式、模块解释原样呈现给用户。没有八字/紫微资料时，天命底盘写「未提供/待补充」，不编造命理。
 3. 日更100条选题路由必须先展示"选题方法论底盘"，且只能使用四类选题方法论：
    - 热点类：结合当前行业、平台和对标账号正在发生的热点，但必须回到本账号的产品、客户和观点，不硬蹭。
    - 人设类：让用户相信"这个人靠谱、懂我、值得听"；适合来时路、价值观、专业经历、踩坑、工作现场、vlog。
@@ -716,7 +719,7 @@ ${params.methodologyBlock}
 企业已有核心知识库（参考背景）：
 ${context.knowledgeBlock}
 
-IP操盘方法论（定位与内容策略判断规则）：
+IP操盘方法论（内部判断规则，只能用于推理，不得原样展示给用户）：
 ${context.methodologyBlock}
 
 策划方案输出结构要求：
@@ -760,13 +763,13 @@ E. 天命IP资产化操盘全案路由
 触发条件（满足任一即走本路由，不走 A-D）：
 - 用户明确提到「天命IP」「资产化」「操盘全案」「12 模块」「商业验证后」；
 - 上下文来自商业诊断官（生意系统体检），并要求进一步做 IP 全案或操盘框架。
-输出固定 12 个模块（顺序固定，缺一不可）：
+输出固定 12 个客户结果段（顺序固定，缺一不可）：
 1. 项目总判断：一句话判断核心问题——"这个 IP 当前不是【表面问题】，而是【底层问题】"，附当前阶段判断、最大卡点、优先解决方向。
 2. 天命底盘：从主理人的八字/紫微判断适合的身份路线、站前台还是幕后、强项方向、不适合硬装的方向；只用于商业表达和人设校准，不做玄学展示。没有命理资料时写"未提供/待补充"，基于已知经历、能力、表达气质做推断判断，绝不编造命理结论。
-3. IP 主定位：定位公式"我是【身份】，帮助【人群】，解决【问题】，获得【结果】"；附主身份、目标人群、核心问题、一句话定位、不建议使用的标签。
+3. IP 主定位：直接给出适合该客户的主身份、目标人群、核心问题、一句话定位、不建议使用的标签，并说明分别来自客户知识库里的哪些事实或本轮输入；不要展示"定位公式"或占位模板。
 4. 目标客户：只抓最值得成交和最适合交付的人；输出核心客户、不适合客户、客户筛选标准。
 5. 核心问题：区分客户表面需求（流量/涨粉/课程/工具/话术）和真实问题（身份不清、经验没产品化、内容没信任感、私域没承接、成交没诊断逻辑、交付没沉淀）。
-6. IP 价值：天命优势 × 用户需求 × 信任资产 × 产品承接 × 交付复用；输出价值判断、变现潜力、当前最值得放大的优势、当前最需要补齐的短板。
+6. IP 价值：结合客户已提供的经历、能力、案例、用户需求、信任资产、产品承接和交付复用潜力，输出价值判断、变现潜力、当前最值得放大的优势、当前最需要补齐的短板；不要展示方法论公式。
 7. 产品设计：从"客户愿意为什么结果付费"出发；输出产品阶梯（引流品→低客单→中客单→高客单）、主推产品、高客单成果包、产品边界、升级路径；高客单卖成果不卖时间。
 8. 内容系统：围绕定位和成交搭栏目（认知类/方法类/案例类/转化类）；输出内容主线、内容栏目、选题方向、置顶视频方向、转化型内容设计。
 9. 流量闭环：内容触达→互动→领资料→加微信→填诊断→进社群/咨询→转化产品→沉淀案例；输出引流路径、私信关键词、微信承接动作、社群/私域培育方式、转化入口。
@@ -774,6 +777,7 @@ E. 天命IP资产化操盘全案路由
 11. 交付资产化：把经验沉淀成资产（定位表/用户画像/产品说明页/选题库/私域话术/成交问答/案例库/交付 SOP/知识库/智能体）；输出交付流程、SOP 清单、案例沉淀、知识库结构、智能体方向。
 12. 行动处方：只给优先级——"当前第一优先级不是【错误动作】，而是【正确动作】。接下来只做三件事：1…2…3…"，一句话结论收尾。
 本路由硬约束：
+- 客户知识库/客户资料/本轮上下文是正文依据，方法论只做后台推理；禁止把方法论名称、定位公式、模块解释、占位符模板原样呈现给用户。
 - 每个模块都要能指导后续选题、文案、产品承接、私域成交和交付资产化，不能只给静态描述。
 - 全案必须区分「已验证事实 / 推断判断 / 待补充证据」三类，缺数据写待补充，不编造。
 - 天命底盘无命理资料时必须写"未提供/待补充"，不输出玄学断言。
@@ -1561,6 +1565,7 @@ ${BENCHMARK_REWRITE_GUARDRAIL}
 
 function buildUserPrompt(context: AimGenerateContext, formatBlocks: string): string {
   const workflowContext = buildWorkflowContext(context)
+  const explicitWordCountRule = buildExplicitWordCountPriorityRule(context.rawInput)
   const contextInstruction = context.runtimeTask === "light_edit"
     ? "请只根据用户原文、选区和修改要求做局部优化；替换稿只改用户点名的内容，不要顺手改未点名的开头、工具名、结尾或结构；如果用户只要求优化开头/前三秒/第一句话/钩子，只输出 3-5 个开头候选或一个开头替换稿，禁止输出整篇文案；可以给开头、结构、结尾等简短可选建议，但不要主动结合企业知识库扩写。"
     : "请根据以上内容，结合企业知识库中的相关信息，生成以下格式的营销内容："
@@ -1580,6 +1585,8 @@ ${contextInstruction}
 
 ${formatBlocks}
 
+${explicitWordCountRule ? `字数冲突处理：${explicitWordCountRule}\n` : ""}
+
 输出格式要求：
 ${context.targetFormats.map((format) => `===FORMAT:${format}===\n（在这里输出${format}的内容）`).join("\n\n")}`
 }
@@ -1595,8 +1602,7 @@ async function saveAimGenerationRecord(
     category: entry.category,
   }))
 
-  return prisma.aimGeneration.create({
-    data: {
+  const data = {
       userId: context.userId,
       agentId: context.agentId,
       projectId: context.projectId || null,
@@ -1616,6 +1622,20 @@ async function saveAimGenerationRecord(
       model: completion.model,
       totalTokens: completion.usage?.totalTokens || null,
       status: "completed",
-    },
-  })
+  }
+
+  if (context.existingGenerationId) {
+    const existing = await prisma.aimGeneration.findFirst({
+      where: { id: context.existingGenerationId, userId: context.userId },
+      select: { id: true },
+    })
+    if (existing) {
+      return prisma.aimGeneration.update({
+        where: { id: existing.id },
+        data,
+      })
+    }
+  }
+
+  return prisma.aimGeneration.create({ data })
 }

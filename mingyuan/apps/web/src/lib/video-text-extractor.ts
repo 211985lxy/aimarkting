@@ -97,6 +97,9 @@ export function assertSupportedVideoUrl(input: string): string {
     throw new Error("请输入正确的视频链接")
   }
   const hostname = parsed.hostname.toLowerCase()
+  if (hostname.includes("douyinvod.com")) {
+    throw new Error("请粘贴抖音分享页或作品页链接，不要粘贴视频文件直链")
+  }
   if (
     hostname === "localhost"
     || hostname === "0.0.0.0"

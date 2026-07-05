@@ -67,7 +67,7 @@ import {
   type AimWorkbenchSkill,
 } from "@/lib/aim-agent-guides"
 import { useAimWorkspaceStore } from "@/lib/aim-workspace-store"
-import { buildBenchmarkLengthRule, buildBenchmarkRecreationSopBlock } from "@/lib/aim-benchmark-length"
+import { BENCHMARK_RECREATION_PREFILL, buildBenchmarkLengthRule, buildBenchmarkRecreationSopBlock } from "@/lib/aim-benchmark-length"
 import { assessBenchmarkRewrite } from "@/lib/aim-benchmark-quality"
 import { shouldOpenDeepCopywriter } from "@/lib/video-copy-routing"
 import { cleanVideoCopyAnalysisMarkdown } from "@/lib/video-copy-display"
@@ -1093,9 +1093,7 @@ export default function AimPage() {
         const lengthRule = buildBenchmarkLengthRule(record.transcript)
         const recreationSop = buildBenchmarkRecreationSopBlock()
         const prefill = [
-          isDeepCopy
-            ? "请基于下面这条长对标文案和已有拆解，按爆款选题再创作 SOP，创作一篇适合我自己的完整长篇文案。"
-            : "请基于下面这条对标文案，按爆款选题再创作 SOP，创作成适合我自己的口播文案。",
+          isDeepCopy ? BENCHMARK_RECREATION_PREFILL.long : BENCHMARK_RECREATION_PREFILL.short,
           "",
           "创作原则：",
           recreationSop,

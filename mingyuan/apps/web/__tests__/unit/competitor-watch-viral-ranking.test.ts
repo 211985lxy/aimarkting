@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { calculateViralVideos } from "@/app/api/competitor/watch-accounts/refresh/route"
-import type { WatchVideoInput } from "@/app/api/competitor/watch-accounts/refresh/route"
+import { calculateViralVideos } from "@/lib/competitor-watch-viral"
+import type { WatchVideoInput } from "@/lib/competitor-watch-viral"
 
 function video(index: number, likes: number): WatchVideoInput {
   return {

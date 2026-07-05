@@ -8,15 +8,15 @@
 
 | 页面路由 | 物理文件路径 | SEO 评分 | A11y 评分 | 自动化测试得分 | 综合评级 |
 | --- | --- | --- | --- | --- | --- |
-| `/` | [page.tsx](file:////Users/xiangyu/Desktop/明动aim智能体/clipflow/apps/web/src/app/(marketing)/page.tsx) | **90** | **100** | **100** | 🟢 优秀 (A) |
-| `/home` | [page.tsx](file:////Users/xiangyu/Desktop/明动aim智能体/clipflow/apps/web/src/app/(dashboard)/home/page.tsx) | **90** | **100** | **100** | 🟢 优秀 (A) |
-| `/ip-profile` | [page.tsx](file:////Users/xiangyu/Desktop/明动aim智能体/clipflow/apps/web/src/app/(dashboard)/ip-profile/page.tsx) | **90** | **90** | **85** | 🟡 良好 (B) |
-| `/aim` | [page.tsx](file:////Users/xiangyu/Desktop/明动aim智能体/clipflow/apps/web/src/app/(dashboard)/aim/page.tsx) | **90** | **90** | **85** | 🟡 良好 (B) |
-| `/quality-check` | [page.tsx](file:////Users/xiangyu/Desktop/明动aim智能体/clipflow/apps/web/src/app/(dashboard)/quality-check/page.tsx) | **90** | **100** | **100** | 🟢 优秀 (A) |
+| `/` | [page.tsx](file:////Users/xiangyu/Desktop/02-业务-明动aim智能体/mingyuan/apps/web/src/app/(marketing)/page.tsx) | **90** | **100** | **100** | 🟢 优秀 (A) |
+| `/home` | [page.tsx](file:////Users/xiangyu/Desktop/02-业务-明动aim智能体/mingyuan/apps/web/src/app/(dashboard)/home/page.tsx) | **90** | **100** | **100** | 🟢 优秀 (A) |
+| `/ip-profile` | [page.tsx](file:////Users/xiangyu/Desktop/02-业务-明动aim智能体/mingyuan/apps/web/src/app/(dashboard)/ip-profile/page.tsx) | **90** | **90** | **85** | 🟡 良好 (B) |
+| `/aim` | [page.tsx](file:////Users/xiangyu/Desktop/02-业务-明动aim智能体/mingyuan/apps/web/src/app/(dashboard)/aim/page.tsx) | **90** | **90** | **85** | 🟡 良好 (B) |
+| `/quality-check` | [page.tsx](file:////Users/xiangyu/Desktop/02-业务-明动aim智能体/mingyuan/apps/web/src/app/(dashboard)/quality-check/page.tsx) | **90** | **100** | **100** | 🟢 优秀 (A) |
 NaN### 💡 核心审计洞察与改进建议
 
 ### 📍 页面 `/` 详细报告
-文件路径: [apps/web/src/app/(marketing)/page.tsx](file:////Users/xiangyu/Desktop/明动aim智能体/clipflow/apps/web/src/app/(marketing)/page.tsx)
+文件路径: [apps/web/src/app/(marketing)/page.tsx](file:////Users/xiangyu/Desktop/02-业务-明动aim智能体/mingyuan/apps/web/src/app/(marketing)/page.tsx)
 
 #### 🔍 SEO 搜索引擎优化缺陷 (90/100)
 - ⚠️ 语义化 HTML5 元素（如 `<main>`、`<section>`）使用较少，大篇幅使用普通的 `<div>` 会降低 SEO 结构分。
@@ -24,7 +24,7 @@ NaN### 💡 核心审计洞察与改进建议
 ---
 
 ### 📍 页面 `/home` 详细报告
-文件路径: [apps/web/src/app/(dashboard)/home/page.tsx](file:////Users/xiangyu/Desktop/明动aim智能体/clipflow/apps/web/src/app/(dashboard)/home/page.tsx)
+文件路径: [apps/web/src/app/(dashboard)/home/page.tsx](file:////Users/xiangyu/Desktop/02-业务-明动aim智能体/mingyuan/apps/web/src/app/(dashboard)/home/page.tsx)
 
 #### 🔍 SEO 搜索引擎优化缺陷 (90/100)
 - ⚠️ 语义化 HTML5 元素（如 `<main>`、`<section>`）使用较少，大篇幅使用普通的 `<div>` 会降低 SEO 结构分。
@@ -32,7 +32,7 @@ NaN### 💡 核心审计洞察与改进建议
 ---
 
 ### 📍 页面 `/ip-profile` 详细报告
-文件路径: [apps/web/src/app/(dashboard)/ip-profile/page.tsx](file:////Users/xiangyu/Desktop/明动aim智能体/clipflow/apps/web/src/app/(dashboard)/ip-profile/page.tsx)
+文件路径: [apps/web/src/app/(dashboard)/ip-profile/page.tsx](file:////Users/xiangyu/Desktop/02-业务-明动aim智能体/mingyuan/apps/web/src/app/(dashboard)/ip-profile/page.tsx)
 
 #### 🔍 SEO 搜索引擎优化缺陷 (90/100)
 - ⚠️ 语义化 HTML5 元素（如 `<main>`、`<section>`）使用较少，大篇幅使用普通的 `<div>` 会降低 SEO 结构分。
@@ -46,7 +46,7 @@ NaN### 💡 核心审计洞察与改进建议
 ---
 
 ### 📍 页面 `/aim` 详细报告
-文件路径: [apps/web/src/app/(dashboard)/aim/page.tsx](file:////Users/xiangyu/Desktop/明动aim智能体/clipflow/apps/web/src/app/(dashboard)/aim/page.tsx)
+文件路径: [apps/web/src/app/(dashboard)/aim/page.tsx](file:////Users/xiangyu/Desktop/02-业务-明动aim智能体/mingyuan/apps/web/src/app/(dashboard)/aim/page.tsx)
 
 #### 🔍 SEO 搜索引擎优化缺陷 (90/100)
 - ⚠️ 语义化 HTML5 元素（如 `<main>`、`<section>`）使用较少，大篇幅使用普通的 `<div>` 会降低 SEO 结构分。
@@ -60,7 +60,7 @@ NaN### 💡 核心审计洞察与改进建议
 ---
 
 ### 📍 页面 `/quality-check` 详细报告
-文件路径: [apps/web/src/app/(dashboard)/quality-check/page.tsx](file:////Users/xiangyu/Desktop/明动aim智能体/clipflow/apps/web/src/app/(dashboard)/quality-check/page.tsx)
+文件路径: [apps/web/src/app/(dashboard)/quality-check/page.tsx](file:////Users/xiangyu/Desktop/02-业务-明动aim智能体/mingyuan/apps/web/src/app/(dashboard)/quality-check/page.tsx)
 
 #### 🔍 SEO 搜索引擎优化缺陷 (90/100)
 - ⚠️ 语义化 HTML5 元素（如 `<main>`、`<section>`）使用较少，大篇幅使用普通的 `<div>` 会降低 SEO 结构分。

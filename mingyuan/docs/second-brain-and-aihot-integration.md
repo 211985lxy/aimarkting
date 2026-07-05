@@ -118,7 +118,7 @@ sequenceDiagram
   $$\text{Gap} = \text{Pass Score} - \text{Current Score}$$
 - **焦点锁定**：系统**挑选 Gap 最大的那个木桶短板作为本次重写的唯一焦点（Target Focus）**，分派给上述对应的四大专属子 Agent 执行高精度精修。
 - **测试指令**：
-  在 `clipflow/apps/web` 下执行以下命令可进行四维及格与四大改写 prompt 的闭环断言测试：
+  在 `mingyuan/apps/web` 下执行以下命令可进行四维及格与四大改写 prompt 的闭环断言测试：
   ```bash
   npx vitest run __tests__/unit/quality-gate.test.ts
   ```
@@ -128,7 +128,7 @@ sequenceDiagram
 ## 4. 生产环境部署与运维 (Runbook)
 
 ### 4.1 环境变量配置
-在 `clipflow/apps/web/.env` 文件中配置以下变量：
+在 `mingyuan/apps/web/.env` 文件中配置以下变量：
 ```bash
 # Obsidian 双脑同步云端鉴权密钥 (需与本地配置文件一致)
 OBSIDIAN_SYNC_TOKEN="your-secure-obsidian-sync-secret-key"

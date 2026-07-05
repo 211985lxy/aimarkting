@@ -92,14 +92,22 @@ export async function generateEmbedding(text: string): Promise<EmbeddingResult |
 
   const config = readConfig()
 
-  try {
-    const response = await client.embeddings.create({
+  // BGE 系列模型 token 上限约 512（≈1500 中文字符），过长的 input 会触发 400。
+  // 截断到安全长度，避免批量调用时刷屏 400。
+  const maxChars = config.model.startsWith("BAAI/bge") ? 1500 : 8000
+  const truncated = text.slice(0, maxChars)
+
+  const tryCreate = () =>
+    client.embeddings.create({
       model: config.model,
-      input: text.slice(0, 8000), // safety truncation
+      input: truncated,
       // 部分模型（如 OpenAI ada-002）支持 dimensions 参数，部分（如 BGE）不支持
       // 仅当模型名以 text-embedding 开头时传递 dimensions
       ...(config.model.startsWith("text-embedding") ? { dimensions: config.dimensions } : {}),
     })
+
+  try {
+    const response = await tryCreate()
 
     const data = response.data[0]
     if (!data) return null
@@ -111,8 +119,24 @@ export async function generateEmbedding(text: string): Promise<EmbeddingResult |
       tokensUsed: response.usage?.prompt_tokens ?? 0,
     }
   } catch (error) {
-    console.warn("[embedding] generation failed:", error)
-    return null
+    // 失败一次重试（间歇性 400/网络抖动），仍失败则降级返回 null（上层会回退到 raw 检索）
+    try {
+      const response = await tryCreate()
+      const data = response.data[0]
+      if (!data) return null
+      return {
+        vector: data.embedding,
+        model: response.model,
+        dimensions: config.dimensions,
+        tokensUsed: response.usage?.prompt_tokens ?? 0,
+      }
+    } catch (retryError) {
+      console.warn(
+        `[embedding] generation failed (model=${config.model}, inputLen=${truncated.length}):`,
+        retryError,
+      )
+      return null
+    }
   }
 }
 

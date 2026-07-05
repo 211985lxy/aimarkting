@@ -1,20 +1,15 @@
-# Project Rules
+# 项目补充规则（运维与部署）
 
-## Product Architecture
+> 本文件是根 `AGENTS.md` 的补充，仅记录部署/运维相关信息。产品架构、命令、硬规则、视频包装说明等以根 `AGENTS.md` 为准。
 
-- Video creation is a three-layer system and these layers MUST stay distinct across UI, prompt design, API contracts, task lineage, and analytics.
-- Director layer: decides how the video is structured and paced. This corresponds to video structure templates and narrative blueprints.
-- Scriptwriter layer: decides how the message is expressed and sold. This corresponds to content templates, brief inputs, IP profile context, and script generation.
-- Packaging layer: decides how the final video is visually assembled and mixed. This corresponds to Shanjian packaging templates, materials, BGM, subtitles, and layout capabilities such as picture-in-picture-style compositions.
-- Shanjian packaging templates MUST NOT be modeled as content structure templates or script templates.
-- Any change to `/create`, script generation, or video task creation MUST state which layer it affects and MUST preserve downstream lineage for that layer.
+## 视频架构说明
 
-## UI Rules
+历史上视频创作是「导演层 / 编剧层 / 包装层」三层架构。现在主流程只剩**创作（导演层 + 编剧层）**，包装层（闪剪成片）已脱离主流程，标记为待删死代码。
 
-- All UI-related work must invoke the `ui-ux-pro-max` skill first to keep the design language and visuals consistent.
-- UI components must use `shadcn/ui` only. No alternative UI component libraries or custom component systems are allowed.
+详见根 `AGENTS.md` 的「视频包装」一节。
 
-## kube
+## 部署与运维（仅部署环境，开发机无此配置）
 
-KUBECONFIG=~/.kube/config-ask-aibao365
-阿里云 AccessKey 存在以下位置：profile 名为 aliyun-aibao365（存储在 ~/.aliyun/config.json）
+- Kube 配置：`KUBECONFIG=~/.kube/config-ask-aibao365`（部署机，开发机不存在）
+- 阿里云 AccessKey：profile 名为 `aliyun-aibao365`，存储在 `~/.aliyun/config.json`（部署机）
+- ECS 独立部署脚本：`mingyuan/scripts/deploy-ecs-standalone.sh`

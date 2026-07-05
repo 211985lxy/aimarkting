@@ -11,7 +11,12 @@ import {
   extractBenchmarkOriginalCopy,
   isBenchmarkCopyTooSimilar,
 } from "@/lib/aim-agent-handlers"
-import { buildBenchmarkLengthRule, buildBenchmarkRecreationSopBlock } from "@/lib/aim-benchmark-length"
+import {
+  BENCHMARK_RECREATION_PREFILL,
+  buildBenchmarkLengthRule,
+  buildBenchmarkRecreationSopBlock,
+  buildExplicitWordCountPriorityRule,
+} from "@/lib/aim-benchmark-length"
 
 describe("AIM content production positioning", () => {
   it("keeps the required standalone content agents", () => {
@@ -64,8 +69,16 @@ describe("AIM content production positioning", () => {
 
     expect(rule).toContain("目标约 5 字")
     expect(rule).toContain("控制在 5-5 字")
-    expect(rule).toContain("不要摘要")
+    expect(rule).toContain("如果用户没有另写明确字数要求")
     expect(buildBenchmarkLengthRule("")).toBeNull()
+  })
+
+  it("lets explicit user word count override benchmark length", () => {
+    const rule = buildBenchmarkLengthRule("一 二 三 四 五", "请写一篇不少于2000字的长文") || ""
+
+    expect(rule).toContain("必须优先服从用户字数")
+    expect(rule).not.toContain("控制在 5-5 字")
+    expect(buildExplicitWordCountPriorityRule("请输出两千字")).toContain("必须优先服从用户字数")
   })
 
   it("requires visible rewrite for benchmark copy", () => {
@@ -77,9 +90,15 @@ describe("AIM content production positioning", () => {
     const sop = buildBenchmarkRecreationSopBlock()
 
     expect(sop).toContain("爆款选题再创作 SOP")
-    expect(sop).toContain("核心选题、开头机制、观点冲突和情绪触发点")
+    expect(sop).toContain("已有拆解里的爆款结构逻辑")
+    expect(sop).toContain("核心选题、开头机制、观点冲突、情绪触发")
     expect(sop).toContain("内部建立观点池")
     expect(sop).toContain("结构重构、观点重构、表达重构")
+  })
+
+  it("prefills benchmark recreation with the dissected viral structure first", () => {
+    expect(BENCHMARK_RECREATION_PREFILL.short).toContain("先按拆解好的爆款结构逻辑走")
+    expect(BENCHMARK_RECREATION_PREFILL.long).toContain("先按拆解好的爆款结构逻辑走")
   })
 
   it("returns publish packages directly in chat with brand-related topics", () => {

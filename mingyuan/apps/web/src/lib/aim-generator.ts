@@ -35,6 +35,7 @@ interface AimInput {
   videoCopyExtractionId?: string
   runtimeTask?: AimRuntimeTask
   contentScenario?: ContentScenario
+  existingGenerationId?: string
   trace?: AimTraceRecorder
 }
 

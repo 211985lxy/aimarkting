@@ -1,4 +1,6 @@
-# ClipFlow 激活码管理指南
+> **⚠️ OUTDATED — 路径和数据库名（clipflow）已过时，当前项目为 mingyuan。** 保留仅作历史参考。
+
+# ClipFlow 激活码管理指南（历史）
 
 激活码用于限制注册和延长用户会员有效期。当前实现以管理后台和 Next.js API 为主，不再依赖根目录下的 `generate-codes.sh` / `export-codes.sh` 旧脚本。
 

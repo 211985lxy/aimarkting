@@ -43,10 +43,10 @@ export async function getAliyunNlsToken(): Promise<string> {
     Format: "JSON",
     RegionId: regionId,
     SignatureMethod: "HMAC-SHA1",
-    SignatureNonce: crypto.randomBytes(16).toString("hex"),
+    SignatureNonce: crypto.randomUUID(),
     SignatureVersion: "1.0",
     Timestamp: timestamp,
-    Version: "2018-05-18",
+    Version: "2019-02-28",
   }
 
   // 升序排列参数

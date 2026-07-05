@@ -117,7 +117,7 @@ async function updateStatus(id: string, status: string): Promise<void> {
   })
 }
 
-function sanitizeErrorForUser(err: unknown): string {
+export function sanitizeErrorForUser(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err)
   // User-safe messages from analyzer pass through
   if (msg.startsWith('AI 分析')) return msg
@@ -125,6 +125,12 @@ function sanitizeErrorForUser(err: unknown): string {
   // 如果是本地物理抓取失败，直接透传该明确的业务和诊断报错，避免被下方的模糊过滤误杀
   if (msg.includes('本地物理抓取失败')) {
     return msg
+  }
+  if (msg.includes('未配置真实对标账号抓取服务')) {
+    return msg
+  }
+  if (msg.includes('AccessDenied') || msg.includes('Unauthorized') || msg.includes('Forbidden')) {
+    return `数据采集服务权限失败：${msg}`
   }
   
   // Explicitly warn about missing TIKHUB_API_KEY (精准匹配，绝不误杀)

@@ -6,30 +6,33 @@ import type { LLMProvider, LLMProviderConfig } from "./types"
 /**
  * 智能体模型路由策略
  *
- * 核心思路：DeepSeek 走官方直连（无中转差价），其他模型走中转站聚合
- * - 深度文案官 / 定位策划官 → DeepSeek 优先，稳定产出
- * - 内容生产 / 商业诊断 / 数据复盘 → DeepSeek（官方直连，日常分发成本低）
+ * 核心思路：关键创作优先质量，日常生产优先稳定低成本
+ * - 深度文案 / 商业选题 → 离火 GPT-5.5 优先，OpenRouter 国产强模型兜底
+ * - 内容生产 / 质检 → DeepSeek 直连优先，OpenRouter 国产快模型兜底
  *
- * provider 名与 config.ts 一致：deepseek / jiekou / openrouter / therouter / glm / openai
+ * provider 名与 config.ts 一致：deepseek / jiekou / openrouter / therouter / glm / lihuo / openai
  * model 为可选，覆盖 provider 的默认模型（同一 provider 下不同智能体可用不同模型）
  */
 
 type AgentModelRoute = { name: string; model?: string }
 
 const AGENT_ROUTES: Record<string, AgentModelRoute[]> = {
-  // ── 高质量写作组 ──
-  // Claude 当前受地区限制，先走 DeepSeek；中转模型只做备用。
+  // ── 高质量写作 / 选题策划组 ──
   deep_copywriter: [
+    { name: "lihuo", model: "gpt-5.5" },
+    { name: "openrouter", model: "qwen/qwen3.7-plus" },
+    { name: "openrouter", model: "moonshotai/kimi-k2.6" },
     { name: "deepseek" },
     { name: "jiekou" },
-    { name: "openrouter" },
     { name: "therouter" },
     { name: "glm" },
   ],
   business_diagnosis: [
+    { name: "lihuo", model: "gpt-5.5" },
+    { name: "openrouter", model: "deepseek/deepseek-v4-pro" },
+    { name: "openrouter", model: "z-ai/glm-5.2" },
     { name: "deepseek" },
     { name: "jiekou" },
-    { name: "openrouter" },
     { name: "therouter" },
     { name: "glm" },
   ],
@@ -38,18 +41,34 @@ const AGENT_ROUTES: Record<string, AgentModelRoute[]> = {
   // DeepSeek 官方直连价格最低，不走中转站加价；直连不可用时才回退到中转站
   content_producer: [
     { name: "deepseek" },
+    { name: "openrouter", model: "qwen/qwen3.7-plus" },
     { name: "jiekou" },
     { name: "glm" },
   ],
   business_system_diagnosis: [
     { name: "deepseek" },
+    { name: "openrouter", model: "deepseek/deepseek-v4-pro" },
+    { name: "openrouter", model: "z-ai/glm-5.2" },
     { name: "jiekou" },
     { name: "glm" },
   ],
   content_review: [
     { name: "deepseek" },
+    { name: "openrouter", model: "deepseek/deepseek-v4-flash" },
+    { name: "openrouter", model: "bytedance-seed/seed-1.6-flash" },
     { name: "jiekou" },
     { name: "glm" },
+  ],
+  persona: [
+    { name: "deepseek" },
+    { name: "openrouter", model: "moonshotai/kimi-k2.6" },
+    { name: "openrouter", model: "qwen/qwen3.7-plus" },
+    { name: "jiekou" },
+    { name: "glm" },
+  ],
+  vision_analysis: [
+    { name: "openrouter", model: "qwen/qwen3-vl-8b-instruct" },
+    { name: "openrouter", model: "qwen/qwen3-vl-235b-a22b-instruct" },
   ],
 }
 

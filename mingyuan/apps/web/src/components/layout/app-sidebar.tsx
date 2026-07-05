@@ -16,6 +16,7 @@ import {
   ChevronRight,
   MoreHorizontal,
   Trash2,
+  LogIn,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -83,6 +84,7 @@ const navGroups: NavGroup[] = [
 
 const footerItems: NavItem[] = [
   { title: "账户设置", href: "/account", icon: Settings },
+  { title: "切换账号", href: "/login?switch=1", icon: LogIn },
 ]
 
 const coreAimAgentIds: AimAgentId[] = [
@@ -104,6 +106,8 @@ function formatHistoryDate(value: string) {
 
 function extractHistoryTheme(input: string) {
   const lines = input.split("\n").map((line) => line.trim()).filter(Boolean)
+  const lastUserLine = [...lines].reverse().find((line) => line.startsWith("用户："))
+  if (lastUserLine) return compactHistoryTheme(lastUserLine.replace(/^用户：\s*/, ""))
   const labeled = lines.find((line) => /^(对标标题|选题|主题|标题)[:：]/.test(line))
   if (labeled) return compactHistoryTheme(labeled.replace(/^(对标标题|选题|主题|标题)[:：]\s*/, ""))
 

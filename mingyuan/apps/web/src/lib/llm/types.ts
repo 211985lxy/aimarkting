@@ -35,6 +35,7 @@ export interface LLMProviderConfig {
   apiKey: string
   baseURL: string
   defaultModel: string
+  defaultHeaders?: Record<string, string>
 }
 
 export interface LLMProvider {

@@ -37,6 +37,7 @@ export interface ParseGenerateBodyResult {
   hotTopic: string | undefined
   polishInstruction: string | undefined
   useMarketViralVideos: boolean | undefined
+  existingGenerationId: string | undefined
 }
 
 export function parseGenerateBody(body: Record<string, unknown>): ParseGenerateBodyResult {
@@ -83,6 +84,7 @@ export function parseGenerateBody(body: Record<string, unknown>): ParseGenerateB
     polishInstruction: typeof body.polishInstruction === "string" ? body.polishInstruction : undefined,
     useMarketViralVideos:
       typeof body.useMarketViralVideos === "boolean" ? body.useMarketViralVideos : undefined,
+    existingGenerationId: typeof body.existingGenerationId === "string" ? body.existingGenerationId.trim() || undefined : undefined,
   }
 }
 

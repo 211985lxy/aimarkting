@@ -4,6 +4,7 @@ import { cleanVideoCopyAnalysisMarkdown } from "@/lib/video-copy-display"
 export interface VideoCopyAnalysisInput {
   title?: string | null
   platform?: string | null
+  videoDuration?: string | null
   transcript: string
 }
 
@@ -19,9 +20,14 @@ function splitSentences(text: string): string[] {
     .filter(Boolean)
 }
 
+function buildFallbackStructureEffect(): string {
+  return "结构作用：文案动作：承接上一个信息点，继续推进冲突、解释或判断。用户心理：让用户顺着问题继续追问原因。商业意图：把泛泛看热闹的人筛成愿意理解方法的人。可复用模板：先抛出现象，再拆关键原因，最后落到可判断的结论。"
+}
+
 export function buildFallbackVideoCopyAnalysis(input: VideoCopyAnalysisInput): VideoCopyAnalysis {
   const sentences = splitSentences(input.transcript)
   const hook = sentences[0] ?? input.transcript.slice(0, 80)
+  const bodyEnd = sentences.length > 4 ? sentences.length - 2 : sentences.length - 1
   const methodMatches = [
     input.transcript.match(/第一个[，,、\s]*[^。！？!?]{2,30}/),
     input.transcript.match(/第二[，,、\s]*[^。！？!?]{2,30}/),
@@ -29,24 +35,27 @@ export function buildFallbackVideoCopyAnalysis(input: VideoCopyAnalysisInput): V
   ]
   const methodSections = methodMatches.every(Boolean)
     ? methodMatches.map((match, index) => [
-        `### 正文-${index + 1}：${match![0]}`,
+        `### 约${(index + 1) * 12}-${(index + 2) * 12}秒：${match![0]}`,
         `原文片段：${input.transcript.slice(match!.index, Math.min(input.transcript.length, match!.index! + 180))}`,
-        "结构作用：作为正文中的独立方法节点，承接前文判断并推进一个具体操作。",
+        buildFallbackStructureEffect(),
         "",
       ].join("\n"))
-    : [
-        `### 正文\n${sentences.slice(1, 5).join("\n") || "正文待分析"}`,
-      ]
+    : sentences.slice(1, bodyEnd).slice(0, 6).map((sentence, index) => [
+        `### 约${(index + 1) * 12}-${(index + 2) * 12}秒：${sentence.slice(0, 18)}`,
+        `原文片段：${sentence}`,
+        buildFallbackStructureEffect(),
+        "",
+      ].join("\n"))
 
   return {
     markdown: cleanVideoCopyAnalysisMarkdown([
       "## 结构拆解",
       "",
-      `### 开头\n${hook}`,
+      `### 约0-12秒：开头钩子\n${hook}`,
       "",
       ...methodSections,
       "",
-      `### 结尾\n${sentences.slice(-2).join("\n") || "结尾待分析"}`,
+      `### 约${Math.max(0, (sentences.length - 2) * 12)}-${Math.max(12, sentences.length * 12)}秒：结尾收束\n${sentences.slice(-2).join("\n") || "结尾待分析"}`,
       "",
       "## 心理拆解",
       "",
@@ -98,20 +107,26 @@ export function buildVideoCopyAnalysisMessages(input: VideoCopyAnalysisInput): C
 - 不要泛泛而谈"这个开头很吸引人"。
 - 每个判断都要说明"为什么有效"。
 - 必须识别核心选题、开头机制、观点冲突和情绪触发点；学习机制，不复制句子。
-- 信息要克制，宁可少而准；原文片段和结构作用必须完整，辅助解释要少。
-- 结构拆解最多输出 4 个 ### 节点：开头、2-3 个正文关键节点、结尾；不要展开成流水账。
-- 如果原文出现"第一/第二/第三"、"三大方法"、"三个心法"、"三步"、"三类"等枚举结构，只挑最关键的 2-3 个独立节点。
+- 信息要克制，宁可少而准；原文片段必须完整，结构作用必须拆出机制，不要复述原文。
+- 结构拆解是重点，必须按时间轴拆细；每 12 秒左右输出一个 ### 节点，不设置 6-8 个节点上限。
+- 如果原文自带时间戳，严格按 12 秒时间段合并相邻句；如果没有时间戳，根据文案顺序和视频时长估算时间段。
+- 节点标题必须使用"时间段 + 结构动作"，例如"### 00:00-00:12：反常结果开场"；禁止输出"正文-1"、"正文第一部分"这种空标题。
+- 如果原文出现"第一/第二/第三"、"三大方法"、"三个心法"、"三步"、"三类"等枚举结构，每个枚举点都要单独成节点；不要合并成一段正文。
 - 每个结构子节点只保留两项：原文片段、结构作用。
 - 原文片段必须引用该节点开头的连续原文，保持必要完整；不要只写概括。
-- 结构作用要完整说明它在结构上承担什么功能，不要压缩到看不懂。
-- 正文子节点标题要具体，例如"### 狩猎法，方法一先给行动框架"，不要写"正文-1"、"正文第一部分"这种空标题。
+- 结构作用必须按"文案动作 / 用户心理 / 商业意图 / 可复用模板"四点写清楚。不要只写"制造好奇"、"建立信任"这种空话。
+- 文案动作要说明这一句在做什么：抛反常、立冲突、拆误区、补因果、给判断、埋需求、收承诺。
+- 用户心理要说明用户为什么会继续看：被戳中什么困惑、担心、好奇、反常结果或自我代入。
+- 商业意图要说明它在筛选什么客户、预埋什么服务认知、把用户往哪一步转化。
+- 可复用模板要抽象成一句可迁移句式，方便换行业重写。
+- 结构子节点标题要具体，必须体现时间段和结构动作，例如"### 00:24-00:36：用反向解释补足因果链"。
 - 不要使用 **加粗星号** 标记字段名；字段直接写"原文片段："、"结构作用："。
 - 禁止输出"心理作用："、"迁移保留点："这两类字段。
 - 结构层级直接用 Markdown 标题：## 作为章节，### 作为结构节点，不要用加粗文字伪装标题。
 - 如果原文有转化意图，必须指出它的成交路径。
 - 如果原文不适合用户直接模仿，必须明确提醒风险。
 - 迁移应用必须包含少量可见 SOP：可借什么、必须重构什么、原创风险是什么。
-- 心理拆解、商业拆解、迁移应用每节最多 3 条短句；少举例，举例只保留最关键的 1 个。
+- 心理拆解、商业拆解、迁移应用不是重点，每节最多 2 条短句；把主要篇幅留给结构拆解。
 - 输出要具体、可执行、适合内容创作者直接使用，但不要超过必要信息量。
 
 输出格式：纯 Markdown，不要 JSON 包裹。
@@ -129,6 +144,7 @@ export function buildVideoCopyAnalysisMessages(input: VideoCopyAnalysisInput): C
       content: [
         `平台：${input.platform || "unknown"}`,
         `标题：${input.title || "未提供"}`,
+        `视频时长：${input.videoDuration || "未提供，请按文案长度估算 12 秒片段"}`,
         "视频文案：",
         input.transcript,
         "",
@@ -157,7 +173,7 @@ export async function analyzeVideoCopy(
   const result = await provider.complete({
     messages: buildVideoCopyAnalysisMessages(input),
     temperature: 0.2,
-    maxTokens: 1800,
+    maxTokens: 3200,
   })
 
   try {

@@ -83,7 +83,7 @@ describe("AI HOT briefing endpoints", () => {
     expect(res.status).toBe(200)
 
     const body = await json(res)
-    expect(body.data.title).toBe("AI HOT · 今日 9 点")
+    expect(body.data.title).toBe("每日选题雷达 · 今日 9 点")
     expect(body.data.items).toHaveLength(2)
     expect(body.data.markdown).toContain("https://example.com/model-two")
   })

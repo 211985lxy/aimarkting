@@ -34,6 +34,9 @@ describe("video text extractor", () => {
     expect(() => assertSupportedVideoUrl("not-a-link")).toThrow("请输入正确的视频链接")
     expect(() => assertSupportedVideoUrl("http://localhost:3002/video-copy")).toThrow("请粘贴公开视频链接")
     expect(() => assertSupportedVideoUrl("http://127.0.0.1:3002/video-copy")).toThrow("请粘贴公开视频链接")
+    expect(() => assertSupportedVideoUrl("https://v3-search.douyinvod.com/example/video/tos/cn/file.mp4")).toThrow(
+      "请粘贴抖音分享页或作品页链接"
+    )
   })
 
   it("maps provider failures to user-facing Chinese messages", () => {

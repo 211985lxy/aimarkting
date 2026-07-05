@@ -1,4 +1,6 @@
-# ClipFlow 生产部署指南
+> **⚠️ OUTDATED — 本文档写于 ClipFlow 时代，路径和部署方式（PM2）已过时。当前部署见 `mingyuan/PROJECT.md` 和 `mingyuan/scripts/deploy-ecs-standalone.sh`。** 保留仅作历史参考。
+
+# ClipFlow 生产部署指南（历史）
 
 本文按当前代码结构整理：Next.js 应用位于 `clipflow/apps/web`，包管理使用 pnpm，数据库使用 MySQL/MariaDB，Prisma 7 通过 MariaDB adapter 连接。
 

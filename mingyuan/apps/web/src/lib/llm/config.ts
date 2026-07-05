@@ -29,7 +29,7 @@ export function getProviderConfigs(): LLMProviderConfig[] {
       name: "openrouter",
       apiKey: process.env.OPENROUTER_API_KEY,
       baseURL: process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1",
-      defaultModel: process.env.OPENROUTER_MODEL || "anthropic/claude-sonnet-4.6",
+      defaultModel: process.env.OPENROUTER_MODEL || "qwen/qwen3.7-plus",
     })
   }
 
@@ -60,7 +60,11 @@ export function getProviderConfigs(): LLMProviderConfig[] {
       name: "lihuo",
       apiKey: process.env.LIHUO_API_KEY,
       baseURL: process.env.LIHUO_BASE_URL || "https://api.lihuo.me/v1",
-      defaultModel: process.env.LIHUO_MODEL || "gpt-5.4",
+      defaultModel: process.env.LIHUO_MODEL || "gpt-5.5",
+      defaultHeaders: {
+        Accept: "application/json",
+        "User-Agent": "Mozilla/5.0",
+      },
     })
   }
 
