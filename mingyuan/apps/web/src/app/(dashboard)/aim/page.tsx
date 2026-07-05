@@ -1922,7 +1922,7 @@ export default function AimPage() {
             <div className="md:hidden">
               <Select value={selectedAgentId} onValueChange={(v) => { if (v !== selectedAgentId) router.push(`/aim?agent=${v}`) }}>
                 <SelectTrigger className="h-9 w-[130px]">
-                  <SelectValue />
+                  <span className="truncate">{agent.title}</span>
                 </SelectTrigger>
                 <SelectContent>
                   {AGENT_OPTIONS.map((a) => (
