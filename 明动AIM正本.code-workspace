@@ -1,0 +1,13 @@
+{
+  "folders": [
+    {
+      "name": "明动AIM正本",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "window.title": "明动AIM正本 - ${activeEditorShort}${separator}${rootName}",
+    "terminal.integrated.cwd": "/Users/xiangyu/Desktop/02-业务-明动aim智能体",
+    "git.openRepositoryInParentFolders": "never"
+  }
+}
