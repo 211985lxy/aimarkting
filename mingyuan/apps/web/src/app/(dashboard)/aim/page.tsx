@@ -171,6 +171,15 @@ function extractChoiceGroups(content: string): ChoiceGroup[] {
   return groups
 }
 
+function splitMethodNote(content: string) {
+  const match = content.match(/\[\[AIM_METHOD_NOTE\]\]([\s\S]*?)\[\[\/AIM_METHOD_NOTE\]\]/)
+  if (!match) return { methodNote: "", result: content }
+  return {
+    methodNote: match[1].trim(),
+    result: content.replace(match[0], "").trim(),
+  }
+}
+
 /** 生成一个稳定的临时 id（组件内使用，避免 Math.random 之外的库依赖） */
 let _seq = 0
 function nextId(prefix = "m") {
@@ -670,6 +679,10 @@ function DeliverableBubble({
           </TabsList>
           {deliverables.results.map((item) => (
             <TabsContent key={item.format} value={item.format} className="space-y-3">
+              {(() => {
+                const display = splitMethodNote(item.content)
+                return (
+                  <>
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">{FORMAT_LABELS[item.format]} · {item.wordCount} 字</span>
@@ -691,13 +704,24 @@ function DeliverableBubble({
                   </Button>
                 </div>
               </div>
+              {display.methodNote && (
+                <details className="rounded-md border border-border bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
+                  <summary className="cursor-pointer select-none font-medium text-foreground/70">思考依据</summary>
+                  <div className="mt-2 border-t border-border/60 pt-2">
+                    <MarkdownRenderer content={display.methodNote} />
+                  </div>
+                </details>
+              )}
               <div className="max-h-[600px] overflow-y-auto py-1">
                 {item.format === "video_script" ? (
-                  <ZhuJianContent text={item.content} />
+                  <ZhuJianContent text={display.result} />
                 ) : (
-                  <MarkdownRenderer content={item.content} />
+                  <MarkdownRenderer content={display.result} />
                 )}
               </div>
+                  </>
+                )
+              })()}
             </TabsContent>
           ))}
         </Tabs>
@@ -1987,7 +2011,22 @@ export default function AimPage() {
                       }`}
                     >
                       {m.role === "assistant" ? (
-                        <MarkdownRenderer content={m.content} />
+                        (() => {
+                          const display = splitMethodNote(m.content)
+                          return (
+                            <>
+                              {display.methodNote && (
+                                <details className="mb-3 rounded-md border border-border bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
+                                  <summary className="cursor-pointer select-none font-medium text-foreground/70">思考依据</summary>
+                                  <div className="mt-2 border-t border-border/60 pt-2">
+                                    <MarkdownRenderer content={display.methodNote} />
+                                  </div>
+                                </details>
+                              )}
+                              <MarkdownRenderer content={display.result} />
+                            </>
+                          )
+                        })()
                       ) : (
                         <p className="whitespace-pre-wrap break-words">{m.content}</p>
                       )}
