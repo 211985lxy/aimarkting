@@ -1,6 +1,6 @@
 "use client"
 
-import { Loader2, MessageCircle, Send, Square, Wand2 } from "lucide-react"
+import { Loader2, Mic, Send, Square, Wand2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 
@@ -76,7 +76,7 @@ export function AimPromptComposer({
               disabled={busy && !isRecording}
               title="语音输入"
             >
-              {isRecording ? <span className="text-xs text-red-500">停止</span> : <MessageCircle className="h-4 w-4" />}
+              {isRecording ? <span className="text-xs text-red-500">停止</span> : <Mic className="h-4 w-4" />}
             </Button>
             <Button
               type="button"
