@@ -1,0 +1,3 @@
+[submodule ".agents/skills/mingyuan-koubo-copy"]
+	path = .agents/skills/mingyuan-koubo-copy
+	url = https://github.com/211985lxy/mingyuan-ai-skill.git
