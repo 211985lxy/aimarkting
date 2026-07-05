@@ -427,6 +427,31 @@ describe("Topic Generation Prompts", () => {
     expect(prompt).toContain("不要默认压过其他资料")
   })
 
+  it("user prompt treats client project as the IP operation baseline", () => {
+    const prompt = buildTopicUserPrompt(
+      {
+        elements: TOPIC_ELEMENTS.slice(0, 2),
+        topicSources: [
+          {
+            category: "client_project",
+            title: "中汝达AI数字供暖",
+            content: "目标客户：供暖项目业主\n产品/服务：数字供暖改造",
+          },
+          {
+            category: "meeting_minutes",
+            title: "客户复盘会",
+            content: "客户原话：我们怎么证明节能效果？",
+          },
+        ],
+      },
+      TOPIC_ELEMENTS.slice(0, 2).map((item) => item.code),
+    )
+
+    expect(prompt).toContain("IP操作方案基准线")
+    expect(prompt).toContain("热点、会议纪要、对标、问卷和采访清单只是素材来源")
+    expect(prompt).toContain("不能覆盖基准线")
+  })
+
   it("user prompt includes IP profile fields", () => {
     const prompt = buildTopicUserPrompt(
       {

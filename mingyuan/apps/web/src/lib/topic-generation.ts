@@ -65,7 +65,7 @@ const TOPIC_SOURCE_LABELS: Record<string, string> = {
   customer_pain: "客户痛点",
   project_case: "成交案例",
   customer_qa: "客户问答",
-  client_project: "全案资料",
+  client_project: "IP操作方案基准线",
   industry_hot: "行业热点",
 }
 
@@ -243,6 +243,14 @@ export function buildTopicUserPrompt(
 - 如果同时提供 AI HOT 或行业热点，它们只能补充时效角度，不能覆盖对标主线。
 - 每个借鉴对标的选题，都要在 rationale 或 angle 中体现：这个 IP 应该怎么开头、旧认知怎么改、方法模块怎么迁移、结尾如何承接自己的产品。`
     : ""
+  const hasProjectBaseline = Boolean(profileSection) || topicSources?.some((source) => source.category === "client_project")
+  const projectBaselineInstruction = hasProjectBaseline
+    ? `## IP操作方案基准线
+全站选题策划必须先对齐整体 IP 操作方案或客户项目全案，再使用其他素材。
+- 先校验目标客户、主产品/服务、成交路径、交付目标和账号定位，选题不能偏离这条主线。
+- 热点、会议纪要、对标、问卷和采访清单只是素材来源，用来补充钩子、证据、真实问题和执行动作，不能覆盖基准线。
+- 如果某个素材很热但和 IP 操作方案不匹配，请降低 projectFit 和 conversionFit，不要硬推荐。`
+    : ""
   const meetingMinutesInstruction = topicSources?.some((source) => source.category === "meeting_minutes")
     ? `## 会议纪要参与规则
 本次素材包含会议纪要。请把会议纪要作为真实业务语料参与选题，但不要默认压过其他资料。
@@ -251,7 +259,7 @@ export function buildTopicUserPrompt(
 - 如果某张选题来自会议纪要，请在 rationale 或 angle 中点明对应的会议问题或原话。`
     : ""
 
-  return `${profileSection ? profileSection + "\n\n" : ""}${contentThemeSection ? contentThemeSection + "\n\n" : ""}${sourceSection ? sourceSection + "\n\n" : ""}${benchmarkRewriteInstruction ? benchmarkRewriteInstruction + "\n\n" : ""}${meetingMinutesInstruction ? meetingMinutesInstruction + "\n\n" : ""}${elementSection}\n\n请基于以上${profileSection ? " IP 档案、" : ""}${sourceSection ? "选题素材和" : ""}营销元素，生成4个差异化的短视频选题卡片。每个选题都要巧妙融入指定的营销元素，并推荐最匹配的开场类型和文案结构。${modeInstruction}`
+  return `${profileSection ? profileSection + "\n\n" : ""}${contentThemeSection ? contentThemeSection + "\n\n" : ""}${sourceSection ? sourceSection + "\n\n" : ""}${projectBaselineInstruction ? projectBaselineInstruction + "\n\n" : ""}${benchmarkRewriteInstruction ? benchmarkRewriteInstruction + "\n\n" : ""}${meetingMinutesInstruction ? meetingMinutesInstruction + "\n\n" : ""}${elementSection}\n\n请基于以上${profileSection ? " IP 档案、" : ""}${sourceSection ? "选题素材和" : ""}营销元素，生成4个差异化的短视频选题卡片。每个选题都要巧妙融入指定的营销元素，并推荐最匹配的开场类型和文案结构。${modeInstruction}`
 }
 
 function inferTopicType(card: TopicCard, index: number): TopicCard["topicType"] {

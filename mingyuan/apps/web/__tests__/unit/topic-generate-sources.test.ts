@@ -1,11 +1,29 @@
 import { describe, expect, it } from "vitest"
 import {
   buildBenchmarkAccountSources,
+  buildProjectSource,
   buildTopicSources,
   buildVideoCopyExtractionSources,
-} from "@/app/api/topics/generate/route"
+} from "@/lib/topic-source-builders"
 
 describe("topic generate sources", () => {
+  it("marks project source as the IP operation baseline", () => {
+    const source = buildProjectSource({
+      name: "中汝达AI数字供暖",
+      industry: "数字供暖",
+      targetCustomer: "供暖项目业主",
+      offer: "数字供暖改造",
+      deliveryGoal: "获客转化",
+    })
+
+    expect(source).toMatchObject({
+      category: "client_project",
+      title: "IP操作方案基准线：中汝达AI数字供暖",
+    })
+    expect(source?.content).toContain("全站选题策划的基准线")
+    expect(source?.content).toContain("目标客户：供暖项目业主")
+  })
+
   it("builds benchmark sources from watched account videos", () => {
     const sources = buildBenchmarkAccountSources([
       {
