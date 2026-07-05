@@ -1,35 +1,15 @@
-import { readFile } from "fs/promises"
-import path from "path"
-
-let cachedMethodology: string | null = null
+import { getMethodologyBlock } from "@/lib/agent-methodology-store"
 
 /**
  * 事件内容化方法论（视频日记 / 项目现场 / 事件复盘叙事专用）。
  *
- * 与 IP 操盘方法论、商业诊断方法论同构：运行时读取外部 Markdown 文件并缓存。
+ * 与 IP 操盘方法论、商业诊断方法论同构：DB 优先 + 文件兜底 + 编辑即时生效
+ * （实际加载逻辑收敛到 agent-methodology-store）。
  * 与前两者不同——本方法论是「按需注入」，仅当创作内容属于"现场/事件复盘类"
  * 时才加载，避免给普通口播/转化内容增加噪声。触发判断见 shouldUseEventStorytelling。
  */
 export async function buildEventStorytellingMethodologyBlock(): Promise<string> {
-  if (cachedMethodology !== null) return cachedMethodology
-
-  const candidates = [
-    path.resolve(process.cwd(), "../../docs/event-storytelling-methodology-core.md"),
-    path.resolve(process.cwd(), "mingyuan/docs/event-storytelling-methodology-core.md"),
-  ]
-
-  for (const file of candidates) {
-    try {
-      const content = await readFile(file, "utf8")
-      cachedMethodology = `\n\n=== 事件内容化方法论（现场/事件复盘类创作专用）===\n${content.trim()}\n`
-      return cachedMethodology
-    } catch {
-      // ponytail: two deploy cwd shapes; ignore missing candidate and try the next.
-    }
-  }
-
-  cachedMethodology = ""
-  return cachedMethodology
+  return getMethodologyBlock("event_storytelling")
 }
 
 /**

@@ -1179,3 +1179,17 @@ model BenchmarkProfileItem {
   @@index([profileId])
 }
 
+// ─── Agent Methodology（智能体方法论库，可在后台编辑） ──
+// 对应 mingyuan/docs/*-methodology-core.md 三份方法论。
+// 加载器优先读 DB，无则回退文件并播种。编辑后通过版本号使内存缓存失效。
+model AgentMethodology {
+  id        String   @id @default(cuid())
+  key       String   @unique // ip_copywriting | business_diagnosis | event_storytelling
+  title     String
+  content   String   @db.Text // markdown 全文
+  filePath  String?  // 对应的 md 文件相对路径，仅记录溯源
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+

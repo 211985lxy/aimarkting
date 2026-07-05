@@ -14,6 +14,7 @@ import {
   LogOut,
   Bot,
   Target,
+  Compass,
 } from "lucide-react"
 import {
   Sidebar,
@@ -36,6 +37,7 @@ import { useAdminStore } from "@/lib/admin-store"
 const navItems = [
   { title: "仪表盘", titleEn: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { title: "智能体管理", titleEn: "Agents", href: "/admin/agents", icon: Bot },
+  { title: "IP操盘方法论", titleEn: "Methodology", href: "/admin/methodology", icon: Compass },
   { title: "用户管理", titleEn: "Users", href: "/admin/users", icon: Users },
   { title: "激活码", titleEn: "Activation Codes", href: "/admin/activation-codes", icon: KeyRound },
   { title: "知识库", titleEn: "Knowledge", href: "/admin/knowledge", icon: BookOpen },
