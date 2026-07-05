@@ -3,13 +3,9 @@ import type { Metadata } from "next"
 import { getBrandingConfig } from "@/lib/branding"
 import { HeroSection } from "@/components/marketing/hero-section"
 import { PlatformsSection } from "@/components/marketing/platforms-section"
-import { PainPointsSection } from "@/components/marketing/pain-points-section"
 import { HowItWorksSection } from "@/components/marketing/how-it-works-section"
 import { FeaturesSection } from "@/components/marketing/features-section"
 import { UseCasesSection } from "@/components/marketing/use-cases-section"
-import { StatsSection } from "@/components/marketing/stats-section"
-import { TestimonialsSection } from "@/components/marketing/testimonials-section"
-import { DifferentiatorsSection } from "@/components/marketing/differentiators-section"
 import { CTASection } from "@/components/marketing/cta-section"
 
 function normalizeLocale(locale: string | undefined) {
@@ -140,13 +136,9 @@ export default function MarketingPage() {
 
       <HeroSection />
       <PlatformsSection />
-      <PainPointsSection />
       <HowItWorksSection />
       <FeaturesSection />
       <UseCasesSection />
-      <StatsSection />
-      <TestimonialsSection />
-      <DifferentiatorsSection />
       <CTASection />
     </main>
   )

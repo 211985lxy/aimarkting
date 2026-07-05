@@ -63,10 +63,10 @@ export function HeroSection() {
           </p>
 
           {/* 主标题：高对比、大号、群响式压迫感 */}
-          <h1 className="max-w-3xl text-4xl font-bold leading-[1.08] tracking-tight text-[#25211D] sm:text-5xl lg:text-6xl">
+          <h1 className="max-w-3xl break-words text-4xl font-bold leading-[1.08] tracking-tight text-[#25211D] sm:text-5xl lg:text-6xl">
             {t("title")}
             <br />
-            <span className="text-[#D14A33]">
+            <span className="block break-all text-[#D14A33]">
               {t("titleHighlight")}
             </span>
           </h1>
