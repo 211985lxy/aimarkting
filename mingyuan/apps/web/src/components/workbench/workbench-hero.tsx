@@ -16,8 +16,8 @@ interface WorkbenchHeroProps {
 export function WorkbenchHero({ title, subtitle, badge, actions, backHref, backLabel }: WorkbenchHeroProps) {
   return (
     <section className="overflow-hidden rounded-xl border border-primary/15 bg-card shadow-sm">
-      <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
-        <div className="min-w-0 space-y-2">
+      <div className="flex flex-col gap-4 p-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             {backHref ? (
               <Link href={backHref} aria-label={backLabel ?? "返回上一级"}>
@@ -33,7 +33,7 @@ export function WorkbenchHero({ title, subtitle, badge, actions, backHref, backL
             <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{subtitle}</p>
           ) : null}
         </div>
-        {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex w-full min-w-0 flex-wrap items-center gap-2 xl:w-auto xl:justify-end">{actions}</div> : null}
       </div>
     </section>
   )
