@@ -161,8 +161,8 @@ function fromDouyin(topic: HotTopic): HotDecisionItem {
   const videoScore = Math.min(12, Math.log10(Math.max(topic.videoCount, 1)) * 3)
   const risk = riskScore(topic.title)
   const labelBonus = topic.label === "hot" ? 8 : topic.label === "new" ? 4 : topic.label === "recommended" ? 6 : 0
-  // 放宽开口：无业务相关性不再直接判 avoid，改为降分 + caution
-  const relevancePenalty = businessScore === 0 ? 22 : 0
+  // ponytail: 抖音热榜噪音更高，无业务相关性的题直接重罚，留出人工判断空间但默认不过线
+  const relevancePenalty = businessScore === 0 ? 45 : 0
   const score = clamp(Math.round(titleScore + businessScore + heatScore + videoScore + labelBonus - risk - relevancePenalty))
   const verdict = risk >= 30 ? "avoid" : businessScore === 0 ? "caution" : getVerdict(score, risk)
 

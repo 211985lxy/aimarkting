@@ -23,6 +23,15 @@ type RequestOptions = RequestInit & {
 /** 默认请求超时。后台绝大多数接口都是 DB 查询，20s 足够；蒸馏/上传等长任务由各调用方覆盖。 */
 const DEFAULT_TIMEOUT_MS = 20000
 
+function startTimeout(controller: AbortController | null, timeoutMs: number) {
+  if (!controller || timeoutMs <= 0) return null
+  return globalThis.setTimeout(() => controller.abort(), timeoutMs)
+}
+
+function stopTimeout(timer: ReturnType<typeof globalThis.setTimeout> | null) {
+  if (timer) globalThis.clearTimeout(timer)
+}
+
 function handleAdminUnauthorized() {
   useAdminStore.getState().clearSession()
 
@@ -51,9 +60,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     : null
 
   const controller = timeoutMs > 0 ? new AbortController() : null
-  const timer = controller
-    ? window.setTimeout(() => controller.abort(), timeoutMs)
-    : null
+  const timer = startTimeout(controller, timeoutMs)
 
   let response: Response
   try {
@@ -69,7 +76,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   } catch (err) {
     // 网络错误（断网/DNS/CORS）或超时（abort）——统一归一化为 AdminApiError，
     // 否则 fetch 抛出的 TypeError 会绕过调用方的 instanceof 判断，错误信息被吞。
-    if (timer) window.clearTimeout(timer)
+    stopTimeout(timer)
     const aborted = err instanceof DOMException && err.name === "AbortError"
     throw new AdminApiError(
       aborted ? "请求超时，请检查网络后重试" : "网络连接失败，请检查网络后重试",
@@ -77,7 +84,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       { cause: String(err) }
     )
   } finally {
-    if (timer) window.clearTimeout(timer)
+    stopTimeout(timer)
   }
 
   const payload = await response.json().catch(() => null)
@@ -166,7 +173,7 @@ export function getActivationCodesExportUrl(params: { status?: string; batchId?:
 export async function downloadActivationCodesExport(params: { status?: string; batchId?: string }) {
   const token = useAdminStore.getState().token || getStoredAdminToken()
   const controller = new AbortController()
-  const timer = window.setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
+  const timer = startTimeout(controller, DEFAULT_TIMEOUT_MS)
 
   let response: Response
   try {
@@ -175,7 +182,7 @@ export async function downloadActivationCodesExport(params: { status?: string; b
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     })
   } catch (err) {
-    window.clearTimeout(timer)
+    stopTimeout(timer)
     const aborted = err instanceof DOMException && err.name === "AbortError"
     throw new AdminApiError(
       aborted ? "导出超时，请重试" : "网络连接失败，请检查网络后重试",
@@ -183,7 +190,7 @@ export async function downloadActivationCodesExport(params: { status?: string; b
       { cause: String(err) }
     )
   } finally {
-    window.clearTimeout(timer)
+    stopTimeout(timer)
   }
 
   if (!response.ok) {

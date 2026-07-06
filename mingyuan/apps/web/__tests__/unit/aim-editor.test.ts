@@ -23,9 +23,9 @@ describe("aim editor helpers", () => {
   })
 
   it("clamps editor panel width", () => {
-    expect(clampEditorPanelWidth(100)).toBe(320)
-    expect(clampEditorPanelWidth(520)).toBe(520)
-    expect(clampEditorPanelWidth(2000)).toBe(1600)
+    expect(clampEditorPanelWidth(100)).toBe(280)
+    expect(clampEditorPanelWidth(520)).toBe(460)
+    expect(clampEditorPanelWidth(2000)).toBe(460)
   })
 
   it("extracts replacement draft from AI response", () => {

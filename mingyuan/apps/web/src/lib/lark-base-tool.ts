@@ -23,7 +23,7 @@ type RunCommand = (command: LarkCommand, args: string[]) => Promise<unknown>
 type EnvLike = Record<string, string | undefined>
 
 type LarkConfig = {
-  cliPath: string
+  cliPath?: string
   baseToken: string
   tableId: string
 }
@@ -80,7 +80,7 @@ export function readLarkBaseConfig(env: EnvLike, tableType: LarkTableType): Lark
   if (!tableId) throw new Error(`缺少 ${tableKey}`)
 
   return {
-    cliPath: requireLarkCliPath(env),
+    cliPath: env.LARK_CLI_PATH?.trim() || undefined,
     baseToken,
     tableId,
   }
@@ -95,7 +95,7 @@ function readResultTableConfig(env: EnvLike, resultType: LarkResultType): LarkCo
   if (!tableId) throw new Error(`缺少 ${tableKey}`)
 
   return {
-    cliPath: requireLarkCliPath(env),
+    cliPath: env.LARK_CLI_PATH?.trim() || undefined,
     baseToken,
     tableId,
   }
@@ -123,7 +123,7 @@ export async function runLarkBaseCommand(
     throw new Error(`不允许执行飞书 Base 命令：${command}`)
   }
 
-  const cliPath = options.cliPath || requireLarkCliPath()
+  const cliPath = options.cliPath || (options.runner ? "/mock/lark-cli" : requireLarkCliPath())
   // 默认 runner 加 15s 超时 + 10MB maxBuffer,防止 lark-cli 卡死或大表 stdout 溢出
   const runner =
     options.runner ||
