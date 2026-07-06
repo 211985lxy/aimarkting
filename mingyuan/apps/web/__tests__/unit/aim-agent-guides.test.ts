@@ -16,7 +16,9 @@ describe("aim agent guides", () => {
       expect(guide.inputTemplate.length).toBeGreaterThan(0)
       expect(guide.outputAssets.length).toBeGreaterThan(0)
       expect(guide.nextActions.length).toBeGreaterThan(0)
-      expect(guide.skills.length).toBeGreaterThan(0)
+      if (agent.id !== "free_copywriter") {
+        expect(guide.skills.length).toBeGreaterThan(0)
+      }
     }
   })
 
@@ -99,13 +101,36 @@ describe("aim agent guides", () => {
 
     expect(labels).toEqual(expect.arrayContaining([
       "改开头钩子",
-      "改写现有文案",
-      "对标爆款再创作",
-      "生成视频日记",
-      "小红书图文笔记",
-      "核心内容一键拆解",
-      "生成 12 条发布计划",
+      "重写这版文案",
+      "按爆款逻辑重写",
+      "借热点写一版",
+      "生成现场口播",
+      "生成小红书图文",
+      "生成获客成交文案",
+      "生成观点口播",
+      "一键拆成全平台内容",
+      "生成后续 12 条选题",
     ]))
+  })
+
+  it("adds a hot-topic oral script skill with route-specific guidance", () => {
+    const guide = getAimAgentGuide("content_producer")
+    const skill = guide.skills.find((item) => item.id === "hot_oral_script")
+    const guideText = [guide.defaultInstruction, ...guide.quickPrompts].join("\n")
+
+    expect(skill?.label).toBe("热点口播脚本生成")
+    expect(skill?.prompt).toContain("类型 A")
+    expect(skill?.prompt).toContain("类型 B")
+    expect(skill?.prompt).toContain("类型 C")
+    expect(skill?.prompt).toContain("热点适配度")
+    expect(skill?.prompt).toContain("不得直接照抄")
+    expect(skill?.prompt).toContain("5-10 条")
+    expect(skill?.prompt).toContain("前 3 秒钩子")
+    expect(skill?.prompt).toContain("镜头表现建议")
+    expect(skill?.prompt).toContain("屏幕字幕重点")
+    expect(skill?.prompt).toContain("结尾行动引导")
+    expect(guideText).toContain("热点口播")
+    expect(guideText).toContain("参考同行文案")
   })
 
   it("keeps video diary and xiaohongshu skills tied to their methodology", () => {
