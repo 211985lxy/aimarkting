@@ -98,7 +98,7 @@ describe("aim agent guides", () => {
     const labels = getAimAgentGuide("content_producer").skills.map((skill) => skill.label)
 
     expect(labels).toEqual(expect.arrayContaining([
-      "优化开头",
+      "改开头钩子",
       "改写现有文案",
       "对标爆款再创作",
       "生成视频日记",
@@ -122,7 +122,9 @@ describe("aim agent guides", () => {
   })
 
   it("defines topic planning and review skills", () => {
-    expect(getAimAgentGuide("business_diagnosis").skills.map((skill) => skill.label)).toContain("选择内容主线")
+    const planningLabels = getAimAgentGuide("business_diagnosis").skills.map((skill) => skill.label)
+    expect(planningLabels).toContain("选择内容主线")
+    expect(planningLabels).toContain("判断这条值不值得做")
 
     const reviewLabels = getAimAgentGuide("content_review").skills.map((skill) => skill.label)
     expect(reviewLabels).toEqual(expect.arrayContaining([
@@ -133,7 +135,23 @@ describe("aim agent guides", () => {
       "平台适配质检",
       "转化路径质检",
       "风险表达质检",
+      "发布前判断",
     ]))
+  })
+
+  it("adds a benchmark-asset flywheel skill for topic planning", () => {
+    const skill = getAimAgentGuide("business_diagnosis").skills.find((item) => item.id === "benchmark_asset_flywheel")
+    const guideText = [
+      ...getAimAgentGuide("business_diagnosis").quickPrompts,
+      ...getAimAgentGuide("business_diagnosis").outputAssets,
+    ].join("\n")
+
+    expect(skill?.label).toBe("对标资产生成选题池")
+    expect(skill?.prompt).toContain("30 条可直接开拍的候选选题")
+    expect(skill?.prompt).toContain("5 条 S 级优先选题")
+    expect(skill?.prompt).toContain("10 条 A 级连续栏目选题")
+    expect(guideText).toContain("S级优先选题")
+    expect(guideText).toContain("A级连续栏目选题")
   })
 
   it("keeps meeting-minutes asset pack grounded and non-generic", () => {
@@ -153,5 +171,19 @@ describe("aim agent guides", () => {
         expect(skill.prompt).toContain("请")
       }
     }
+  })
+
+  it("adds a plain-language retro path instead of a new technical workflow", () => {
+    const businessSystemText = [
+      getAimAgentGuide("business_system_diagnosis").intro,
+      ...getAimAgentGuide("business_system_diagnosis").quickPrompts,
+      ...getAimAgentGuide("business_system_diagnosis").outputAssets,
+      ...getAimAgentGuide("business_system_diagnosis").skills.map((skill) => `${skill.label} ${skill.prompt}`),
+    ].join("\n")
+
+    expect(businessSystemText).toContain("内容数据复盘")
+    expect(businessSystemText).toContain("下次同类内容怎么判断")
+    expect(businessSystemText).not.toContain("飞轮")
+    expect(businessSystemText).not.toContain("闭环")
   })
 })
