@@ -1249,6 +1249,28 @@ export interface AimGenerateResponse {
   knowledgeStrategy?: string
 }
 
+export interface AimDecisionSnapshot {
+  summary: string
+  targetUser?: string
+  expectedSignal?: string
+  confidence?: string
+  createdAt?: string
+}
+
+export interface AimRetroSnapshot {
+  summary: string
+  actualData?: string
+  verdict?: string
+  nextRule?: string
+  createdAt?: string
+}
+
+export interface AimCalibrationRule {
+  rule: string
+  source?: string
+  createdAt?: string
+}
+
 export interface AimGeneration {
   id: string
   agentId?: string | null
@@ -1270,6 +1292,11 @@ export interface AimGeneration {
   workflowStatus?: string
   reviewNote?: string | null
   publishedAt?: string | null
+  publishPlatform?: string | null
+  publishUrl?: string | null
+  decisionSnapshot?: AimDecisionSnapshot | null
+  retroSnapshots?: AimRetroSnapshot[]
+  calibrationRules?: AimCalibrationRule[]
 }
 
 export async function generateAimContent(data: AimGenerateRequest, signal?: AbortSignal): Promise<AimGenerateResponse> {
@@ -1449,8 +1476,13 @@ export async function updateClientProject(id: string, data: Partial<CreateClient
 }
 
 export async function updateAimWorkflowStatus(id: string, data: {
-  workflowStatus: string
+  workflowStatus?: string
   reviewNote?: string
+  publishPlatform?: string
+  publishUrl?: string
+  decisionSnapshot?: AimDecisionSnapshot
+  retroSnapshot?: AimRetroSnapshot
+  calibrationRule?: AimCalibrationRule
 }): Promise<AimGeneration> {
   return request<AimGeneration>(`/api/aim/history/${encodeURIComponent(id)}`, {
     method: "PATCH",

@@ -37,6 +37,7 @@ import { buildExplicitWordCountPriorityRule } from "@/lib/aim-benchmark-length"
 
 export type AimAgentId =
   | "content_producer"
+  | "free_copywriter"
   | "deep_copywriter"
   | "business_system_diagnosis"
   | "business_diagnosis"
@@ -129,6 +130,15 @@ export const PUBLISH_PACKAGE_CHAT_RULE = [
   "发布话题必须至少包含 1 个账号名称、品牌名称、IP 名或项目名相关的话题；如果上下文没有明确名称，用当前 IP/公司/项目信息推断，仍无法判断时写 #品牌名待补充。",
   "固定输出结构：## 对标发布信息、## 我的发布标题、## 我的发布文案、## 发布话题、## 发布前提醒。",
   "对标发布信息里没有明确内容时写未提供/待补充，不要编造对标账号、对标标题或真实平台数据。",
+].join("\n")
+
+export const AIM_HIGH_RISK_LOOP_RULE = [
+  "高风险任务验证规则：只在正式交付场景生效，包括定位方案、生意系统体检、100 条选题库、会议纪要资产包、天命全案、完整成稿、发布包、获客文案、小红书图文方案、置顶视频脚本、正式质检报告。",
+  "简单问答、局部润色、单句改写、纯发散创意、框架阶段或追问阶段，不要追加“验证结果”区块，避免把回复做重。",
+  "命中正式交付场景时，先按内部成功标准组织输出，确认内容有没有围绕当前任务、有没有脱离用户原意、有没有把背景素材用错位置。",
+  "缺失事实统一写“未提供/待补充”，禁止补编案例、数据、来源、命理结论、对标信息或用户没给出的关键背景。",
+  "正式交付内容里必须让读者看出：哪些判断来自当前输入、知识库或上下文，哪些地方仍然缺依据；不要扩展成新的复杂模板。",
+  "正式交付内容结尾追加一个简短“验证结果”区块，只允许包含三类信息：已确认什么、待补什么、下一步最小动作。",
 ].join("\n")
 
 // ─── 格式指令常量 ──────────────────────────────────────────
@@ -317,6 +327,8 @@ IP操盘方法论（写作与判断规则）：
 ${params.methodologyBlock}
 ${params.ipWikiBlock ? `\n${params.ipWikiBlock}` : ""}
 
+${AIM_HIGH_RISK_LOOP_RULE}
+
 你的对话原则：
 1. 文案类智能体不追问客户，不让客户补充资料，不输出追问式开场。
 2. 如果信息不足，基于已有上下文做合理假设，直接给出一个可用版本。
@@ -374,6 +386,51 @@ ${PUBLISH_PACKAGE_CHAT_RULE}
   }
 }
 
+// ─── 1b. 自由文案创作 (FreeCopywriterHandler) ─────────────────
+
+class FreeCopywriterHandler implements AimAgentHandler {
+  agentId = "free_copywriter" as const
+
+  private buildPrompt(params: Pick<AimChatParams, "knowledgeBlock" | "ipWikiBlock">): string {
+    return `你是一个交货型文案写手，只负责听懂用户当前要求，并把文案直接交出来。
+
+可参考的业务背景：
+${params.knowledgeBlock}
+${params.ipWikiBlock ? `\n${params.ipWikiBlock}` : ""}
+
+规则：
+1. 用户怎么要求就怎么写；用户的指令优先级高于模板、方法论、默认字数和系统习惯。
+2. 用户要长就写长，用户要短就写短；没有明确字数时按内容自然长度写。
+3. 不强制套爆款结构、开头库、结尾库、框架确认、观点池、95%-105% 字数规则或多平台拆分。
+4. 不反问、不讲方法论、不输出分析报告；除非用户明确要求，只给一版可直接用的文案。
+5. 保留人的语气，少用宣传腔、排比句和空泛总结。`
+  }
+
+  async chat(params: AimChatParams): Promise<AimChatResponse> {
+    return executeChatLLM(this.agentId, this.buildPrompt(params), params.messages)
+  }
+
+  streamChat(params: AimChatParams): AsyncIterable<string> {
+    return executeChatLLMStream(this.agentId, this.buildPrompt(params), params.messages)
+  }
+
+  async generate(context: AimGenerateContext): Promise<AimGenerateResponse> {
+    const format = "raw_copy" as ContentFormat
+    const systemPrompt = this.buildPrompt(context)
+    const userPrompt = `请直接按用户要求写一版文案：
+"${context.rawInput}"`
+    const completion = await executeGenerateLLM(this.agentId, systemPrompt, userPrompt)
+    const content = completion.content.trim()
+    const record = await saveAimGenerationRecord(context, completion, { [format]: content } as Record<ContentFormat, string | undefined>)
+
+    return {
+      id: record.id,
+      results: [{ format, content, wordCount: content.length }],
+      knowledgeUsed: record.knowledgeUsed as any[],
+    }
+  }
+}
+
 // ─── 2. 深度文案官 (DeepCopywriterHandler) ─────────────────────
 
 class DeepCopywriterHandler implements AimAgentHandler {
@@ -391,6 +448,8 @@ ${params.knowledgeBlock}
 IP操盘方法论（写作与判断规则）：
 ${params.methodologyBlock}
 ${params.ipWikiBlock ? `\n${params.ipWikiBlock}` : ""}
+
+${AIM_HIGH_RISK_LOOP_RULE}
 
 你的对话原则：
 1. 先判断选题是否有情绪波动、用户痛点、表达欲和可融合热点。
@@ -529,6 +588,8 @@ ${params.knowledgeBlock}
 商业诊断方法论（内部判断规则，仅供你自己判断用，绝不向用户提及任何框架名、英文缩写或流程名）：
 ${params.businessDiagnosisBlock}
 
+${AIM_HIGH_RISK_LOOP_RULE}
+
 你的对话路由（必须先判断用户的问题是否成立，再决定怎么回答）：
 1. 先判断问题是否成立：按方法论里的「问诊消解漏斗」从上往下判断，命中即在该层处理，不要跳到体检。
    - 信息类问题（行业标准/平台规则/合规边界）：能答的直接简短答完；拿不准的提示查官方资料，不要编数字。
@@ -568,6 +629,8 @@ ${context.businessDiagnosisBlock}
 
 企业已有核心知识库（参考背景）：
 ${context.knowledgeBlock}
+
+${AIM_HIGH_RISK_LOOP_RULE}
 
 体检报告必须严格按以下八段固定结构输出，缺一不可，顺序不可调换：
 
@@ -659,6 +722,8 @@ ${params.knowledgeBlock}
 IP操盘方法论（内部判断规则，只能用于推理，不得原样展示给用户）：
 ${params.methodologyBlock}
 
+${AIM_HIGH_RISK_LOOP_RULE}
+
 你的对话原则：
 1. 只处理 IP 本身：这个人如何站出来、被谁信任、讲什么内容、承接什么产品。
 2. 先判断用户当前在走哪条路由：
@@ -721,6 +786,8 @@ ${context.knowledgeBlock}
 
 IP操盘方法论（内部判断规则，只能用于推理，不得原样展示给用户）：
 ${context.methodologyBlock}
+
+${AIM_HIGH_RISK_LOOP_RULE}
 
 策划方案输出结构要求：
 先判断用户输入最适合哪条交付路由，并按该路由输出，不要把四种结果混在一起：
@@ -840,6 +907,8 @@ export function buildContentReviewChatPrompt(knowledgeBlock: string): string {
 企业已有核心知识库（只作背景，不要抢走用户当前稿子的主题）：
 ${knowledgeBlock}
 
+${AIM_HIGH_RISK_LOOP_RULE}
+
 你的对话原则：
 1. 只做质检和最小修改建议，不要整篇重写，除非用户明确要求重写。
 2. 优先检查：开头吸引力、逻辑顺畅、AI味/套话、文笔表达、平台风险、转化承接、流量潜力。
@@ -855,6 +924,8 @@ export function buildContentReviewGeneratePrompt(knowledgeBlock: string): string
 
 企业已有核心知识库（只作背景，不要抢走用户当前稿子的主题）：
 ${knowledgeBlock}
+
+${AIM_HIGH_RISK_LOOP_RULE}
 
 质检报告输出结构要求：
 1. 总体结论：可发 / 改完可发 / 暂不建议发，并说明一句理由。
@@ -949,6 +1020,8 @@ class PersonaHandler implements AimAgentHandler {
 企业已有核心知识库（参考背景）：
 ${params.knowledgeBlock}
 
+${AIM_HIGH_RISK_LOOP_RULE}
+
 你的工作方式（引导式，每轮只推进一个维度）：
 按顺序把以下 6 个维度收集齐，每轮只追问当前最关键的 1 个缺口，并给一个降低门槛的回答示例：
 1. 经历与成就：哪一年做了什么、做成/赚到过什么（要具体年份，是置顶视频的关键记忆点）
@@ -1029,7 +1102,9 @@ ${params.knowledgeBlock}
 
     const systemPrompt = `${agentPrompt}
 
-${context.knowledgeBlock}`
+${context.knowledgeBlock}
+
+${AIM_HIGH_RISK_LOOP_RULE}`
 
     const workflowContext = buildWorkflowContext(context)
     const userPrompt = `用户提供的来时路素材：
@@ -1075,6 +1150,7 @@ export function detectPersonaMode(input: string): "guided" | "intake" | "intake_
 
 const HANDLERS: Record<AimAgentId, AimAgentHandler> = {
   content_producer: new ContentProducerHandler(),
+  free_copywriter: new FreeCopywriterHandler(),
   deep_copywriter: new DeepCopywriterHandler(),
   business_system_diagnosis: new BusinessSystemDiagnosisHandler(),
   business_diagnosis: new BusinessDiagnosisHandler(),
@@ -1084,6 +1160,7 @@ const HANDLERS: Record<AimAgentId, AimAgentHandler> = {
 
 const VALID_AGENT_IDS = new Set<string>([
   "content_producer",
+  "free_copywriter",
   "deep_copywriter",
   "business_system_diagnosis",
   "business_diagnosis",
@@ -1596,6 +1673,12 @@ async function saveAimGenerationRecord(
   completion: any,
   parsed: Record<ContentFormat, string | undefined>
 ) {
+  const clampVarchar = (value: string | null | undefined, max = 191) =>
+    value ? value.slice(0, max) : null
+
+  const sanitizeDbText = (value: string | null | undefined) =>
+    value ? value.replace(/\u0000/g, "").replace(/[\u{10000}-\u{10FFFF}]/gu, "") : null
+
   const knowledgeUsed = context.retrievedEntries.map((entry) => ({
     id: entry.id,
     title: entry.title,
@@ -1603,39 +1686,63 @@ async function saveAimGenerationRecord(
   }))
 
   const data = {
-      userId: context.userId,
-      agentId: context.agentId,
-      projectId: context.projectId || null,
-      rawInput: context.rawInput,
-      inputSource: "text",
-      videoScript: parsed.video_script || null,
-      wechatArticle: parsed.wechat_article || null,
-      momentsPost: parsed.moments_post || null,
-      communityMessage: parsed.community_message || null,
-      shootingBrief: parsed.shooting_brief || null,
-      rawCopy: parsed.raw_copy || null,
-      formatsRequested: context.targetFormats,
-      knowledgeUsed,
-      topicTitle: context.topicTitle || null,
-      hotTopic: context.hotTopic || null,
-      polishInstruction: context.polishInstruction || null,
-      model: completion.model,
-      totalTokens: completion.usage?.totalTokens || null,
-      status: "completed",
+    userId: context.userId,
+    agentId: context.agentId,
+    projectId: context.projectId || null,
+    rawInput: sanitizeDbText(context.rawInput) ?? "",
+    inputSource: "text",
+    videoScript: sanitizeDbText(parsed.video_script),
+    wechatArticle: sanitizeDbText(parsed.wechat_article),
+    momentsPost: sanitizeDbText(parsed.moments_post),
+    communityMessage: sanitizeDbText(parsed.community_message),
+    shootingBrief: sanitizeDbText(parsed.shooting_brief),
+    rawCopy: sanitizeDbText(parsed.raw_copy),
+    formatsRequested: context.targetFormats,
+    knowledgeUsed,
+    topicTitle: clampVarchar(context.topicTitle),
+    hotTopic: clampVarchar(context.hotTopic),
+    polishInstruction: sanitizeDbText(context.polishInstruction),
+    model: completion.model,
+    totalTokens: completion.usage?.totalTokens || null,
+    status: "completed",
   }
 
-  if (context.existingGenerationId) {
-    const existing = await prisma.aimGeneration.findFirst({
-      where: { id: context.existingGenerationId, userId: context.userId },
-      select: { id: true },
-    })
-    if (existing) {
-      return prisma.aimGeneration.update({
-        where: { id: existing.id },
-        data,
+  const degradedData = {
+    ...data,
+    rawInput: "[omitted: original input could not be persisted safely]",
+    videoScript: null,
+    wechatArticle: null,
+    momentsPost: null,
+    communityMessage: null,
+    shootingBrief: null,
+    rawCopy: null,
+    polishInstruction: null,
+  }
+
+  const persist = (payload: typeof data) => {
+    if (context.existingGenerationId) {
+      return prisma.aimGeneration.findFirst({
+        where: { id: context.existingGenerationId, userId: context.userId },
+        select: { id: true },
+      }).then((existing) => {
+        if (existing) {
+          return prisma.aimGeneration.update({
+            where: { id: existing.id },
+            data: payload,
+          })
+        }
+        return prisma.aimGeneration.create({ data: payload })
       })
     }
+
+    return prisma.aimGeneration.create({ data: payload })
   }
 
-  return prisma.aimGeneration.create({ data })
+  try {
+    return await persist(data)
+  } catch (error) {
+    console.error("[aim/generate] history persist failed, retrying with degraded payload", error)
+  }
+
+  return persist(degradedData)
 }

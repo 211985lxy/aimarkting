@@ -19,6 +19,7 @@ describe("Agent API contract", () => {
       "business_system_diagnosis",
       "business_diagnosis",
       "content_producer",
+      "free_copywriter",
       "deep_copywriter",
       "content_review",
     ])

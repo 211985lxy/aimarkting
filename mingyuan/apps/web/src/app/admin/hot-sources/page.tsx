@@ -74,7 +74,7 @@ export default function AdminHotSourcesPage() {
         <div>
           <h1 className="text-2xl font-bold">热点信源</h1>
           <p className="text-sm text-muted-foreground">
-            按账号绑定热点精选使用的行业信源。保存后，前台热点中心会优先读取这里的配置。
+            按账号绑定热点精选使用的行业信源。保存后，前台选题雷达会优先读取这里的配置。
           </p>
         </div>
         <Button variant="outline" onClick={fetchSources} disabled={loading} className="cursor-pointer">

@@ -166,6 +166,16 @@ describe("定位策划官 prompt 保护", () => {
     expect(systemPrompt).toContain("会议证据")
     expect(systemPrompt).toContain("禁止结尾反问")
   })
+
+  it("chat prompt includes the shared high-risk verification rule", async () => {
+    const handler = getAgentHandler("business_diagnosis")
+    await handler.chat(buildChatParams())
+
+    const systemPrompt = capturedSystemPrompt()
+    expect(systemPrompt).toContain("高风险任务验证规则")
+    expect(systemPrompt).toContain("验证结果")
+    expect(systemPrompt).toContain("未提供/待补充")
+  })
 })
 
 describe("商业诊断官 business_system_diagnosis 方法论 block", () => {
@@ -257,6 +267,36 @@ describe("商业诊断官 chat prompt 消解漏斗路由", () => {
     const systemPrompt = capturedSystemPrompt()
     expect(systemPrompt).toContain("只有当问题成立")
     expect(systemPrompt).toContain("才提醒用户可以点击【一键生成】")
+  })
+})
+
+describe("AIM high-risk loop prompt coverage", () => {
+  beforeEach(() => {
+    completeMock.mockReset()
+    completeMock.mockResolvedValue({ content: "ok", model: "test", usage: { totalTokens: 0 } })
+  })
+
+  it("keeps deep_copywriter framework-first while adding loop rules only for formal deliverables", async () => {
+    const handler = getAgentHandler("deep_copywriter")
+    await handler.chat(buildChatParams())
+
+    const systemPrompt = capturedSystemPrompt()
+    expect(systemPrompt).toContain("第一轮先输出文案框架，不直接写成稿")
+    expect(systemPrompt).toContain("框架阶段或追问阶段，不要追加“验证结果”区块")
+    expect(systemPrompt).toContain("正式交付内容结尾追加一个简短“验证结果”区块")
+  })
+
+  it("adds loop rules to business_system_diagnosis without breaking the eight-section report", async () => {
+    const handler = getAgentHandler("business_system_diagnosis")
+    await handler.generate(buildGenerateContext({ businessDiagnosisBlock: "【商业诊断方法论】示例体检规则" }))
+
+    const systemPrompt = capturedSystemPrompt()
+    expect(systemPrompt).toContain("高风险任务验证规则")
+    expect(systemPrompt).toContain("验证结果")
+    expect(systemPrompt).toContain("未提供/待补充")
+    expect(systemPrompt).toContain("体检报告必须严格按以下八段固定结构输出")
+    expect(systemPrompt).toContain("业务现状说明")
+    expect(systemPrompt).toContain("本周最小动作")
   })
 })
 

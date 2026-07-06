@@ -36,7 +36,7 @@ const COPY_EDITOR_LABELS: EditorPanelLabels = {
 }
 
 export function getAimEditorPanelLabels(agentId: AimAgentId, editorFormat?: ContentFormat): EditorPanelLabels {
-  if ((editorFormat && COPY_FORMATS.has(editorFormat)) || agentId === "content_producer" || agentId === "deep_copywriter") {
+  if ((editorFormat && COPY_FORMATS.has(editorFormat)) || agentId === "content_producer" || agentId === "free_copywriter" || agentId === "deep_copywriter") {
     return COPY_EDITOR_LABELS
   }
 

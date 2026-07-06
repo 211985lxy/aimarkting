@@ -4,7 +4,15 @@ import { prisma } from "@/lib/prisma"
 import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
 import { buildDefaultKnowledgeTags, mergeKnowledgeTags } from "@/lib/knowledge-tags"
 
-const ALLOWED_KINDS = new Set(["note", "report", "copy_extraction", "video"])
+const ALLOWED_KINDS = new Set([
+  "note",
+  "report",
+  "copy_extraction",
+  "video",
+  "account_pool",
+  "structure_asset",
+  "topic_candidates",
+])
 
 // GET — 档案的素材列表
 export const GET = withAdminAuth(async (_request, { params }) => {

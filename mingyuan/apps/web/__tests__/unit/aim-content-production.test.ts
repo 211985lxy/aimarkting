@@ -3,6 +3,7 @@ import { AIM_AGENT_OPTIONS } from "@/lib/aim-ui-config"
 import { parseMultiFormatResponse } from "@/lib/aim-generator"
 import { buildKnowledgeBlock } from "@/lib/aim-knowledge-context"
 import {
+  AIM_HIGH_RISK_LOOP_RULE,
   BENCHMARK_REWRITE_GUARDRAIL,
   PUBLISH_PACKAGE_CHAT_RULE,
   benchmarkCopyReuseRatio,
@@ -22,23 +23,33 @@ describe("AIM content production positioning", () => {
   it("keeps the required standalone content agents", () => {
     const titles = AIM_AGENT_OPTIONS.map((agent) => agent.title)
 
-    expect(titles).toContain("内容生产官")
-    expect(titles).toContain("定位策划官")
-    expect(titles).toContain("商业诊断官")
+    expect(titles).toContain("内容文案创作")
+    expect(titles).toContain("交货文案创作")
+    expect(titles).toContain("灵感选题策划")
+    expect(titles).toContain("商业模式诊断")
+  })
+
+  it("adds a delivery copywriter that follows user requirements first", () => {
+    const freeCopywriter = AIM_AGENT_OPTIONS.find((agent) => agent.id === "free_copywriter")
+
+    expect(freeCopywriter?.title).toBe("交货文案创作")
+    expect(freeCopywriter?.description).toContain("听用户要求")
+    expect(freeCopywriter?.defaultFormats).toEqual(["raw_copy"])
   })
 
   it("positions the deep copywriter as framework-first", () => {
     const deepCopywriter = AIM_AGENT_OPTIONS.find((agent) => agent.id === "deep_copywriter")
 
-    expect(deepCopywriter?.description).toContain("先出框架")
+    expect(deepCopywriter?.title).toBe("深度长文创作")
+    expect(deepCopywriter?.defaultFormats).toEqual(["raw_copy"])
   })
 
   it("positions content_review as the publish quality agent", () => {
     const reviewAgent = AIM_AGENT_OPTIONS.find((agent) => agent.id === "content_review")
 
-    expect(reviewAgent?.title).toBe("发布质检官")
-    expect(reviewAgent?.description).toContain("成稿质检")
-    expect(reviewAgent?.description).toContain("最小改法")
+    expect(reviewAgent?.title).toBe("发布前质检")
+    expect(reviewAgent?.description).toContain("标题")
+    expect(reviewAgent?.description).toContain("风险表达")
     expect(reviewAgent?.defaultFormats).toEqual(["raw_copy"])
   })
 
@@ -50,6 +61,21 @@ describe("AIM content production positioning", () => {
     expect(prompt).toContain("流量潜力评分")
     expect(prompt).toContain("不要整篇重写")
     expect(prompt).toContain("如果用户没有提供完整文案")
+  })
+
+  it("defines the shared high-risk loop guardrail as a light prompt-only rule", () => {
+    expect(AIM_HIGH_RISK_LOOP_RULE).toContain("高风险任务验证规则")
+    expect(AIM_HIGH_RISK_LOOP_RULE).toContain("验证结果")
+    expect(AIM_HIGH_RISK_LOOP_RULE).toContain("未提供/待补充")
+    expect(AIM_HIGH_RISK_LOOP_RULE).toContain("简单问答、局部润色、单句改写、纯发散创意")
+  })
+
+  it("keeps content_review minimal while adding the loop rule for formal deliverables", () => {
+    const prompt = buildContentReviewGeneratePrompt("企业知识库")
+
+    expect(prompt).toContain("正式交付内容结尾追加一个简短“验证结果”区块")
+    expect(prompt).toContain("不要整篇重写")
+    expect(prompt).toContain("最小修改建议")
   })
 
   it("labels Feishu-importable content knowledge categories in prompts", () => {

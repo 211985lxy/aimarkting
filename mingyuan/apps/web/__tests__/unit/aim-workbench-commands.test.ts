@@ -13,6 +13,7 @@ describe("aim workbench commands", () => {
 
   it("detects generation and quality commands", () => {
     expect(detectAimWorkbenchCommand("重新生成这一版")?.id).toBe("regenerate")
+    expect(detectAimWorkbenchCommand("优化下开头")?.id).toBe("optimize_opening")
     expect(detectAimWorkbenchCommand("按原文字数重新改写")?.id).toBe("rewrite_benchmark")
     expect(detectAimWorkbenchCommand("检查一下有没有照抄")?.id).toBe("run_quality_check")
   })

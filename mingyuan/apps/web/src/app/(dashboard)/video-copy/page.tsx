@@ -154,7 +154,7 @@ const topComments = analysis?.topComments ?? []
     <div className="space-y-6 pb-10">
       <WorkbenchHero
         title="爆款文案拆解"
-        subtitle="粘贴对标视频链接，提取原文案并拆解结构、心理、商业和可迁移打法，沉淀到选题中心作为参考。"
+        subtitle="粘贴对标视频链接，提取原文案并拆解结构、心理、商业和可迁移打法，加入选题池作为参考。"
         badge={<Badge variant="secondary">{statusLabel(record)}</Badge>}
         backHref="/competitor"
         backLabel="返回优质账号分析"

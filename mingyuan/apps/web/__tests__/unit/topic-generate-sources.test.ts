@@ -74,4 +74,19 @@ describe("topic generate sources", () => {
 
     expect(sources.map((source) => source.title)).toEqual(["项目", "对标账号", "对标文案", "日常灵感", "AI HOT"])
   })
+
+  it("prioritizes imported benchmark knowledge ahead of other selected knowledge", () => {
+    const sources = buildTopicSources({
+      projectSource: { category: "client_project", title: "项目", content: "项目资料" },
+      benchmarkSources: [],
+      videoCopySources: [],
+      selectedKnowledge: [
+        { category: "daily_inspiration", title: "灵感便签", content: "随手记" },
+        { category: "benchmark_reference", title: "23账号结构资产", content: "S级/A级 选题资产" },
+      ],
+      hotTopicSources: [{ category: "industry_hot", title: "AI HOT", content: "热点" }],
+    })
+
+    expect(sources.map((source) => source.title)).toEqual(["项目", "23账号结构资产", "灵感便签", "AI HOT"])
+  })
 })

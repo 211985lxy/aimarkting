@@ -8,24 +8,24 @@ import { WorkbenchHero } from "@/components/workbench/workbench-hero"
 
 const TASKS = [
   {
-    name: "每日选题雷达",
+    name: "选题雷达",
     schedule: "每天 09:00",
     endpoint: "/api/cron/aihot-briefing",
-    desc: "整理今日行业线索，作为选题中心结合账号资料、对标账号、对标文案和资料库生成专属选题的参考。",
+    desc: "整理今日行业线索，作为选题工作台结合账号资料、对标账号、对标文案和资料库生成专属选题的参考。",
     status: "已接入",
   },
   {
     name: "抖音热点抓取",
     schedule: "按 cron 配置",
     endpoint: "/api/cron/douyin-hot",
-    desc: "拉取抖音热榜快照，供热点中心和选题判断使用。",
+    desc: "拉取抖音热榜快照，供选题雷达和选题判断使用。",
     status: "已接入",
   },
   {
     name: "市场热榜刷新",
     schedule: "按 cron 配置",
     endpoint: "/api/cron/market-hotlist",
-    desc: "生成市场热点快照，合并进入热点中心筛选。",
+    desc: "生成市场热点快照，合并进入选题雷达筛选。",
     status: "已接入",
   },
   {
@@ -70,12 +70,12 @@ export default function ScheduledTasksPage() {
     <div className="space-y-6 pb-10">
       <WorkbenchHero
         title="定时任务清单"
-        subtitle="集中查看 AIM 后台已有的定时任务、每日选题和轮询任务。这里先做清单入口，不提供启停配置。"
+        subtitle="集中查看 AIM 后台已有的定时任务、选题线索和轮询任务。这里先做清单入口，不提供启停配置。"
         badge={<Badge variant="secondary">运营入口</Badge>}
         actions={
           <Button variant="outline" nativeButton={false} render={<Link href="/ai-hot" />}>
             <Bell className="h-4 w-4" />
-            每日选题
+            选题雷达
           </Button>
         }
       />
@@ -112,7 +112,7 @@ export default function ScheduledTasksPage() {
         <CardContent className="flex flex-col gap-3 p-4 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span>需要确认真实执行频率时，以服务器 cron / 平台定时器配置为准。</span>
           <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/hot-topics" />}>
-            打开热点中心
+            打开选题雷达
             <ExternalLink className="h-3.5 w-3.5" />
           </Button>
         </CardContent>

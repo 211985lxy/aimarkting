@@ -95,8 +95,8 @@ const MODE_META: Record<ApiTopicRecommendationMode, { label: string; description
     description: "基于已选素材生成可采用的选题卡。",
   },
   daily: {
-    label: "选题日报",
-    description: "结合今日 AI HOT 和项目资料，生成当天可执行的选题日报。",
+    label: "今日待办",
+    description: "把选题雷达里的线索和项目资料收束成当天可执行的主推选题。",
   },
   weekly: {
     label: "本周选题",
@@ -392,7 +392,7 @@ export default function TopicPlanningPage() {
       .catch((err) => {
         if (cancelled) return
         console.error("[topic-auto] Auto-generation failed:", err)
-        setAutoGenerateError(err instanceof Error ? err.message : "今日选题日报自动生成失败")
+        setAutoGenerateError(err instanceof Error ? err.message : "今日待办自动生成失败")
       })
       .finally(() => {
         if (!cancelled) setAutoGenerating(false)
@@ -611,8 +611,8 @@ export default function TopicPlanningPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-10">
       <WorkbenchHero
-        title="选题中心"
-        subtitle="按客户项目沉淀灵感、优质账号参考和用户洞察，再把这些素材稳定变成可拍选题。"
+        title="选题工作台"
+        subtitle="按客户项目沉淀灵感、竞品参考和用户洞察，再把这些素材稳定变成可拍选题。"
         badge={<Badge variant="secondary">{MODE_META[recommendationMode].label}</Badge>}
       />
 
@@ -621,8 +621,8 @@ export default function TopicPlanningPage() {
           <Card className="h-full transition-colors hover:border-primary/40 hover:bg-muted/40">
             <CardContent className="flex items-center justify-between gap-3 p-4">
               <div>
-                <p className="font-semibold text-foreground">热点中心</p>
-                <p className="mt-1 text-sm text-muted-foreground">切换 AI HOT、抖音热榜和近30天热点，筛出选题切口。</p>
+                <p className="font-semibold text-foreground">选题雷达</p>
+                <p className="mt-1 text-sm text-muted-foreground">查看当天热点、行业信号和可用线索，再收进选题池。</p>
               </div>
               <ExternalLink className="h-4 w-4 text-muted-foreground" />
             </CardContent>
@@ -1022,19 +1022,19 @@ function TopicDailyReportEmptyState({
     <Card className="border-dashed border-primary/30 bg-primary/[0.02]">
       <CardHeader className="space-y-3 pb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge>选题日报</Badge>
+          <Badge>今日待办</Badge>
           <Badge variant="outline">待生成</Badge>
         </div>
         <div>
-          <CardTitle className="text-xl leading-tight">今日选题日报还没生成</CardTitle>
+          <CardTitle className="text-xl leading-tight">今日待办还没生成</CardTitle>
           <CardDescription className="mt-2 text-sm leading-6">
-            点击「生成选题日报」，系统会优先借助对标账号和拆解文案，结合项目资料生成主推方向；AI HOT 只做辅助热点参考。
+            点击「生成今日待办」，系统会优先借助对标账号和拆解文案，结合项目资料生成主推方向；选题雷达只提供线索，不直接替代这里的最终判断。
           </CardDescription>
           {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
         </div>
         <Button className="w-fit" onClick={onGenerate} disabled={disabled}>
           <Sparkles className="mr-1 h-4 w-4" />
-          生成选题日报
+          生成今日待办
         </Button>
       </CardHeader>
     </Card>
@@ -1055,7 +1055,7 @@ function TopicDailyReportPanel({ report }: { report: TopicDailyReport }) {
     <Card className="border-primary/30 bg-primary/[0.02]">
       <CardHeader className="space-y-3 pb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge>今日选题日报</Badge>
+          <Badge>今日待办</Badge>
         </div>
         <div>
           <CardTitle className="text-xl leading-tight">今日主编判断</CardTitle>

@@ -64,6 +64,7 @@ export interface AgentLogicProfile {
  */
 const AGENT_KNOWLEDGE_CATEGORIES: Record<AimAgentId, string[]> = {
   content_producer: ["user_insight", "product_usp", "project_case", "private_domain_material", "hot_topic", "benchmark_reference"],
+  free_copywriter: ["user_insight", "product_usp", "project_case", "benchmark_reference"],
   deep_copywriter: ["boss_experience", "product_usp", "user_insight", "benchmark_reference", "positioning_material"],
   business_diagnosis: ["user_insight", "positioning_material", "boss_experience", "product_usp", "customer_pain"],
   business_system_diagnosis: ["product_usp", "customer_pain", "project_case", "customer_qa", "user_insight"],
@@ -78,6 +79,7 @@ const AGENT_KNOWLEDGE_CATEGORIES: Record<AimAgentId, string[]> = {
  */
 const AGENT_MODEL_CHAINS: Record<AimAgentId, string[]> = {
   content_producer: ["deepseek", "openrouter", "jiekou", "glm"],
+  free_copywriter: ["deepseek", "openrouter", "jiekou", "glm"],
   deep_copywriter: ["lihuo", "openrouter", "openrouter", "deepseek", "jiekou", "therouter", "glm"],
   business_diagnosis: ["lihuo", "openrouter", "openrouter", "deepseek", "jiekou", "therouter", "glm"],
   business_system_diagnosis: ["deepseek", "openrouter", "openrouter", "jiekou", "glm"],
@@ -94,6 +96,7 @@ const AGENT_METHODOLOGIES: Record<AimAgentId, Array<{ key: MethodologyKey; label
     { key: "ip_copywriting", label: "IP 操盘方法论" },
     { key: "event_storytelling", label: "事件内容化方法论", note: "仅现场/事件复盘类内容时按需注入" },
   ],
+  free_copywriter: [],
   deep_copywriter: [
     { key: "ip_copywriting", label: "IP 操盘方法论" },
     { key: "event_storytelling", label: "事件内容化方法论", note: "仅现场/事件复盘类内容时按需注入" },
@@ -110,6 +113,7 @@ const AGENT_METHODOLOGIES: Record<AimAgentId, Array<{ key: MethodologyKey; label
 /** 各智能体额外注入的知识源（只读说明，镜像 handlers.ts / chat route 的上下文装配） */
 const AGENT_OTHER_CONTEXT: Record<AimAgentId, string[]> = {
   content_producer: ["爆款结构库（开头/结构/结尾，来自内容模板）", "写作风格档案", "AIM 长期记忆", "IP Wiki", "编辑器上下文"],
+  free_copywriter: ["写作风格档案", "AIM 长期记忆", "IP Wiki", "编辑器上下文"],
   deep_copywriter: ["爆款结构库", "写作风格档案", "AIM 长期记忆", "IP Wiki"],
   business_diagnosis: ["竞品观察（watchAccount）", "写作风格档案", "AIM 长期记忆", "IP Wiki", "对标视频拆解"],
   business_system_diagnosis: ["写作风格档案", "AIM 长期记忆", "IP Wiki"],

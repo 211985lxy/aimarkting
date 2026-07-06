@@ -45,6 +45,12 @@ const AGENT_ROUTES: Record<string, AgentModelRoute[]> = {
     { name: "jiekou" },
     { name: "glm" },
   ],
+  free_copywriter: [
+    { name: "deepseek" },
+    { name: "openrouter", model: "qwen/qwen3.7-plus" },
+    { name: "jiekou" },
+    { name: "glm" },
+  ],
   business_system_diagnosis: [
     { name: "deepseek" },
     { name: "openrouter", model: "deepseek/deepseek-v4-pro" },

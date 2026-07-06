@@ -5,6 +5,7 @@ import type { ContentFormat } from "@/lib/api/client"
 /** 内容智能体 id */
 export type AimAgentId =
   | "content_producer"
+  | "free_copywriter"
   | "business_diagnosis"
   | "business_system_diagnosis"
   | "deep_copywriter"
@@ -43,6 +44,13 @@ export const AIM_AGENT_OPTIONS: AimAgentMeta[] = [
     description: "改写、再创作、多平台内容",
     icon: Video,
     defaultFormats: ["video_script"],
+  },
+  {
+    id: "free_copywriter",
+    title: "交货文案创作",
+    description: "听用户要求，直接交稿",
+    icon: PenLine,
+    defaultFormats: ["raw_copy"],
   },
   {
     id: "deep_copywriter",

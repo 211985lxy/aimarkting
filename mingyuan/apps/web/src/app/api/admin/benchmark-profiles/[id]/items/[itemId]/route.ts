@@ -3,7 +3,15 @@ import { withAdminAuth } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 import { ensureKnowledgeEmbedding } from "@/lib/llm/embeddings"
 
-const ALLOWED_KINDS = new Set(["note", "report", "copy_extraction", "video"])
+const ALLOWED_KINDS = new Set([
+  "note",
+  "report",
+  "copy_extraction",
+  "video",
+  "account_pool",
+  "structure_asset",
+  "topic_candidates",
+])
 
 // 通过 benchmark_item:<itemId> 标签定位该素材同步落库的 KnowledgeEntry
 async function findLinkedKnowledgeEntry(itemId: string) {

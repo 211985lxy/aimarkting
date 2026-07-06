@@ -3,7 +3,7 @@ import { fetchAiNewsRadarCreatorItems } from "@/lib/ai-news-radar-client"
 import { AIHOT_USER_AGENT } from "@/lib/aihot-constants"
 import type { AiHotItem, AiHotResponse } from "@/lib/aihot-client"
 
-export const AIHOT_BRIEFING_TITLE = "每日选题雷达 · 今日 9 点"
+export const AIHOT_BRIEFING_TITLE = "选题雷达 · 今日 9 点"
 
 const AIHOT_ITEMS_URL = "https://aihot.virxact.com/api/public/items"
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000
@@ -166,7 +166,7 @@ export function buildAiHotBriefingMarkdown(items: AiHotBriefingItem[]) {
   const lines = [
     `# ${AIHOT_BRIEFING_TITLE}`,
     "",
-    "推荐优先级：当前账号资料/资料库 > 对标账号/对标文案 > 行业热点/AI HOT。下面内容只是今日选题线索，不是最终推荐选题；进入选题中心后会结合账号资料、对标素材和行业热点生成可拍选题。",
+    "推荐优先级：当前账号资料/资料库 > 对标账号/对标文案 > 行业热点/AI HOT。下面内容只是今日选题线索，不是最终推荐选题；进入选题工作台后会结合账号资料、对标素材和行业热点生成可拍选题。",
   ]
   let index = 1
 

@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma"
 
 export const maxDuration = 60
 
-const POLISH_MODEL = process.env.SCRIPT_GENERATION_MODEL || "openai/gpt-5.4"
+const POLISH_MODEL = process.env.POLISH_MODEL || process.env.SCRIPT_POLISH_MODEL
 
 // 文案禁用词黑名单（AI 味/营销黑话），各润色模式共用
 const FORBIDDEN_TERMS =

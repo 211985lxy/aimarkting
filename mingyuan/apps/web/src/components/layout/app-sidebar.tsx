@@ -69,9 +69,9 @@ const navGroups: NavGroup[] = [
   {
     label: "内容生产",
     items: [
-      { title: "每日选题雷达", href: "/ai-hot", icon: Bell },
-      { title: "选题中心", href: "/topic-planning", icon: Target },
-      { title: "市场洞察", href: "/competitor", icon: BarChart2 },
+      { title: "选题雷达", href: "/ai-hot", icon: Bell },
+      { title: "选题工作台", href: "/topic-planning", icon: Target },
+      { title: "竞品研究", href: "/competitor", icon: BarChart2 },
     ],
   },
   {

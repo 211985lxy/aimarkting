@@ -19,7 +19,17 @@ import { Badge } from "@/components/ui/badge"
 import { KNOWLEDGE_STRATEGY_PROFILES } from "@/lib/aim-knowledge-strategy"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { MarkdownRenderer } from "@/components/markdown-renderer"
+import { Textarea } from "@/components/ui/textarea"
 import { IpWikiDialog, type IpWikiDialogContext } from "./ip-wiki-dialog"
 import { AimPromptComposer } from "@/components/aim/aim-prompt-composer"
 import { ActionStrip } from "@/components/workbench/action-strip"
@@ -40,11 +50,14 @@ import {
   ApiError,
   listClientProjects,
   updateAimWorkflowStatus,
+  type AimCalibrationRule,
+  type AimDecisionSnapshot,
   type AimEvolutionSuggestion,
   type AimGenerateResponse,
   type AimGeneration,
   type AimChatToolAction,
   type AimChatContent,
+  type AimRetroSnapshot,
   type ClientProject,
   type ContentFormat,
   type QualityCheckReport,
@@ -72,6 +85,7 @@ import { assessBenchmarkRewrite } from "@/lib/aim-benchmark-quality"
 import { shouldOpenDeepCopywriter } from "@/lib/video-copy-routing"
 import { cleanVideoCopyAnalysisMarkdown } from "@/lib/video-copy-display"
 import { detectAimWorkbenchCommand, type AimWorkbenchCommand } from "@/lib/aim-workbench-commands"
+import { buildOpeningRecommendationPrompt } from "@/lib/aim-opening-recommendation"
 import {
   EDITOR_PANEL_DEFAULT_WIDTH,
   applyFirstMatchingStructureToReference,
@@ -202,6 +216,13 @@ interface AimImageAttachment {
   assetUrl: string
   readUrl: string
   previewUrl: string
+}
+
+type RecordDialogMode = "decision" | "publish" | "retro"
+
+interface RecordDialogState {
+  mode: RecordDialogMode
+  generationId: string
 }
 
 function ChoiceStepper({
@@ -636,6 +657,9 @@ function DeliverableBubble({
   isBusy,
   onEditResult,
   onCompileToWiki,
+  onOpenDecision,
+  onOpenPublish,
+  onOpenRetro,
 }: {
   deliverables: AimGenerateResponse
   agentId: AimAgentId
@@ -647,6 +671,9 @@ function DeliverableBubble({
   isBusy: boolean
   onEditResult?: (format: ContentFormat, content: string) => void
   onCompileToWiki?: () => void
+  onOpenDecision?: () => void
+  onOpenPublish?: () => void
+  onOpenRetro?: () => void
 }) {
   const [activeTab, setActiveTab] = useState<ContentFormat>(deliverables.results[0]?.format || "raw_copy")
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null)
@@ -673,7 +700,7 @@ function DeliverableBubble({
   const hasXiaohongshu = deliverables.results.some((r) => r.format === "xiaohongshu_post")
   const hasCommunity = deliverables.results.some((r) => r.format === "community_message")
   const hasShooting = deliverables.results.some((r) => r.format === "shooting_brief")
-  const canRunPublishCheck = agentId === "content_producer" || agentId === "deep_copywriter" || agentId === "content_review"
+  const canRunPublishCheck = agentId === "content_producer" || agentId === "free_copywriter" || agentId === "deep_copywriter" || agentId === "content_review"
   const primaryNextActions = nextActions?.filter((action) => action.id === "publish_package" || action.id === "publish_check") ?? []
   const secondaryNextActions = nextActions?.filter((action) => action.id !== "publish_package" && action.id !== "publish_check") ?? []
   const hasMoreActions = Boolean(
@@ -806,6 +833,15 @@ function DeliverableBubble({
               <ShieldCheck className="h-3.5 w-3.5 mr-1" /> 发布前自查
             </Button>
           )}
+          <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={onOpenDecision} disabled={isBusy}>
+            发布前判断
+          </Button>
+          <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={onOpenPublish} disabled={isBusy}>
+            登记发布
+          </Button>
+          <Button size="sm" variant="ghost" className={SOFT_ACTION_CLASS} onClick={onOpenRetro} disabled={isBusy}>
+            填写复盘
+          </Button>
           <Select onValueChange={runMoreAction} disabled={isBusy || !hasMoreActions}>
             <SelectTrigger className="h-7 w-[88px] border-0 bg-muted/45 text-xs text-muted-foreground shadow-none hover:bg-muted">
               <SelectValue placeholder="更多" />
@@ -878,6 +914,27 @@ export default function AimPage() {
   const [wikiDialog, setWikiDialog] = useState<{ open: boolean; context: IpWikiDialogContext | null }>({
     open: false,
     context: null,
+  })
+  const [recordDialog, setRecordDialog] = useState<RecordDialogState | null>(null)
+  const [decisionForm, setDecisionForm] = useState<AimDecisionSnapshot>({
+    summary: "",
+    targetUser: "",
+    expectedSignal: "",
+    confidence: "",
+  })
+  const [publishForm, setPublishForm] = useState({
+    publishPlatform: "抖音",
+    publishUrl: "",
+  })
+  const [retroForm, setRetroForm] = useState<AimRetroSnapshot>({
+    summary: "",
+    actualData: "",
+    verdict: "",
+    nextRule: "",
+  })
+  const [retroRuleForm, setRetroRuleForm] = useState<AimCalibrationRule>({
+    rule: "",
+    source: "内容复盘",
   })
   const [projectEnabled, setProjectEnabled] = useState(false)
   const [isEvolving, setIsEvolving] = useState(false)
@@ -1478,6 +1535,65 @@ export default function AimPage() {
     return true
   }
 
+  function getOpeningSegment(text: string) {
+    const trimmed = text.trimStart()
+    const offset = text.length - trimmed.length
+    const paragraphs = trimmed.split(/\n\s*\n/)
+    const first = paragraphs[0]?.trim() || ""
+    const second = paragraphs[1]?.trim() || ""
+    const segment = first.length < 80 && second ? `${first}\n\n${second}` : first
+    return { offset, segment }
+  }
+
+  function handleOptimizeOpening(commandInput: string) {
+    const { segment } = getOpeningSegment(editorText)
+    if (segment.length < 20) {
+      toast.error("当前稿子太短，找不到可优化的开头")
+      return true
+    }
+
+    setIsGenerating(true)
+    void chatAim([
+      {
+        role: "user",
+        content: buildOpeningRecommendationPrompt({
+          commandInput,
+          openingSegment: segment,
+          fullText: editorText,
+        }),
+      },
+    ], {
+      agentId: "content_producer",
+      projectId: projectEnabled ? selectedProjectId || undefined : undefined,
+    })
+      .then((result) => {
+        const recommendations = result.content.trim()
+        if (!recommendations) throw new Error("开头推荐结果为空")
+        setEditorPanelOpen(true)
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nextId(),
+            role: "user",
+            content: commandInput,
+          },
+          {
+            id: nextId(),
+            role: "assistant",
+            content: recommendations,
+            agentId: "content_producer",
+          },
+        ])
+        toast.success("已生成开头推荐")
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "开头推荐失败")
+      })
+      .finally(() => setIsGenerating(false))
+
+    return true
+  }
+
   function runWorkbenchCommand(command: AimWorkbenchCommand) {
     setInput("")
 
@@ -1503,6 +1619,7 @@ export default function AimPage() {
       void generateWithInput("")
       return true
     }
+    if (command.id === "optimize_opening") return handleOptimizeOpening(command.input)
     if (command.id === "rewrite_benchmark") {
       const rewriteInput = buildBenchmarkRewriteInput()
       if (rewriteInput) void generateWithInput(rewriteInput)
@@ -1890,7 +2007,10 @@ export default function AimPage() {
       await handleSend()
       return
     }
-    await generateWithInput(input.trim())
+    const currentInput = input.trim()
+    const workbenchCommand = detectAimWorkbenchCommand(currentInput)
+    if (workbenchCommand && runWorkbenchCommand(workbenchCommand)) return
+    await generateWithInput(currentInput)
   }
 
   function handleStop() {
@@ -1976,6 +2096,95 @@ export default function AimPage() {
     },
     [messages, refreshHistory, selectedAgentId],
   )
+
+  const openRecordDialog = useCallback((msgId: string, mode: RecordDialogMode) => {
+    const base = messages.find((m) => m.id === msgId)?.deliverables
+    if (!base?.id || base.id.startsWith("polish-")) {
+      toast.error("只有已保存的内容才能记录")
+      return
+    }
+
+    if (mode === "decision") {
+      setDecisionForm({
+        summary: "",
+        targetUser: "",
+        expectedSignal: "",
+        confidence: "",
+      })
+    } else if (mode === "publish") {
+      setPublishForm({
+        publishPlatform: "抖音",
+        publishUrl: "",
+      })
+    } else {
+      setRetroForm({
+        summary: "",
+        actualData: "",
+        verdict: "",
+        nextRule: "",
+      })
+      setRetroRuleForm({
+        rule: "",
+        source: "内容复盘",
+      })
+    }
+
+    setRecordDialog({ mode, generationId: base.id })
+  }, [messages])
+
+  const handleSubmitRecordDialog = useCallback(async () => {
+    if (!recordDialog) return
+
+    try {
+      if (recordDialog.mode === "decision") {
+        if (!decisionForm.summary.trim()) {
+          toast.error("先写清楚为什么值得发")
+          return
+        }
+        await updateAimWorkflowStatus(recordDialog.generationId, {
+          decisionSnapshot: {
+            summary: decisionForm.summary.trim(),
+            targetUser: decisionForm.targetUser?.trim(),
+            expectedSignal: decisionForm.expectedSignal?.trim(),
+            confidence: decisionForm.confidence?.trim(),
+          },
+        })
+        toast.success("已记下发布前判断")
+      } else if (recordDialog.mode === "publish") {
+        await updateAimWorkflowStatus(recordDialog.generationId, {
+          workflowStatus: "published",
+          publishPlatform: publishForm.publishPlatform.trim() || "抖音",
+          publishUrl: publishForm.publishUrl.trim(),
+        })
+        toast.success("已登记发布")
+      } else {
+        if (!retroForm.summary.trim()) {
+          toast.error("先写清楚这次结果怎么判断")
+          return
+        }
+        await updateAimWorkflowStatus(recordDialog.generationId, {
+          retroSnapshot: {
+            summary: retroForm.summary.trim(),
+            actualData: retroForm.actualData?.trim(),
+            verdict: retroForm.verdict?.trim(),
+            nextRule: retroForm.nextRule?.trim(),
+          },
+          calibrationRule: retroRuleForm.rule.trim()
+            ? {
+                rule: retroRuleForm.rule.trim(),
+                source: retroRuleForm.source?.trim() || "内容复盘",
+              }
+            : undefined,
+        })
+        toast.success("已保存复盘")
+      }
+
+      setRecordDialog(null)
+      refreshHistory({ force: true, agentId: selectedAgentId })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败")
+    }
+  }, [decisionForm, publishForm, recordDialog, refreshHistory, retroForm, retroRuleForm, selectedAgentId])
 
   const busy = isThinking || isGenerating || isQualityChecking || isTranscribing
   const hasEditor = Boolean(sourceOriginalText.trim() || editorText.trim())
@@ -2192,6 +2401,9 @@ export default function AimPage() {
                           onNextAction={handleAimNextAction}
                           isBusy={busy}
                           onEditResult={(format, content) => openEditorFromResult(m.id, format, content)}
+                          onOpenDecision={() => openRecordDialog(m.id, "decision")}
+                          onOpenPublish={() => openRecordDialog(m.id, "publish")}
+                          onOpenRetro={() => openRecordDialog(m.id, "retro")}
                           onCompileToWiki={
                             m.agentId === "business_diagnosis" &&
                             !!selectedProjectId &&
@@ -2368,6 +2580,131 @@ export default function AimPage() {
           onClose={() => setWikiDialog((prev) => ({ ...prev, open: false }))}
         />
       )}
+
+      <Dialog open={!!recordDialog} onOpenChange={(open) => { if (!open) setRecordDialog(null) }}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {recordDialog?.mode === "decision"
+                ? "发布前判断"
+                : recordDialog?.mode === "publish"
+                  ? "登记发布"
+                  : "填写复盘"}
+            </DialogTitle>
+            <DialogDescription>
+              {recordDialog?.mode === "decision"
+                ? "把这条为什么发、准备打到谁、想验证什么先记下来。"
+                : recordDialog?.mode === "publish"
+                  ? "记录发到哪个平台，顺手把状态推进到已发布。"
+                  : "只写结果判断和下次同类内容的判断规则。"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {recordDialog?.mode === "decision" && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">这条为什么值得发</p>
+                <Textarea
+                  value={decisionForm.summary}
+                  onChange={(event) => setDecisionForm((prev) => ({ ...prev, summary: event.target.value }))}
+                  placeholder="比如：这条不是讲工具，而是帮新手解决不知道从哪开始的问题。"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">最可能打中的人</p>
+                <Input
+                  value={decisionForm.targetUser ?? ""}
+                  onChange={(event) => setDecisionForm((prev) => ({ ...prev, targetUser: event.target.value }))}
+                  placeholder="比如：刚开始做 AI 内容、但没有判断标准的人。"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">发完最想验证什么</p>
+                <Textarea
+                  value={decisionForm.expectedSignal ?? ""}
+                  onChange={(event) => setDecisionForm((prev) => ({ ...prev, expectedSignal: event.target.value }))}
+                  placeholder="比如：收藏率、评论里有没有人追问工具链、是否能带出下一条选题。"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">当前把握</p>
+                <Input
+                  value={decisionForm.confidence ?? ""}
+                  onChange={(event) => setDecisionForm((prev) => ({ ...prev, confidence: event.target.value }))}
+                  placeholder="比如：7/10，题对了，但开头还不够硬。"
+                />
+              </div>
+            </div>
+          )}
+
+          {recordDialog?.mode === "publish" && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">发布平台</p>
+                <Input
+                  value={publishForm.publishPlatform}
+                  onChange={(event) => setPublishForm((prev) => ({ ...prev, publishPlatform: event.target.value }))}
+                  placeholder="抖音 / 小红书 / 视频号"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">内容链接</p>
+                <Input
+                  value={publishForm.publishUrl}
+                  onChange={(event) => setPublishForm((prev) => ({ ...prev, publishUrl: event.target.value }))}
+                  placeholder="粘贴发布后的链接，没有可先留空。"
+                />
+              </div>
+            </div>
+          )}
+
+          {recordDialog?.mode === "retro" && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">这次结果怎么判断</p>
+                <Textarea
+                  value={retroForm.summary}
+                  onChange={(event) => setRetroForm((prev) => ({ ...prev, summary: event.target.value }))}
+                  placeholder="比如：播放一般，但收藏和私信明显高，说明题不破圈，但很能打中目标人。"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">实际数据或反馈</p>
+                <Textarea
+                  value={retroForm.actualData ?? ""}
+                  onChange={(event) => setRetroForm((prev) => ({ ...prev, actualData: event.target.value }))}
+                  placeholder="写播放、点赞、收藏、评论、私信，或者用户原话。"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">这次判断哪里对，哪里错</p>
+                <Textarea
+                  value={retroForm.verdict ?? ""}
+                  onChange={(event) => setRetroForm((prev) => ({ ...prev, verdict: event.target.value }))}
+                  placeholder="比如：判断对在痛点，判断错在标题太像教程合集。"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">下次同类内容怎么判断</p>
+                <Textarea
+                  value={retroRuleForm.rule}
+                  onChange={(event) => setRetroRuleForm((prev) => ({ ...prev, rule: event.target.value }))}
+                  placeholder="比如：工具类长教程先看能不能压成一个明确场景，否则不做大而全。"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRecordDialog(null)}>
+              取消
+            </Button>
+            <Button onClick={() => void handleSubmitRecordDialog()} disabled={busy}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,5 +1,17 @@
 export type TopicSource = { category: string; title: string; content: string }
 
+function partitionBenchmarkKnowledge(sources: TopicSource[]) {
+  const benchmark: TopicSource[] = []
+  const other: TopicSource[] = []
+
+  for (const source of sources) {
+    if (source.category === "benchmark_reference") benchmark.push(source)
+    else other.push(source)
+  }
+
+  return { benchmark, other }
+}
+
 export function buildProjectSource(project: {
   name: string
   industry: string | null
@@ -90,11 +102,15 @@ export function buildTopicSources(input: {
   videoCopySources: TopicSource[]
   hotTopicSources: TopicSource[]
 }) {
+  const { benchmark: selectedBenchmarkKnowledge, other: selectedNonBenchmarkKnowledge } =
+    partitionBenchmarkKnowledge(input.selectedKnowledge)
+
   return [
     ...(input.projectSource ? [input.projectSource] : []),
     ...input.benchmarkSources,
     ...input.videoCopySources,
-    ...input.selectedKnowledge,
+    ...selectedBenchmarkKnowledge,
+    ...selectedNonBenchmarkKnowledge,
     ...input.hotTopicSources,
   ]
 }

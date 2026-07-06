@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { WatchRecommendationsPanel } from "@/components/topic-planning/watch-recommendations-panel"
 import { AiResultPanel } from "@/components/workbench/ai-result-panel"
 import { WorkbenchHero } from "@/components/workbench/workbench-hero"
 import {
@@ -124,11 +125,11 @@ export default function AiHotBriefingPage() {
   return (
     <div className="space-y-6 pb-10">
       <WorkbenchHero
-        title={briefing?.audience === "client_industry" ? `${sourceLabel}热点` : "每日选题雷达"}
+        title={briefing?.audience === "client_industry" ? `${sourceLabel}热点` : "选题雷达"}
         subtitle={
           briefing?.audience === "client_industry"
-            ? "切换账号后自动读取该账号绑定的信源，热点中心只展示对应行业线索。"
-            : "先看今天可用的行业线索，再进入选题中心结合当前账号资料、对标账号、对标文案和资料库生成账号专属选题。热点只做辅助，不直接当最终选题。"
+            ? "切换账号后自动读取该账号绑定的信源，只展示对应行业线索。"
+            : "先看今天可用的行业线索，再进入选题工作台，结合当前账号资料、对标账号、对标文案和资料库生成账号专属选题。热点只做辅助，不直接当最终选题。"
         }
         badge={<Badge variant="secondary">{briefing?.audience === "client_industry" ? "账号信源热点" : "账号资料优先"}</Badge>}
         actions={
@@ -157,7 +158,7 @@ export default function AiHotBriefingPage() {
               </p>
             ) : null}
             <Button className="w-full md:w-auto" nativeButton={false} render={<Link href="/topic-planning" />}>
-              生成账号专属选题
+              打开选题工作台
             </Button>
             <Button
               variant="outline"
@@ -182,11 +183,13 @@ export default function AiHotBriefingPage() {
         </Card>
       ) : null}
 
+      <WatchRecommendationsPanel />
+
       {!briefing || briefing.items.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center text-muted-foreground">
             <Newspaper className="h-9 w-9 opacity-50" />
-            <p className="text-sm">今天暂时没有可用线索。也可以直接去选题中心，基于账号资料和对标素材生成选题。</p>
+            <p className="text-sm">今天暂时没有可用线索。也可以直接去选题工作台，基于账号资料和对标素材生成选题。</p>
           </CardContent>
         </Card>
       ) : (
@@ -235,7 +238,7 @@ export default function AiHotBriefingPage() {
                               nativeButton={false}
                               render={<Link href={buildTopicPlanningHref(item)} />}
                             >
-                              带入选题中心
+                              加入选题池
                             </Button>
                           </div>
                         </div>

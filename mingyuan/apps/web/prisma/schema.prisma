@@ -426,28 +426,33 @@ model AimGeneration {
   userId           String
   agentId          String?
   projectId        String?
-  rawInput         String   @db.Text
+  rawInput         String   @db.MediumText
   inputSource      String   @default("text") // text | voice
-  videoScript      String?  @db.Text
-  wechatArticle    String?  @db.Text
-  momentsPost      String?  @db.Text
-  communityMessage String?  @db.Text
-  shootingBrief    String?  @db.Text
-  rawCopy          String?  @db.Text
+  videoScript      String?  @db.MediumText
+  wechatArticle    String?  @db.MediumText
+  momentsPost      String?  @db.MediumText
+  communityMessage String?  @db.MediumText
+  shootingBrief    String?  @db.MediumText
+  rawCopy          String?  @db.MediumText
   formatsRequested Json     @default("[]")
   knowledgeUsed    Json     @default("[]")
-  ipSnapshotUsed   String?  @db.Text
+  ipSnapshotUsed   String?  @db.MediumText
   qualityScores    Json?
   topicTitle       String?
   hotTopic         String?
-  polishInstruction String? @db.Text
+  polishInstruction String? @db.MediumText
   workflowStatus   String   @default("draft")
-  reviewNote       String?  @db.Text
+  reviewNote       String?  @db.MediumText
   publishedAt      DateTime?
+  publishPlatform  String?
+  publishUrl       String?  @db.MediumText
+  decisionSnapshot Json?
+  retroSnapshots   Json     @default("[]")
+  calibrationRules Json     @default("[]")
   model            String?
   totalTokens      Int?
   status           String   @default("completed")
-  errorMessage     String?  @db.Text
+  errorMessage     String?  @db.MediumText
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -1192,4 +1197,3 @@ model AgentMethodology {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-

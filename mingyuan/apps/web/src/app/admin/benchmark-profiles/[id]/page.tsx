@@ -60,6 +60,9 @@ const KIND_LABELS: Record<string, string> = {
   report: "诊断报告",
   copy_extraction: "文案提取",
   video: "爆款样本",
+  account_pool: "账号池",
+  structure_asset: "结构资产",
+  topic_candidates: "选题池",
 }
 
 const KIND_COLORS: Record<string, string> = {
@@ -67,6 +70,9 @@ const KIND_COLORS: Record<string, string> = {
   report: "bg-indigo-50 text-indigo-600",
   copy_extraction: "bg-amber-50 text-amber-600",
   video: "bg-emerald-50 text-emerald-600",
+  account_pool: "bg-violet-50 text-violet-600",
+  structure_asset: "bg-fuchsia-50 text-fuchsia-600",
+  topic_candidates: "bg-orange-50 text-orange-600",
 }
 
 // ── 类型 ──

@@ -148,7 +148,13 @@ describe("aim agent guides", () => {
 
   it("defines topic planning and review skills", () => {
     const planningLabels = getAimAgentGuide("business_diagnosis").skills.map((skill) => skill.label)
-    expect(planningLabels).toContain("选择内容主线")
+    expect(planningLabels.slice(0, 5)).toEqual([
+      "判断内容目的",
+      "做曝光选题",
+      "做获客选题",
+      "做信任选题",
+      "做成交选题",
+    ])
     expect(planningLabels).toContain("判断这条值不值得做")
 
     const reviewLabels = getAimAgentGuide("content_review").skills.map((skill) => skill.label)
@@ -162,6 +168,14 @@ describe("aim agent guides", () => {
       "风险表达质检",
       "发布前判断",
     ]))
+  })
+
+  it("keeps topic goals decided before copywriting", () => {
+    const goalSkill = getAimAgentGuide("business_diagnosis").skills.find((item) => item.id === "decide_content_goal")
+
+    expect(goalSkill?.prompt).toContain("曝光、获客、信任、成交")
+    expect(goalSkill?.prompt).toContain("不要直接写文案")
+    expect(goalSkill?.prompt).toContain("下一步交给文案官")
   })
 
   it("adds a benchmark-asset flywheel skill for topic planning", () => {

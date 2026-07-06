@@ -17,4 +17,11 @@ describe("aim editor labels", () => {
     expect(labels.title).toBe("策划案编辑")
     expect(labels.draftTitle).toBe("我的策划案")
   })
+
+  it("labels delivery copywriter output as copy editing", () => {
+    const labels = getAimEditorPanelLabels("free_copywriter", "raw_copy")
+
+    expect(labels.title).toBe("文案编辑")
+    expect(labels.draftTitle).toBe("我的稿子")
+  })
 })

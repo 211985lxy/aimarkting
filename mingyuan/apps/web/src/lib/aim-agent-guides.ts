@@ -158,6 +158,41 @@ const CONTENT_PRODUCER_SKILLS: AimWorkbenchSkill[] = [
 
 const TOPIC_PLANNING_SKILLS: AimWorkbenchSkill[] = [
   {
+    id: "decide_content_goal",
+    label: "判断内容目的",
+    description: "先判断这条内容该服务曝光、获客、信任还是成交。",
+    prompt: "请基于当前业务、目标客户和素材，判断这条内容最适合服务哪个目的：曝光、获客、信任、成交。不要直接写文案。固定输出：1. 推荐目的；2. 为什么不是另外三个目的；3. 适合的选题角度；4. 开头钩子方向；5. 下一步交给文案官时要强调什么。",
+    agentId: "business_diagnosis",
+  },
+  {
+    id: "exposure_topics",
+    label: "做曝光选题",
+    description: "为了让更多目标客户先看见。",
+    prompt: "请围绕提升曝光生成选题。重点找反差、热点、争议、强痛点、反常识和行业误区。每条输出：选题标题、目标人群、为什么容易被看见、开头钩子、风险边界。不要直接写文案。",
+    agentId: "business_diagnosis",
+  },
+  {
+    id: "lead_topics",
+    label: "做获客选题",
+    description: "为了让对的人评论、私信、咨询或留资。",
+    prompt: "请围绕获取线索生成选题。重点找客户正在遇到的具体问题、想解决但不会解决的场景、能自然引导咨询的入口。每条输出：选题标题、客户痛点、触发咨询的理由、承接动作、适合平台。不要直接写文案。",
+    agentId: "business_diagnosis",
+  },
+  {
+    id: "trust_topics",
+    label: "做信任选题",
+    description: "为了让客户相信你真实、专业、靠谱。",
+    prompt: "请围绕建立信任生成选题。重点找真实案例、服务过程、现场细节、专业判断、避坑经验和风险边界。每条输出：选题标题、可信证据、要讲的细节、能建立什么信任、不能夸大的地方。不要直接写文案。",
+    agentId: "business_diagnosis",
+  },
+  {
+    id: "conversion_topics",
+    label: "做成交选题",
+    description: "为了推动咨询、预约、下单或服务转化。",
+    prompt: "请围绕促进成交生成选题。重点讲清适合谁、不适合谁、解决什么问题、为什么现在该行动、下一步怎么联系。每条输出：选题标题、目标客户、成交前顾虑、内容主线、行动引导。不要直接写文案。",
+    agentId: "business_diagnosis",
+  },
+  {
     id: "meeting_minutes_asset_pack",
     label: "会议纪要完整资产包",
     description: "需要全量材料时再用。",
